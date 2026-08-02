@@ -46,6 +46,7 @@ Exceção: tabelas de log/evento imutável (ex.: `audit_logs`) não têm `delete
 - Uma migration por mudança de schema logicamente coesa (não uma por tabela isolada, nem uma migration gigante por sprint).
 - Nome: `NNNN_descricao_curta.sql`, numeração sequencial.
 - Toda tabela com `organization_id` (direto ou via `brand_id`) tem RLS habilitado na mesma migration que a cria — nunca em uma migration separada posterior.
+- **`INSERT ... RETURNING` (o que `.insert().select()` do supabase-js sempre faz) exige que a linha também passe pela policy de SELECT, não só pela de INSERT/WITH CHECK.** Se a policy de SELECT depende de um estado que só existe *depois* do insert (ex.: virar membro de uma organização que acabou de ser criada), o insert falha com erro de RLS mesmo que o WITH CHECK esteja correto. Ao desenhar uma policy de SELECT para uma tabela que também recebe inserts "de bootstrap" (o próprio criador), inclua sempre uma cláusula alternativa tipo `or created_by = auth.uid()` / `or actor_user_id = auth.uid()`.
 
 ## 6. Feature flags
 

@@ -173,9 +173,14 @@ $$;
 -- ---------------------------------------------------------------------------
 -- RLS — organizations
 -- ---------------------------------------------------------------------------
+-- "or created_by = auth.uid()" é necessário porque INSERT ... RETURNING
+-- também exige que a linha passe pela policy de SELECT — no momento da
+-- criação, o criador ainda não é membro (isso só acontece no próximo passo
+-- do Provisionamento Inicial), então sem essa cláusula o INSERT falharia
+-- ao tentar retornar a linha criada.
 create policy "organizations_select_members"
   on public.organizations for select
-  using (public.is_org_member(id));
+  using (public.is_org_member(id) or created_by = auth.uid());
 
 create policy "organizations_insert_self"
   on public.organizations for insert
@@ -188,9 +193,12 @@ create policy "organizations_update_admins"
 -- ---------------------------------------------------------------------------
 -- RLS — organization_members
 -- ---------------------------------------------------------------------------
+-- "or user_id = auth.uid()" pelo mesmo motivo de organizations (RETURNING
+-- exige policy de SELECT) — sem isso, o bootstrap da própria membership
+-- (owner se auto-adicionando) não conseguiria retornar a linha criada.
 create policy "organization_members_select_self_org"
   on public.organization_members for select
-  using (public.is_org_member(organization_id));
+  using (public.is_org_member(organization_id) or user_id = auth.uid());
 
 -- Permite duas situações: (1) o próprio criador da organização se auto-adiciona
 -- como owner logo após criá-la (bootstrap do cadastro); (2) um admin/owner
@@ -246,9 +254,12 @@ create policy "user_profiles_update_self"
 -- RLS — audit_logs (select: admin/owner da org; insert: qualquer membro,
 -- só para registrar suas próprias ações — nunca em nome de terceiros)
 -- ---------------------------------------------------------------------------
+-- "or actor_user_id = auth.uid()" pelo mesmo motivo de organizations acima
+-- (RETURNING exige policy de SELECT) — sem isso, um membro não-admin não
+-- conseguiria nem registrar sua própria ação em audit_logs.
 create policy "audit_logs_select_admins"
   on public.audit_logs for select
-  using (public.is_org_admin(organization_id));
+  using (public.is_org_admin(organization_id) or actor_user_id = auth.uid());
 
 create policy "audit_logs_insert_members"
   on public.audit_logs for insert
