@@ -52,11 +52,19 @@ export async function signUpAction(formData: FormData): Promise<void> {
   });
 
   if (error) {
-    logger.warn("auth.signup_failed", { email, reason: error.message });
+    logger.warn("auth.signup_failed", {
+      email,
+      reason: error.message,
+      code: error.code,
+      status: error.status,
+    });
+
     const message =
       error.code === "user_already_exists"
         ? "Já existe uma conta com este e-mail."
-        : "Não foi possível criar a conta. Tente novamente.";
+        : error.code === "over_email_send_rate_limit"
+          ? "Enviamos muitas mensagens de confirmação recentemente. Aguarde alguns minutos e tente novamente."
+          : "Não foi possível criar a conta. Tente novamente.";
     redirectWithError("/cadastro", message);
   }
 
