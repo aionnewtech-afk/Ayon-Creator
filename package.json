@@ -1,0 +1,15 @@
+{
+  "name": "ayon-creator",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm --filter web lint"
+  }
+}
