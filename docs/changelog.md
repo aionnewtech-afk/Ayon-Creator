@@ -30,7 +30,7 @@
 - **`docs/flows.md`:** Fluxo 6 finalizado (checagem antes/cobrança só após sucesso, nunca após falha); novo Fluxo 12 (assinatura e compra de créditos via Mercado Pago), deixando explícito que o webhook — não o redirect do navegador de volta à aplicação — é a fonte de verdade do pagamento.
 - **`docs/ux-design.md`:** CFG-2/CFG-4 detalhadas com os estados reais do Mercado Pago; estado global "Créditos insuficientes" ampliado para cobrir também assinatura inativa.
 
-**Decisão pendente de confirmação (não bloqueia o início do código, mas precisa de resposta antes de implementar cancelamento):** tratamento de créditos já concedidos ao trocar de plano ou cancelar no meio do ciclo (architecture.md §10, item 11).
+**Última decisão confirmada antes do código:** créditos já concedidos (`grant_plan`) não são revogados retroativamente ao trocar de plano ou cancelar no meio do ciclo — mudança só afeta o próximo ciclo (architecture.md §10, item 11, resolvido).
 
 **Próximo passo:** aguardando aprovação explícita do dono do produto para iniciar a implementação de código da Missão 6.
 

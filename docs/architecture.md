@@ -327,7 +327,7 @@ Criados desde a Sprint 1 (sem upload ainda — preparam o terreno para as funcio
 8. ~~**Trend Source Provider do MVP.**~~ **Resolvido (revisão 15):** busca web nativa da API da Anthropic, como adapter de `trend_source` atrás do Provider Gateway — ver §3.3.
 9. ~~**n8n no Fluxo 2.**~~ **Resolvido (revisão 15):** Fluxo 2 é Server Action direta, sem n8n — ver §3.3 e §8.
 10. **(★ novo, Missão 6) Cobrança incremental por marca extra no Business:** hoje até 5 marcas inclusas, sem custo adicional por marca a mais. Se/quando surgir demanda real por mais de 5 marcas numa organização, decidir se isso vira upgrade de plano, add-on pago por marca, ou limite rígido. Não bloqueia o MVP.
-11. **(★ novo, Missão 6) Downgrade/cancelamento de assinatura:** o que acontece com créditos já concedidos (`grant_plan`) quando o cliente troca para um plano menor no meio do ciclo, ou cancela? Proposta razoável (pendente de confirmação): créditos já concedidos não são revogados retroativamente (o cliente já "pagou" por eles no ciclo corrente), a mudança de plano só afeta o próximo ciclo.
+11. ~~**Downgrade/cancelamento de assinatura:** o que acontece com créditos já concedidos (`grant_plan`) quando o cliente troca para um plano menor no meio do ciclo, ou cancela?~~ **Resolvido (Missão 6):** créditos já concedidos no ciclo corrente não são revogados retroativamente — o cliente já "pagou" por eles nesse período. Troca de plano ou cancelamento só afeta o `grant_plan` do próximo ciclo (ou a ausência dele, em caso de cancelamento).
 
 > Estas decisões devem ser resolvidas e refletidas aqui antes da implementação dos módulos correspondentes.
 
