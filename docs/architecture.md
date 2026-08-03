@@ -1,6 +1,7 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** v1.0 (revisão 14 — Missão 4 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 15 — Missão 5 liberada para código) — **aprovado, fonte oficial da verdade para a implementação**
+> **Mudança desta revisão (15 — preparação e aprovação da Missão 5, Trend Engine):** §3.3 (Trend Engine) resolvida: Trend Source Provider do MVP é a busca web nativa da API da Anthropic, sempre atrás do Provider Gateway (contrato `trend_source`, Trend Engine nunca conhece o fornecedor concreto — troca futura por Google Trends/SerpAPI/Exploding Topics/Glimpse/Similarweb é só um novo adapter); nova regra inegociável de que nenhuma tendência entra em estratégia sem passar pelo Intelligence Hub; Fluxo 2 confirmado como Server Action direta, sem n8n. §8 (Papel do n8n) reescrita para refletir que n8n segue não implementado, reservado para quando surgir necessidade real de orquestração assíncrona (Asset Engine é o candidato mais provável). §10, itens 8 e 9, marcados como resolvidos. Aprovado pelo dono do produto. Ver [docs/changelog.md](changelog.md) para o detalhamento completo.
 > **Mudança desta revisão (14 — Missão 4 implementada):** §3.2 (Knowledge Base) implementada e validada com Supabase real — upload de PDF/DOCX/TXT com extração síncrona (`mammoth` para DOCX, `pdf-parse` para PDF), nota manual, edição de tags, remoção (soft delete). `pdf-parse` precisou ser excluído do barrel de exports de `@ayon/core` (ver `packages/core/src/index.ts`) porque depende de `fs` e quebrava o bundle de Client Components que importavam qualquer coisa do pacote — importado agora só pelo arquivo específico que precisa dele. Retrieval por recência/tags confirmado como suficiente para o MVP (nenhum provider de embedding integrado, conforme decidido).
 > **Mudança desta revisão (13 — pós-validação da Missão 3):** §10, item 7, marcado como resolvido — os 4 prompts do Specialist Registry foram validados qualitativamente com Supabase e Anthropic reais e documentados individualmente em [`docs/prompts/`](prompts/). Nova §11 registra o **Tool Registry** (ferramentas externas plugáveis para especialistas) como evolução arquitetural futura — não implementada agora, apenas documentada para não ser esquecida nem reinventada de forma inconsistente.
 > **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis, Missão 3 redefinida):** o Intelligence Hub deixa de tratar os especialistas (e o Coordinator) como papéis fixos no código — nova §4.1 define o **Specialist Registry**, uma tabela (`specialists`) que descreve cada especialista por dados (identidade, objetivo, system prompt, capacidade de Provider Layer, aplicabilidade, prioridade, parâmetros configuráveis), resolvida em tempo de execução exatamente como o Provider Gateway resolve fornecedores. `provider_configs.specialist_type` (enum fixo) é substituído por `provider_configs.specialist_id` (FK para `specialists`) — detalhado em [database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions--specialists). Isso resolve, na prática, a decisão em aberto PRD §13.1 (quais especialistas rodam em cada tipo de decisão passa a ser dado, não código). Ver também [docs/engine-behavior.md](engine-behavior.md) para o comportamento esperado de cada especialista.
@@ -150,8 +151,11 @@ O corpus de conhecimento retrivável de cada marca (RAG), incluindo a transcriç
 
 Orquestra a descoberta de tendências relevantes ao nicho/marca ("O que está em alta").
 
-- **Responsabilidade:** consultar Trend Source Provider(s) configurados, consolidar candidatos e enviar ao Intelligence Hub (não mais diretamente ao Brand Brain isoladamente) para ranqueamento estratégico quando a decisão for "importante" (ver §4.3).
+- **Responsabilidade:** consultar o Trend Source Provider ativo (via Provider Gateway) para candidatos de tendência e enviar ao Intelligence Hub — nunca ao Brand Brain isoladamente — para ranqueamento estratégico (ver §4.3).
 - **Armazenamento:** `trend_research` (ver [database.md](database.md#43-trend_research)).
+- **Trend Source Provider do MVP (resolvido, revisão 15 — aprovado pelo dono do produto):** adapter inicial de `trend_source` implementado sobre a ferramenta de busca web nativa da API da Anthropic, resolvido pelo Provider Gateway pelo contrato `(capability: "trend_source", tier)` — exatamente como qualquer outro capability hoje (`llm`). **O Trend Engine nunca conhece a Anthropic diretamente**, apenas o contrato `trend_source` (lista de candidatos de tendência a partir de um `niche`); a implementação concreta (hoje, busca web da Anthropic) fica inteiramente isolada no adapter, atrás do Provider Gateway. Candidatos futuros de substituição, sem nenhuma mudança no Trend Engine — só um novo adapter + linha em `provider_configs`: Google Trends, SerpAPI, Exploding Topics, Glimpse, Similarweb.
+- **Regra inegociável — uma tendência nunca entra diretamente na estratégia:** todo candidato de tendência produzido pelo Trend Source Provider passa obrigatoriamente pelo Intelligence Hub antes de influenciar qualquer decisão de campanha. Fluxo obrigatório: **Trend Source Provider → Trend Engine → Intelligence Hub → Brand Brain (contexto) → Painel de Especialistas → Coordinator → estratégia final** (`campaigns.strategy_summary`). Nenhuma tendência é exibida ao usuário como recomendação, nem vira campanha, sem antes ser interpretada à luz da identidade da marca — mesma família de regra do "portão" obrigatório do Brand Brain já registrada em [§1.1](#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7).
+- **Orquestração (resolvido, revisão 15 — aprovado pelo dono do produto):** Fluxo 2 é Server Action direta (`Tela → Server Action → Repository → Provider Gateway → Trend Source Provider → Trend Engine → Intelligence Hub → Coordinator`), sem webhook para n8n — mesmo padrão já usado e validado nos Fluxos 1, 10 e 11 (Missões 2, 3 e 4). Ver §8 (Papel do n8n) para quando n8n de fato entra na arquitetura.
 
 ### 3.4 Intelligence Hub ★ (novo)
 
@@ -278,11 +282,15 @@ O MVP entrega exclusivamente um **Pacote de Conteúdo para download** (PRD §4.3
 
 ## 8. Papel do n8n
 
-O n8n orquestra **sequências de chamadas aos Core Engines e ao Provider Gateway**, sem conter lógica específica de fornecedor:
+**Não implementado até esta revisão (15)** — nenhuma missão entregue até aqui (Missões 2, 3 e 4) precisou de n8n de fato; todas usaram Server Action direta (ver §6, §3.2, §3.3), inclusive processos que a v1.0 original previa para o n8n, como a sessão do Intelligence Hub e — a partir da revisão 15 — a descoberta de tendências. Isso não invalida o papel do n8n na arquitetura: é uma decisão deliberada de não adicionar infraestrutura antes dela gerar valor real.
 
-1. Processos longos/assíncronos e multi-etapas (tendências, sessão do Intelligence Hub, geração de cada peça, montagem do pacote, extração/gravação pós-turno da conversa de onboarding — nunca a troca de mensagens em si, ver §6);
+Quando o n8n orquestrar de fato, seu papel continua sendo **sequenciar chamadas aos Core Engines e ao Provider Gateway, sem conter lógica específica de fornecedor**:
+
+1. Processos genuinamente longos/assíncronos e multi-etapas onde uma Server Action síncrona não é viável — candidatos previstos: geração de vídeo (Asset Engine, produção via avatar/mídia licenciada), processamento de mídia, publicações em redes sociais (pós-MVP), automações longas, integrações externas e workflows agendados/recorrentes;
 2. Retentativas, timeouts e tratamento de falha entre etapas;
 3. Atualização de status das entidades no Supabase a cada etapa concluída (refletido na UI via Realtime).
+
+Introduzir n8n é, portanto, uma decisão a tomar quando uma dessas necessidades aparecer de fato (provavelmente Asset Engine), não antes.
 
 ## 9. Segurança
 
@@ -311,6 +319,8 @@ Criados desde a Sprint 1 (sem upload ainda — preparam o terreno para as funcio
 5. **Especialistas com modelos distintos (tier Premium):** vale a pena, em termos de custo/benefício, atribuir modelos diferentes a especialistas diferentes, ou todos usam o mesmo modelo do tier e a diversidade vem só dos prompts/papéis? O **mecanismo** para isso já existe (`provider_configs` por `specialist_id`, §5.1) — o que falta é a decisão de custo/benefício em si. (Relacionado à decisão de produto PRD §13.2.)
 6. Provedor de banco de vídeos públicos licenciados e como ele se integra.
 7. ~~**Seed inicial do Specialist Registry (§4.1):** implementado na Missão 3 [...] revisão do dono do produto sobre o conteúdo exato de cada `system_prompt` pendente.~~ **Resolvido (revisão 13):** os 4 `system_prompt`s (`marketing_strategy`, `branding`, `copywriting`, `coordinator`) passaram por validação qualitativa real (Supabase + Anthropic reais, múltiplos objetivos de campanha incluindo um caso desenhado para forçar divergência) e foram aprovados pelo dono do produto. Um problema de truncamento no prompt de Branding foi corrigido (migration `0005`). Documentação individual de cada especialista em [`docs/prompts/`](prompts/).
+8. ~~**Trend Source Provider do MVP.**~~ **Resolvido (revisão 15):** busca web nativa da API da Anthropic, como adapter de `trend_source` atrás do Provider Gateway — ver §3.3.
+9. ~~**n8n no Fluxo 2.**~~ **Resolvido (revisão 15):** Fluxo 2 é Server Action direta, sem n8n — ver §3.3 e §8.
 
 > Estas decisões devem ser resolvidas e refletidas aqui antes da implementação dos módulos correspondentes.
 

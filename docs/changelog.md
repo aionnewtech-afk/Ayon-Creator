@@ -4,6 +4,29 @@
 
 ---
 
+## v2.0 (revisão 17) — 2026-08-03 — Missão 5 aprovada (Trend Engine / "O que está em alta")
+
+**Status:** aprovado — dono do produto confirmou as duas decisões técnicas pendentes e liberou o início da implementação de código, seguindo o mesmo processo doc-first já usado nas Missões 2, 3 e 4.
+
+**Contexto:** ao contrário das missões anteriores, a maior parte da especificação do Trend Engine já existia (schema `trend_research` completo desde a revisão 2, telas TREND-1/TREND-2 em `ux-design.md` desde a revisão 4, Fluxo 2 e comportamento em `engine-behavior.md` §4). Restavam duas lacunas reais impedindo o início do código — ambas resolvidas nesta revisão.
+
+**O que mudou:**
+
+- **`docs/architecture.md`:** §3.3 (Trend Engine) resolvida:
+  1. **Trend Source Provider do MVP:** adapter de `trend_source` implementado sobre a ferramenta de busca web nativa da API da Anthropic, resolvido pelo Provider Gateway pelo contrato `(capability: "trend_source", tier)` — o Trend Engine nunca conhece o fornecedor concreto, só o contrato. Candidatos futuros de substituição (sem mudança no Trend Engine, só um novo adapter): Google Trends, SerpAPI, Exploding Topics, Glimpse, Similarweb.
+  2. **Sem n8n no Fluxo 2:** confirmado Server Action direta, mesmo padrão já validado nos Fluxos 1, 10 e 11 (Missões 2, 3 e 4) — nenhuma delas precisou de n8n de fato.
+  - **Nova regra inegociável (pedida explicitamente pelo dono do produto):** nenhuma tendência entra em estratégia ou é exibida ao usuário sem passar pelo Intelligence Hub. Fluxo obrigatório: Trend Source Provider → Trend Engine → Intelligence Hub → Brand Brain (contexto) → Painel de Especialistas → Coordinator → estratégia final.
+  - **§8 (Papel do n8n) reescrita:** deixa explícito que n8n segue não implementado em nenhuma missão até aqui (nem a sessão do Intelligence Hub, nem agora a descoberta de tendências, que a v1.0 original previa para ele) — decisão deliberada de não adicionar infraestrutura antes dela gerar valor real. Papel futuro do n8n mantido, mas restrito a necessidades genuinamente assíncronas ainda não implementadas: geração de vídeo (Asset Engine), processamento de mídia, publicações (pós-MVP), automações longas, integrações externas, workflows agendados.
+  - §10, itens 8 e 9, marcados como resolvidos.
+- **`docs/flows.md`:** Fluxo 2 reescrito refletindo as três decisões acima (Server Action direta, Provider Gateway para `trend_source`, regra inegociável do Intelligence Hub).
+- **`docs/database.md`:** **nenhuma mudança necessária** — `trend_research` já está totalmente especificada desde a revisão 2 e não exige nenhuma migration nova, mesmo padrão de reaproveitamento de schema já visto na Missão 4.
+- **`docs/ux-design.md`:** **nenhuma mudança necessária** — TREND-1/TREND-2 já cobrem os estados relevantes (carregando, vazio, erro parcial).
+- **`PRD.md`:** revisão 12, aprovada, referenciando as três decisões acima.
+
+**Próximo passo:** implementação de código da Missão 5 — migration de `trend_research` (schema já especificado em `database.md` §4.3, sem mudança), adapter `trend_source` sobre busca web da Anthropic, `TrendResearchRepository`, módulo `trend-engine/` em `packages/core`, Server Actions e telas TREND-1/TREND-2, seguindo o mesmo padrão de validação real (Supabase + Anthropic) das missões anteriores antes de fechar a tag.
+
+---
+
 ## v1.9 (revisão 16) — 2026-08-03 — Auditoria técnica pré-Missão 5 e fechamento formal da Missão 4
 
 **Status:** aprovado — auditoria completa do repositório (docs, migrations, código) solicitada pelo dono do produto antes de autorizar a Missão 5 (Trend Engine). Encontradas inconsistências entre documentação e código; corrigidas, sem nenhuma mudança de escopo de produto ou arquitetura.

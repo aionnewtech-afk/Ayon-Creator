@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 14 — Fluxo 11 implementado e validado) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 15 — Missão 5 liberada para código) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (15 — aprovação da Missão 5, Trend Engine):** Fluxo 2 revisado e aprovado — Server Action direta, sem n8n (passo 2), Trend Source Provider resolvido via Provider Gateway sem o Trend Engine conhecer o fornecedor concreto (passo 3), e nova regra inegociável de que nenhuma tendência é exibida ao usuário sem passar pelo Intelligence Hub (passo 4). Ver [architecture.md §3.3/§8](architecture.md#33-trend-engine) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (14 — Missão 4 implementada):** Fluxo 11 implementado e validado em produção — upload de PDF/DOCX/TXT (extração síncrona confirmada) e nota manual, ambos passando por `knowledge_base_items`. Retrieval por recência + tags confirmado como decisão final (não mais pendente).
 > **Mudança desta revisão (13 — preparação da Missão 4):** novo Fluxo 11 — "Ensine sua Empresa para a IA" (Knowledge Base), reutilizando `knowledge_base_items` já existente desde a Missão 2. Retrieval no MVP é por recência + tags, não por embeddings — decisão pendente de confirmação do dono do produto (ver [architecture.md §10, item 3](architecture.md#10-decisões-em-aberto-arquitetura)).
 > **Mudança desta revisão (11 — Missão 3 implementada):** Fluxo 10 implementado e em produção, mas só para o gatilho `campaign_strategy` (tela "Criar Campanha", CAMP-1/2/3 simplificado) — painel de especialistas + Coordinator rodam de ponta a ponta (`Promise.allSettled`, falha de um especialista nunca bloqueia os demais nem o Coordinator, passo 7 confirmado em produção, não mais decisão em aberto). O gatilho `trend_ranking` (Fluxo 2, passo 4) ainda não está ligado ao Intelligence Hub porque o Trend Engine em si não foi implementado; geração de conteúdo (Fluxo 3) também não consome o Intelligence Hub ainda — ambos permanecem como especificado, aguardando suas próprias missões.
@@ -31,11 +32,11 @@
 ## Fluxo 2 — "O que está em alta" → "Criar campanha"
 
 1. Usuário acessa **"O que está em alta"** (Trend Engine) para uma marca.
-2. Sistema cria `trend_research` (status `pending`) e dispara webhook para n8n.
-3. **Trend Engine** resolve o Trend Source Provider ativo (via tier da organização/marca) e consulta tendências filtradas pelo `niche`.
-4. Os candidatos de tendência são enviados ao **Intelligence Hub** (ver **Fluxo 10**) para ranqueamento estratégico — não é mais um ranqueamento isolado do Brand Brain.
+2. Server Action cria `trend_research` (status `pending`) e, na mesma chamada, aciona o Trend Engine — sem webhook, sem n8n (ver [architecture.md §8](architecture.md#8-papel-do-n8n)).
+3. **Trend Engine** resolve o Trend Source Provider ativo (via Provider Gateway, `(capability: "trend_source", tier)`) e consulta tendências filtradas pelo `niche` — o Trend Engine nunca conhece o fornecedor concreto por trás do adapter (ver [architecture.md §3.3](architecture.md#33-trend-engine)).
+4. **Regra inegociável — nenhuma tendência é exibida ao usuário sem passar pelo Intelligence Hub:** os candidatos brutos do Trend Source Provider nunca chegam à tela TREND-1 diretamente. São sempre enviados ao **Intelligence Hub** (ver **Fluxo 10**) — que monta contexto a partir do Brand Brain, aciona o Painel de Especialistas e o Coordinator — para ranqueamento e interpretação estratégica; nunca um ranqueamento isolado do Trend Engine ou do Brand Brain sozinho (ver [architecture.md §3.3](architecture.md#33-trend-engine)).
 5. Resultado consolidado gravado em `trend_research.summary` (+ `intelligence_hub_session_id`), `status = completed`.
-6. UI (via Realtime) exibe as tendências já ranqueadas e priorizadas.
+6. UI (via Realtime) exibe as tendências já ranqueadas e priorizadas, cada uma com a justificativa em linguagem de negócio ancorada no Brand Brain (Bloco de Justificativa de Marca, TREND-2).
 7. Usuário seleciona uma tendência/tema e clica em **"Criar campanha"**.
 8. Sistema cria `campaigns` (status `draft`) vinculada à `trend_research` e dispara nova sessão do **Intelligence Hub** (Fluxo 10) para definir a estratégia completa da campanha (temas, formatos do pacote, calendário sugerido).
 9. Estratégia consolidada gravada em `campaigns.strategy_summary` (+ `intelligence_hub_session_id`) — inclui obrigatoriamente uma justificativa em linguagem de negócio ancorada no Brand Brain (Princípio do Consultor Permanente, PRD §1.1; ver Fluxo 10, passo 4).
