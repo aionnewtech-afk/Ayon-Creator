@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 16 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.3 (revisão 17 — auditoria pré-Missão 7) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (17 — correção de auditoria):** §3.9 (CFG) ganha nota explícita marcando CFG-1/3/5/6 como não implementadas (só CFG-2/4 têm código); §3.6 (HIST) ganha a mesma nota para HIST-1/2. Nenhuma das duas é uma decisão nova — só torna explícito o que já era verdade, corrigindo uma lacuna de sinalização identificada em auditoria anterior (v1.9) e nunca fechada para estes itens.
 > **Mudança desta revisão (16 — Missão 6 implementada e validada):** CFG-2 e CFG-4 implementadas como uma única tela (`/configuracoes`) — CFG-1/3/5/6 seguem fora de escopo. Estados de bloqueio (créditos insuficientes/assinatura inativa) confirmados em produção com CTA funcionando em Criar Campanha e O que está em Alta.
 > **Mudança desta revisão (15 — preparação Missão 6, Billing):** CFG-2 (Plano e Cobrança) e CFG-4 (Créditos e Uso) detalhadas com os estados reais do Mercado Pago (processando pagamento aguardando webhook, `past_due`, checkout externo). Estado global "Créditos insuficientes" (§5) renomeado para "Créditos insuficientes ou assinatura inativa", cobrindo os dois motivos de bloqueio do portão de crédito (Fluxo 6).
 > **Mudança desta revisão (14 — Missão 4 implementada):** KB-1/2/3 implementadas e validadas em produção — upload de PDF/DOCX/TXT, nota manual, edição de tags e remoção, todos confirmados funcionando com Supabase real.
@@ -156,6 +157,8 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 
 ### 3.6 Campanhas (`HIST`)
 
+**Estado de implementação:** especificadas abaixo, sem código correspondente — `campaigns` já existe e é escrita pelo fluxo de Criar Campanha (Missão 3) desde já, mas não há tela de listagem/detalhe; nav item `campanhas` marcado `implemented: false` (`apps/web/config/navigation.ts`).
+
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
 | HIST-1 | Lista de Campanhas | Histórico com status de cada campanha | vazio (primeira campanha ainda não criada) | Menu | HIST-2 |
@@ -178,12 +181,14 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 
 ### 3.9 Configurações (`CFG`)
 
+**Estado de implementação (revisão 16, Missão 6):** CFG-2 e CFG-4 implementadas juntas, numa única tela (`/configuracoes`). **CFG-1, CFG-3, CFG-5 e CFG-6 seguem apenas especificadas abaixo, sem código correspondente** — mesma lacuna já identificada em `docs/changelog.md` v1.9 (revisão 16, pré-Missão 5) e nunca resolvida para estes 4 itens.
+
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
 | CFG-1 | Perfil da Conta/Organização | Dados da organização, usuário logado | — | Menu | — |
-| CFG-2 | Plano e Cobrança | Ver/alterar plano (Starter/Pro/Business), status da assinatura | processando pagamento (aguardando webhook do Mercado Pago — Fluxo 12), assinatura ativa, `past_due` (pagamento falhou, CTA para atualizar no Mercado Pago), `canceled` | Menu | Checkout externo do Mercado Pago (Preapproval) |
+| CFG-2 | Plano e Cobrança **(implementada)** | Ver/alterar plano (Starter/Pro/Business), status da assinatura | processando pagamento (aguardando webhook do Mercado Pago — Fluxo 12), assinatura ativa, `past_due` (pagamento falhou, CTA para atualizar no Mercado Pago), `canceled` | Menu | Checkout externo do Mercado Pago (Preapproval) |
 | CFG-3 | Nível de Qualidade (tier) | Escolher Econômico/Balanceado/Premium — **nunca menciona fornecedor** | — | Menu, CFG-2 | — |
-| CFG-4 | Créditos e Uso | Saldo (`SUM(credit_ledger.amount)`), histórico de lançamentos (`grant_plan`/`purchase`/`consumption`), comprar créditos avulsos (`credit_packages`) | créditos baixos (aviso), sem saldo (bloqueio), processando compra (aguardando webhook) | Menu, aviso de bloqueio em CAMP-4 (Fluxo 6, passo 2) | Checkout externo do Mercado Pago (Checkout Pro) |
+| CFG-4 | Créditos e Uso **(implementada)** | Saldo (`SUM(credit_ledger.amount)`), histórico de lançamentos (`grant_plan`/`purchase`/`consumption`), comprar créditos avulsos (`credit_packages`) | créditos baixos (aviso), sem saldo (bloqueio), processando compra (aguardando webhook) | Menu, aviso de bloqueio em CAMP-4 (Fluxo 6, passo 2) | Checkout externo do Mercado Pago (Checkout Pro) |
 | CFG-5 | Marcas (Business) | Listar/criar marcas da organização | — | Menu | Seletor de marca |
 | CFG-6 | Time e Permissões (Business) | Convidar usuários, definir papel por marca | convite pendente | Menu | — |
 

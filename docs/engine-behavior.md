@@ -1,7 +1,8 @@
 # Comportamento de IA por Engine — Ayon Creator
 
-> **Status:** v1.0 (revisão 11 — item 1 de §8 resolvido) — aprovado
+> **Status:** v1.0 (revisão 12 — auditoria pré-Missão 7) — aprovado
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (12 — correção de auditoria):** §4 (Trend Engine) e §8 item 2 corrigidos — ainda diziam "sem código"/"não validado", mas o Trend Engine foi implementado e validado com Anthropic real desde a Missão 5. Achado numa auditoria de rotina antes da Missão 7, não durante a implementação da Missão 5 em si — o documento simplesmente não foi revisado quando o Trend Engine foi concluído.
 > **O que este documento é:** o padrão de comportamento esperado de cada Core Engine quando ele efetivamente "fala" (gera texto, opina, sugere, justifica) — tom, princípios de raciocínio, o que é um bom resultado, o que nunca deve acontecer. É a referência para quem escreve um `system_prompt` (seja o da conversa de onboarding, seja um especialista no Specialist Registry, seja o Coordinator).
 > **O que este documento não é:** não substitui o [PRD.md](../PRD.md) (visão de produto, escopo, modelo de negócio), não substitui o [architecture.md](architecture.md) (como os sistemas se conectam), não substitui o [flows.md](flows.md) (sequência de passos) nem o [ux-design.md](ux-design.md) (telas e microinterações). Este documento cobre exclusivamente **comportamento** — o que o texto/decisão gerada por cada Engine deve soar como.
 > Todo Engine aqui descrito já está sujeito ao Princípio do Consultor Permanente ([PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)) — este documento detalha como esse princípio se traduz especificamente para cada um.
@@ -40,7 +41,7 @@ O Intelligence Hub tem uma exigência comportamental que nenhum outro Engine tem
 
 ## 4. Trend Engine
 
-Ainda sem código — comportamento a seguir quando a Missão de "O que está em Alta" for implementada.
+**Implementado e validado com Anthropic real desde a Missão 5** (busca web nativa como Trend Source Provider) — os princípios abaixo já foram confirmados em produção, não são mais só hipótese de comportamento.
 
 - **Relevância para esta marca, nunca popularidade genérica.** Uma tendência só é boa sugestão se conecta com um atributo específico do Brand Brain (público, diferencial, objetivo) — "está bombando" sozinho nunca é justificativa suficiente.
 - **Honestidade sobre ausência de sinal.** Quando não há tendência genuinamente relevante, o comportamento correto é dizer isso claramente, não forçar uma sugestão fraca só para preencher a tela (mesmo espírito do Learning Engine, §6).
@@ -71,7 +72,7 @@ Todo Engine que gera texto estruturado segue o mesmo padrão de contrato já est
 ## 8. Decisões em Aberto
 
 1. ~~O conteúdo exato dos `system_prompt` de cada especialista do Intelligence Hub...~~ **Resolvido (revisão 11, refletindo architecture.md §10 item 7 e docs/changelog.md v1.6):** os 4 `system_prompt`s do Specialist Registry passaram por validação qualitativa real (Supabase + Anthropic reais) e foram aprovados pelo dono do produto — documentados individualmente em [docs/prompts/](prompts/).
-2. Comportamento de Trend Engine, Asset Engine e Learning Engine descritos aqui ainda não foram validados com IA real (ao contrário do Brand Brain e do Intelligence Hub, já testados ponta a ponta) — tratar como hipótese de comportamento a confirmar quando cada Engine for implementado, não como padrão já provado.
+2. ~~Comportamento de Trend Engine, Asset Engine e Learning Engine... ainda não foram validados com IA real.~~ **Parcialmente resolvido (Missão 5):** Trend Engine validado com Anthropic real, mesmo padrão de rigor do Brand Brain e do Intelligence Hub (ver §4 acima). **Ainda em aberto:** comportamento de Asset Engine (§5) e Learning Engine (§6) seguem como hipótese não implementada — tratar como tal até cada Engine ser de fato construído e testado.
 
 ## 9. Histórico
 

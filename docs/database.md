@@ -530,7 +530,7 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 
 1. ~~`credit_pricing`: desenhar tabela de conversão custo→crédito por `capability` + `tier`.~~ **Resolvido (Missão 6):** chave é `trigger_reason` + `tier` (não `capability` + `tier` — ver §7.3), com valores seedados (`trend_ranking` 1/2/4, `campaign_strategy` 5/10/20 por tier).
 2. Estrutura exata de `visual_guidelines`, `specialist_opinions.opinion`, `intelligence_hub_sessions.consolidated_result` e `learning_insights.summary` (jsonb) — fixar após prototipagem dos prompts de cada Core Engine. **Já decidido (revisão 7):** `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` incluem obrigatoriamente uma chave `rationale`; o restante da estrutura permanece em aberto.
-3. Confirmar uso de `pgvector` para `knowledge_base_items.embedding`.
+3. ~~Confirmar uso de `pgvector` para `knowledge_base_items.embedding`.~~ **Resolvido (revisão 13, Missão 4):** adiado — MVP usa retrieval por recência + `tags`/`source_type`. Coluna `embedding` permanece reservada (nullable) para busca híbrida futura. Ver [architecture.md §10, item 3](architecture.md#10-decisões-em-aberto-arquitetura).
 4. `provider_configs.specialist_id`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.
 5. Se `content_packages` deve versionar (permitir gerar o pacote mais de uma vez após reaprovações) ou é sempre 1:1 com a campanha.
 6. `feature_flags`: manter global por enquanto, ou já modelar override por organização (`organization_feature_overrides`) desde a Sprint 1? Adiado até haver um caso de uso real.

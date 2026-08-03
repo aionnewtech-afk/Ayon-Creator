@@ -4,6 +4,36 @@
 
 ---
 
+## v2.5 (revisão 22) — 2026-08-03 — Auditoria completa pré-Missão 7 (Asset Engine)
+
+**Status:** documentação corrigida — **aguardando decisões arquiteturais e aprovação explícita do dono do produto antes de iniciar o doc-first da Missão 7**, seguindo o mesmo processo já usado antes de toda missão.
+
+**Escopo da auditoria:** leitura completa de README.md, PRD.md, architecture.md, database.md, flows.md, ux-design.md, engine-behavior.md, CONVENTIONS.md, CHANGELOG.md, docs/changelog.md, docs/prompts/, todas as 10 migrations, e toda a árvore `apps/web`/`packages/*` — mesmo padrão de rigor das auditorias pré-Missão 5 e pré-Missão 6.
+
+**Inconsistências encontradas e corrigidas** (nenhuma delas é uma decisão de produto — só desalinhamento entre documentos ou documento não revisado após uma missão concluir):
+
+1. **PRD.md §13, item 1** tinha um "Ainda pendente" sobre revisão de `system_prompt`s dos especialistas — já resolvido desde a revisão 13 de `architecture.md`/`engine-behavior.md`, mas o PRD nunca foi corrigido. Corrigido.
+2. **`database.md` §10, item 3** (uso de `pgvector`) contradizia `architecture.md` §10, item 3, sobre a mesma decisão — aberta num documento, resolvida no outro desde a Missão 4. Corrigido.
+3. **`docs/engine-behavior.md` §4 (Trend Engine)** ainda dizia "Ainda sem código" e §8 item 2 tratava o Trend Engine como "não validado com IA real" — o Trend Engine foi implementado e validado desde a Missão 5; o documento simplesmente não foi revisado quando essa missão fechou. Corrigido.
+4. **PRD.md contava "4 documentos"** na regra de doc-first (sem `ux-design.md`), enquanto **README.md sempre contou "5"** — na prática, `ux-design.md` sempre foi atualizado junto dos demais em toda missão já fechada; só o texto do PRD estava desatualizado. Corrigido para 5, alinhado ao README.
+5. **`docs/ux-design.md` §3.9 (CFG)** não sinalizava que CFG-1/3/5/6 seguem sem código, apesar de CFG-2/4 já estarem implementadas desde a Missão 6 — lacuna de sinalização já identificada na auditoria pré-Missão 5 (v1.9) e nunca fechada para estes 4 itens. Corrigido com nota explícita.
+6. **`docs/ux-design.md` §3.6 (HIST)** não sinalizava que as telas de histórico de campanhas (HIST-1/2) não têm código, apesar de `campaigns` já existir e ser escrita desde a Missão 3. Corrigido com nota explícita.
+
+**Verificado e confirmado consistente, sem necessidade de correção:** README.md "Estado do projeto" ↔ CHANGELOG.md raiz (ambos param em `v0.6.0`, sem divergência); `docs/flows.md` (nenhuma inconsistência encontrada nesta rodada); numeração de revisão por documento (cada um tem contador próprio desde o início do projeto — não é um erro, só dificulta conferência rápida, registrado como observação, não como correção).
+
+**Riscos arquiteturais identificados para a Missão 7 (Asset Engine) — apresentados ao dono do produto antes de qualquer doc-first, conforme pedido explícito:**
+
+1. Provider Layer para `avatar`/`voice`/`media` não existe nem como contrato/interface — hoje só `llm` e `trend_source` têm adapter concreto.
+2. n8n segue não implementado em lugar nenhum do repositório, apesar de `architecture.md` §8 já apontar o Asset Engine como o candidato mais provável a precisar dele de verdade.
+3. `credit_pricing` não tem nenhuma linha para operações de geração de mídia — precisa de novos `trigger_reason` antes do portão de crédito poder cobrar por elas.
+4. `credit_ledger.related_intelligence_hub_session_id` é hoje o único jeito de rastrear consumo — `database.md` já antecipa que o Asset Engine vai precisar de uma nova coluna (`content_pieces`/`content_versions`), não reaproveitar esta.
+5. `content_pieces`/`content_versions`/`content_packages` são só schema documentado, sem migration — todo o domínio de dados do Asset Engine precisa ser criado do zero.
+6. Realtime é mencionado em `architecture.md`/`ux-design.md`/`flows.md` como mecanismo esperado de atualização de UI, mas nunca foi implementado em nenhuma missão até aqui — todas usam Server Action síncrona + `revalidatePath`.
+
+**Próximo passo:** apresentar essas decisões ao dono do produto antes de escrever qualquer documento de escopo da Missão 7.
+
+---
+
 ## v2.4 (revisão 21) — 2026-08-03 — Missão 6 implementada e validada (Billing)
 
 **Status:** implementado e validado com Supabase + Mercado Pago reais (sandbox) — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2-5.
