@@ -451,15 +451,15 @@ Preço em créditos por tipo de operação — chave é `trigger_reason` (mesmo 
 | status | enum(`active`,`inactive`) | |
 | updated_at | timestamptz | |
 
-**Seed inicial (Missão 6, decisão de produto — arch. §12.4):**
+**Preço em créditos por operação (revisado na Missão 7 — dono do produto ajustou `trend_ranking` e definiu `asset_generation`):**
 
 | trigger_reason | economico | balanceado | premium |
 |---|---|---|---|
-| `trend_ranking` | 1 | 2 | 4 |
+| `trend_ranking` | 2 | 4 | 8 |
+| `asset_generation` ★ novo (Missão 7) | 3 | 6 | 12 |
 | `campaign_strategy` | 5 | 10 | 20 |
-| `asset_generation` ★ proposto (Missão 7, pendente de aprovação) | 2 | 4 | 8 |
 
-`asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas). Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas.
+`trend_ranking` passa de 1/2/4 (seed original, `0008_billing.sql`) para 2/4/8 — ajuste de preço da Missão 7, aplicado via `UPDATE` numa migration nova (nunca editar uma migration já aplicada). `asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas), mas mais caro que `trend_ranking`. Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas.
 
 ### 7.4 `credit_packages` ★ novo (Missão 6)
 

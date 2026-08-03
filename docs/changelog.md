@@ -19,14 +19,20 @@
 **O que mudou nos documentos:**
 
 - **`docs/architecture.md`:** §3.5 (Asset Engine) ganha o escopo do MVP aprovado — `production_mode` limitado a `text_only`/`own_media`, upload manual para formatos visuais **sem depender de `brand_media_assets`/Biblioteca de Mídia** (decisão explícita para não acoplar a Missão 7 a uma funcionalidade que também não existe ainda), execução síncrona, sem Realtime.
-- **`docs/database.md`:** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar sem mudança de coluna. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 do próprio documento). §7.3 (`credit_pricing`) ganha proposta de preço para `asset_generation` — **2/4/8 créditos por tier, pendente de aprovação explícita separada dos números** (mesmo padrão da Missão 6: arquitetura aprovada primeiro, números de negócio confirmados à parte).
+- **`docs/database.md`:** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar sem mudança de coluna. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 do próprio documento). §7.3 (`credit_pricing`) ganha `asset_generation` (**3/6/12 créditos por tier**, aprovado) e reajusta `trend_ranking` de 1/2/4 para **2/4/8** (decisão do dono do produto, Missão 7) — aplicado via `UPDATE` numa migration nova, já que `0008_billing.sql` está aplicada e nunca é editada retroativamente.
 - **`docs/flows.md`:** Fluxo 3, §3.2, reescrito com o escopo do MVP; §3.3 corrigida para não mencionar Realtime.
 - **`docs/ux-design.md`:** CAMP-4/5/6 e os componentes §4.4 (Rastreador de Progresso — não mais "alimentado por Realtime"), §4.5 (Checklist) e §4.6 (Cartão de Revisão) ajustados para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).
 - **`PRD.md`:** §13, item 4, resolvido para o escopo do MVP (5 formatos textuais sempre gerados por IA, 4 visuais por upload manual, nenhum opcional ainda). Contagem de documentos do doc-first corrigida de 4 para 5 (auditoria).
 
-**Decisão de negócio pendente de confirmação separada (mesmo padrão da Missão 6):** preço em créditos de `asset_generation` (proposta: 2/4/8 por tier, mais barato que `campaign_strategy` porque é uma única chamada ao LLM Provider, sem painel de especialistas).
+**Preço em créditos aprovado (dono do produto ajustou a proposta inicial):**
 
-**Próximo passo:** aguardando aprovação explícita do dono do produto (arquitetura + números de crédito) para iniciar a implementação de código da Missão 7.
+| trigger_reason | Econômico | Balanceado | Premium |
+|---|---|---|---|
+| `trend_ranking` | 2 | 4 | 8 |
+| `asset_generation` | 3 | 6 | 12 |
+| `campaign_strategy` | 5 | 10 | 20 |
+
+**Próximo passo:** iniciar a implementação de código da Missão 7 — arquitetura e números de crédito aprovados.
 
 ---
 

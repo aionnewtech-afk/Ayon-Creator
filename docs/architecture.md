@@ -393,10 +393,11 @@ Custo deliberadamente baixo no Intelligence Hub (raciocínio) e concentrado no A
 
 | `trigger_reason` | Econômico | Balanceado | Premium |
 |---|---|---|---|
-| `trend_ranking` | 1 | 2 | 4 |
+| `trend_ranking` | 2 | 4 | 8 |
+| `asset_generation` ★ novo (Missão 7) | 3 | 6 | 12 |
 | `campaign_strategy` | 5 | 10 | 20 |
 
-Preço por `trigger_reason` + `tier`, não só por `capability` — `campaign_strategy` e `trend_ranking` usam a mesma capability (`llm`) mas custam diferente, porque o custo real (nº de especialistas acionados, tamanho do contexto) é diferente. Ver [database.md §7.3](database.md#73-credit_pricing).
+Preço por `trigger_reason` + `tier`, não só por `capability` — as três operações usam a mesma capability (`llm`) mas custam diferente, porque o custo real (nº de chamadas, tamanho do contexto) é diferente: `trend_ranking` é mais leve (1-2 especialistas), `asset_generation` é uma única chamada por peça de texto, `campaign_strategy` é o painel completo. `trend_ranking` ajustado de 1/2/4 para 2/4/8 na Missão 7 (decisão do dono do produto). Ver [database.md §7.3](database.md#73-credit_pricing).
 
 ### 12.5 Planos
 
