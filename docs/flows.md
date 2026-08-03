@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 18 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 19 — preparação doc-first da Missão 7, Asset Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (19 — preparação Missão 7, Asset Engine):** Fluxo 3, §3.2, reescrito — escopo do MVP limitado a `text_only`/`own_media` (upload manual, sem depender de `brand_media_assets`), `ai_avatar`/`licensed_stock_video`/`hybrid` mantidos como especificação futura. §3.3 corrigida para não mencionar Realtime (decisão do dono do produto: sem Realtime no MVP, mesmo padrão de todas as missões anteriores).
 > **Mudança desta revisão (18 — Missão 6 implementada e validada):** Fluxo 6 e Fluxo 12 confirmados em produção com Mercado Pago sandbox real — assinatura ativada via webhook, créditos concedidos, consumo debitado só após sucesso, bloqueio por saldo/assinatura testado e funcionando com CTA correto.
 > **Mudança desta revisão (17 — preparação Missão 6, Billing):** Fluxo 6 finalizado com o portão de crédito de verdade (checagem antes, cobrança só após sucesso, nunca depois de falha) e valores concretos de plano/preço. Novo Fluxo 12 — assinatura de plano e compra de créditos avulsos via Mercado Pago (Preapproval + Checkout Pro), incluindo o tratamento explícito de que o webhook, não o redirect do navegador, é a fonte de verdade.
 > **Mudança desta revisão (16 — Missão 5 implementada e validada):** Fluxo 2 confirmado em produção — Server Action direta (sem n8n), Trend Source Provider resolvido via Provider Gateway, candidatos sempre passando pelo Intelligence Hub antes de chegar à tela. Validado com Supabase + Anthropic reais.
@@ -59,19 +60,20 @@ Disparado por campanha em `generating`. Para cada formato previsto na estratégi
 
 ### 3.2 Materialização por modo de produção (formatos visuais)
 
-- **`ai_avatar`**: Asset Engine aciona Voice Provider (áudio) e Avatar Provider (vídeo com avatar + áudio).
-- **`licensed_stock_video`**: Asset Engine aciona Media Provider para selecionar clipes compatíveis, narra com Voice Provider ou legenda.
-- **`own_media`**: Asset Engine usa `brand_media_assets` conforme tags/tema.
-- **`hybrid`**: combina Avatar Provider + Media Provider + `brand_media_assets`.
-- **`thumbnail`**: gerado a partir de frame do vídeo principal ou via geração de imagem (LLM/Media Provider, a definir).
-- Formatos puramente textuais (`caption`, `blog_post`, `email`, `script`, `teleprompter`) não passam pela Provider Layer de mídia — são apenas variações/formatações do texto gerado em 3.1.
+> **Escopo da Missão 7 (MVP, decisão do dono do produto — [architecture.md §3.5](architecture.md#35-asset-engine)):** só `text_only` e `own_media` implementados. `ai_avatar`, `licensed_stock_video` e `hybrid` seguem documentados abaixo como especificação futura, sem Provider Layer implementada para eles ainda.
+
+- **`text_only`** (`caption`, `blog_post`, `email`, `script`, `teleprompter`): não passam pela Provider Layer de mídia — são apenas variações/formatações do texto gerado em 3.1. Custo em créditos: `asset_generation` ([database.md §7.3](database.md#73-credit_pricing)).
+- **`own_media`** (`video`, `stories`, `carousel`, `thumbnail`, MVP): o cliente **envia o próprio arquivo** diretamente na tela de revisão da peça (CAMP-5) — upload direto para o bucket `content-output`, gravado em `content_versions.output_storage_path`. **Não depende de `brand_media_assets`/Biblioteca de Mídia** (decisão explícita para não acoplar a Missão 7 a uma funcionalidade ainda não implementada). Sem custo em créditos — não há geração por IA nesses formatos no MVP.
+- **`ai_avatar`** (futuro): Asset Engine aciona Voice Provider (áudio) e Avatar Provider (vídeo com avatar + áudio).
+- **`licensed_stock_video`** (futuro): Asset Engine aciona Media Provider para selecionar clipes compatíveis, narra com Voice Provider ou legenda.
+- **`hybrid`** (futuro): combina Avatar Provider + Media Provider + `brand_media_assets`.
 
 ### 3.3 Conclusão e montagem do Pacote de Conteúdo
 
-1. Ao concluir a geração de uma peça, `content_pieces.status = ready_for_review`.
+1. Ao concluir uma peça (geração de texto, ou upload manual confirmado), `content_pieces.status = ready_for_review`.
 2. Quando todas as peças estão `ready_for_review` (ou removidas do escopo), `campaigns.status = ready_for_review`.
 3. Após aprovação de todas as peças (Fluxo 4), o Asset Engine monta o **Pacote de Conteúdo** (`content_packages`, zip com todos os formatos aprovados), `status = building` → `ready`.
-4. UI atualizada via Realtime; usuário é notificado de que o pacote está pronto para download.
+4. UI reflete o resultado direto de cada Server Action (mesmo padrão de toda missão até aqui — sem Supabase Realtime no MVP, decisão do dono do produto); usuário é notificado de que o pacote está pronto para download.
 
 ## Fluxo 4 — Revisão e Aprovação
 

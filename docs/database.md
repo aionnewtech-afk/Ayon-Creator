@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 17 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 18 — preparação doc-first da Missão 7, Asset Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar, sem mudança de coluna, escopo MVP = `text_only`/`own_media`. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 — não reaproveita `related_intelligence_hub_session_id`). §7.3 (`credit_pricing`) ganha proposta de preço para `asset_generation` (2/4/8 créditos), pendente de aprovação.
 > **Mudança desta revisão (17 — Missão 6 implementada e validada):** migrations `0008_billing.sql` (`subscriptions`, `credit_ledger`, `credit_pricing`, `credit_packages`), `0009_drop_organizations_plan.sql` (coluna morta desde a Sprint 1, nunca usada em código, substituída por `subscriptions.plan`) e `0010_plans.sql` (nova tabela `plans` — §7.5, achado durante a implementação) aplicadas e validadas em produção (Supabase + Mercado Pago sandbox reais). `organizations.plan` removida.
 > **Mudança desta revisão (16 — preparação Missão 6, Billing):** §7 (Billing) finalizada — `subscriptions`/`credit_ledger` com colunas ajustadas (`related_intelligence_hub_session_id` no lugar de `related_content_piece_id`, que não existe; `external_payment_id` único para idempotência de webhook); `credit_pricing` com chave `trigger_reason` + `tier` e seed concreto; nova tabela `credit_packages` (catálogo de créditos avulsos). §8 ganha notas de RLS para as 4 tabelas de billing. §10, item 1, resolvido.
 > **Mudança desta revisão (15 — Missão 5 implementada):** `trend_research` (§4.3) criada por `0006_trend_engine.sql` — schema idêntico ao já especificado desde a revisão 2, sem mudança de colunas; `provider_key`/`summary` documentados como nullable (preenchidos só na conclusão). `campaigns.trend_research_id` ganha FK real. Novo capability `trend_source` em `provider_configs`. `specialists.applies_to` de `marketing_strategy`/`branding` amplia para incluir `trend_ranking` (migration `0006`); `system_prompt` do Coordinator generalizado para ser independente de tipo de decisão (migration `0007_coordinator_decision_agnostic.sql` — achado durante a implementação, ver [docs/changelog.md](changelog.md)).
@@ -263,7 +264,9 @@ Implementada e validada na Missão 5 (migration `0006_trend_engine.sql`) — sch
 | created_by | uuid FK → auth.users | |
 | created_at | timestamptz | |
 
-### 4.6 `content_pieces` / `content_versions` / `content_packages`
+### 4.6 `content_pieces` / `content_versions` / `content_packages` ★ pronta para migrar (Missão 7)
+
+Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna — confirmado adequado ao escopo do MVP do Asset Engine (`production_mode` limitado a `text_only`/`own_media`, [architecture.md §3.5](architecture.md#35-asset-engine)). `content_versions.output_storage_path` recebe tanto o texto gerado por IA (formatos textuais) quanto o arquivo enviado manualmente pelo cliente (formatos visuais, MVP) — o mesmo campo serve os dois casos, sem coluna especial para "é upload manual ou gerado".
 
 **`content_pieces`**
 
@@ -428,7 +431,8 @@ Livro-razão append-only — saldo é sempre `SUM(amount)` por `organization_id`
 | organization_id | uuid FK → organizations | |
 | type | enum(`grant_plan`,`purchase`,`consumption`,`adjustment`) | |
 | amount | integer | positivo em `grant_plan`/`purchase`, negativo em `consumption`; `adjustment` pode ser qualquer sinal |
-| related_intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | substitui o antigo `related_content_piece_id` — `content_pieces` não existe ainda (Asset Engine não implementado); todo `consumption` até aqui vem de uma sessão do Intelligence Hub. Passa a incluir `content_pieces`/`content_versions` quando o Asset Engine for implementado (nova coluna nesse momento, não reaproveitar esta) |
+| related_intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | consumo vindo de uma sessão do Intelligence Hub (`campaign_strategy`, `trend_ranking`) |
+| related_content_piece_id | uuid FK → content_pieces (nullable) ★ novo (Missão 7) | consumo vindo da geração de uma peça de conteúdo (`asset_generation`) — nova coluna, como já antecipado na revisão 16; não reaproveita `related_intelligence_hub_session_id` porque geração de peça derivada não abre uma sessão do Intelligence Hub (Fluxo 3, §3.1) |
 | external_payment_id | text (nullable, **unique**) | id do pagamento do Mercado Pago em lançamentos `purchase` — garante idempotência de webhook (arch. §12.2): uma segunda entrega do mesmo evento falha por constraint em vez de duplicar crédito |
 | description | text | |
 | created_by | uuid FK → auth.users (nullable) | nulo em lançamentos automáticos (`grant_plan`, `consumption`, webhook de `purchase`); preenchido só em `adjustment` manual feito por um admin |
@@ -453,6 +457,9 @@ Preço em créditos por tipo de operação — chave é `trigger_reason` (mesmo 
 |---|---|---|---|
 | `trend_ranking` | 1 | 2 | 4 |
 | `campaign_strategy` | 5 | 10 | 20 |
+| `asset_generation` ★ proposto (Missão 7, pendente de aprovação) | 2 | 4 | 8 |
+
+`asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas). Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas.
 
 ### 7.4 `credit_packages` ★ novo (Missão 6)
 

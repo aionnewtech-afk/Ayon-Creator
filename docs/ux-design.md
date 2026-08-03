@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 17 — auditoria pré-Missão 7) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.3 (revisão 18 — preparação doc-first da Missão 7, Asset Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §3.5 (CAMP-4/5/6) ajustada ao escopo do MVP — texto gerado por IA + upload manual para formatos visuais, sem estado "gerando vídeo com avatar". §4.4 corrigida: rastreador de progresso não é mais descrito como "alimentado por Realtime" (decisão do dono do produto: sem Realtime no MVP). §4.5/§4.6 ajustadas para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).
 > **Mudança desta revisão (17 — correção de auditoria):** §3.9 (CFG) ganha nota explícita marcando CFG-1/3/5/6 como não implementadas (só CFG-2/4 têm código); §3.6 (HIST) ganha a mesma nota para HIST-1/2. Nenhuma das duas é uma decisão nova — só torna explícito o que já era verdade, corrigindo uma lacuna de sinalização identificada em auditoria anterior (v1.9) e nunca fechada para estes itens.
 > **Mudança desta revisão (16 — Missão 6 implementada e validada):** CFG-2 e CFG-4 implementadas como uma única tela (`/configuracoes`) — CFG-1/3/5/6 seguem fora de escopo. Estados de bloqueio (créditos insuficientes/assinatura inativa) confirmados em produção com CTA funcionando em Criar Campanha e O que está em Alta.
 > **Mudança desta revisão (15 — preparação Missão 6, Billing):** CFG-2 (Plano e Cobrança) e CFG-4 (Créditos e Uso) detalhadas com os estados reais do Mercado Pago (processando pagamento aguardando webhook, `past_due`, checkout externo). Estado global "Créditos insuficientes" (§5) renomeado para "Créditos insuficientes ou assinatura inativa", cobrindo os dois motivos de bloqueio do portão de crédito (Fluxo 6).
@@ -146,13 +147,15 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 
 ### 3.5 Criar Campanha (`CAMP`) — fluxo guiado
 
+**Escopo da Missão 7 (MVP, [flows.md Fluxo 3](flows.md#fluxo-3--criar-campanha-geração-do-pacote-de-conteúdo-asset-engine)):** CAMP-4/5/6 cobrem só formatos `text_only` (gerados por IA) e `own_media` (upload manual do cliente) — sem estado "gerando vídeo com avatar", sem barra de progresso em tempo real via Realtime (decisão do dono do produto: sem Realtime no MVP). CAMP-1/2/3 já implementadas desde a Missão 3, sem mudança.
+
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
 | CAMP-1 | Ponto de partida | Escolher a tendência (ou iniciar tema livre — ver decisão em aberto §10) | — | TREND-1/2, Painel, "Criar Campanha" no menu | CAMP-2 |
 | CAMP-2 | Painel de Especialistas (Intelligence Hub) | Visualizar a estratégia sendo formada — momento de maior confiança do produto (§4.1) | especialistas analisando, um especialista falhou (parcial), consolidando | CAMP-1 | CAMP-3 |
 | CAMP-3 | Revisão da Estratégia | Mostrar temas, formatos previstos, calendário sugerido, cada um com "Por que sugerimos isso" (§4.11); aprovar ou pedir ajuste | ajustando, aprovado | CAMP-2 | CAMP-4 |
-| CAMP-4 | Gerando Pacote | Checklist de formatos sendo produzidos em tempo real | gerando (por formato), erro em um formato | CAMP-3 | CAMP-5 |
-| CAMP-5 | Revisão e Aprovação | Revisar cada peça (por formato), aprovar/editar/rejeitar | aguardando aprovação, editando, regenerando | CAMP-4 | CAMP-5 (loop) → CAMP-6 |
+| CAMP-4 | Gerando Pacote | Checklist de formatos: texto sendo gerado por IA (sequencial, Server Action síncrona) e formatos visuais aguardando upload do cliente | gerando (formato textual), aguardando upload (formato visual), erro em um formato | CAMP-3 | CAMP-5 |
+| CAMP-5 | Revisão e Aprovação | Revisar cada peça de texto (aprovar/editar/rejeitar/regenerar) ou enviar o arquivo de cada peça visual | aguardando aprovação, editando, regenerando (texto), aguardando upload (visual) | CAMP-4 | CAMP-5 (loop) → CAMP-6 |
 | CAMP-6 | Pacote Pronto | Confirmar conclusão e oferecer download | montando pacote, pronto | CAMP-5 | HIST-2, download |
 
 ### 3.6 Campanhas (`HIST`)
@@ -256,19 +259,19 @@ Não é um chat de perguntas e respostas — é a primeira aparição da Ayon co
 ### 4.4 Rastreador de Progresso (Pipeline Stepper)
 
 - Usado em CAMP-2 a CAMP-6 e no detalhe de campanha (HIST-2) para mostrar em que etapa a campanha está: Estratégia → Gerando → Revisão → Pacote Pronto.
-- Alimentado por Realtime — nunca exige refresh manual.
+- ~~Alimentado por Realtime~~ **Atualizado a cada retorno de Server Action (revisão 17, Missão 7 — decisão do dono do produto: sem Realtime no MVP)**, mesmo padrão de toda tela do produto até aqui — nunca exige refresh manual porque o componente cliente já re-renderiza com o resultado retornado, não porque assina um canal.
 - Cada etapa tem estado próprio (pendente/ativa/concluída/atenção necessária).
 
 ### 4.5 Checklist de Geração por Formato
 
-- Usado em CAMP-4: lista os formatos previstos (vídeo, legenda, stories, carrossel, thumbnail, blog, email, roteiro, teleprompter) com estado individual (na fila/gerando/pronto/falhou).
+- Usado em CAMP-4: lista os formatos previstos (vídeo, legenda, stories, carrossel, thumbnail, blog, email, roteiro, teleprompter) com estado individual. **No MVP (Missão 7):** formatos textuais mostram na fila/gerando/pronto/falhou; formatos visuais (`own_media`) mostram aguardando upload/enviado — nunca "gerando", já que não há geração por IA para eles ainda.
 - Formatos concluídos ficam clicáveis para preview antecipado, sem esperar o pacote inteiro.
 
 ### 4.6 Cartão de Revisão de Peça
 
 - **Justificativa de marca (§4.11) sempre visível**, acima ou ao lado do preview: `content_pieces.brand_rationale`, curta e em linguagem de negócio — nunca escondida atrás de um "saiba mais" (Princípio do Consultor Permanente, §1.1, item 11).
 - Área de preview adaptada ao formato: player de vídeo (video/stories/carrossel), leitor de texto com edição inline (legenda/blog/email/roteiro/teleprompter), visualizador de imagem (thumbnail).
-- Ações: **Aprovar**, **Editar** (só habilitado para formatos textuais — formatos de vídeo não têm editor manual no MVP, apenas aprovar/rejeitar/regenerar), **Rejeitar** (com motivo opcional, usado pelo Learning Engine).
+- Ações: **Aprovar**, **Rejeitar** (com motivo opcional, usado pelo Learning Engine); para formatos textuais também **Editar** e **Regenerar** (nova chamada ao LLM Provider); para formatos visuais (`own_media`, Missão 7) o widget é um upload — **Enviar arquivo** substitui "gerar/regenerar" (não existe geração por IA para esses formatos no MVP), com opção de reenviar antes de aprovar.
 - Atalhos de teclado para revisão rápida em campanhas com muitas peças (ex: `A` aprovar, `R` rejeitar) — ver decisão em aberto §10.
 
 ### 4.7 Seletor de Nível de Qualidade (Tier)

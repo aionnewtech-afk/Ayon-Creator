@@ -4,6 +4,32 @@
 
 ---
 
+## v2.6 (revisão 23) — 2026-08-03 — Preparação doc-first da Missão 7 (Asset Engine)
+
+**Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores.
+
+**Contexto:** ao contrário das Missões 4-6, o Asset Engine tem uma superfície muito maior (9 formatos de peça, múltiplos modos de produção) e nenhuma base de código existente para aproveitar — Provider Layer para Avatar/Voice/Media não existe nem como contrato, `content_pieces`/`content_versions`/`content_packages` são só schema documentado. Auditoria completa feita antes de qualquer doc-first (ver entrada v2.5 acima).
+
+**Decisões arquiteturais apresentadas ao dono do produto antes de escrever qualquer documento — todas aprovadas como recomendado:**
+
+1. **Escopo de modos de produção:** só `text_only` e `own_media` na Missão 7. `ai_avatar` (HeyGen), `licensed_stock_video` (Media Provider a definir) e `hybrid` ficam para uma missão futura — zero fornecedor novo agora, mesma disciplina de "uma fatia vertical por vez" de todas as missões anteriores.
+2. **Execução síncrona, sem n8n** — mesmo padrão das 6 missões já implementadas. `architecture.md` §8 já apontava o Asset Engine como candidato mais provável a precisar de n8n de verdade; adiado até um modo de produção genuinamente demorado (vídeo com avatar) exigir isso de fato.
+3. **Sem Supabase Realtime** — primeira vez que a decisão foi colocada explicitamente na mesa (a documentação sempre mencionou Realtime como mecanismo esperado, mas nenhuma das 6 missões anteriores usou de fato). UI continua atualizando a partir do retorno direto da Server Action.
+
+**O que mudou nos documentos:**
+
+- **`docs/architecture.md`:** §3.5 (Asset Engine) ganha o escopo do MVP aprovado — `production_mode` limitado a `text_only`/`own_media`, upload manual para formatos visuais **sem depender de `brand_media_assets`/Biblioteca de Mídia** (decisão explícita para não acoplar a Missão 7 a uma funcionalidade que também não existe ainda), execução síncrona, sem Realtime.
+- **`docs/database.md`:** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar sem mudança de coluna. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 do próprio documento). §7.3 (`credit_pricing`) ganha proposta de preço para `asset_generation` — **2/4/8 créditos por tier, pendente de aprovação explícita separada dos números** (mesmo padrão da Missão 6: arquitetura aprovada primeiro, números de negócio confirmados à parte).
+- **`docs/flows.md`:** Fluxo 3, §3.2, reescrito com o escopo do MVP; §3.3 corrigida para não mencionar Realtime.
+- **`docs/ux-design.md`:** CAMP-4/5/6 e os componentes §4.4 (Rastreador de Progresso — não mais "alimentado por Realtime"), §4.5 (Checklist) e §4.6 (Cartão de Revisão) ajustados para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).
+- **`PRD.md`:** §13, item 4, resolvido para o escopo do MVP (5 formatos textuais sempre gerados por IA, 4 visuais por upload manual, nenhum opcional ainda). Contagem de documentos do doc-first corrigida de 4 para 5 (auditoria).
+
+**Decisão de negócio pendente de confirmação separada (mesmo padrão da Missão 6):** preço em créditos de `asset_generation` (proposta: 2/4/8 por tier, mais barato que `campaign_strategy` porque é uma única chamada ao LLM Provider, sem painel de especialistas).
+
+**Próximo passo:** aguardando aprovação explícita do dono do produto (arquitetura + números de crédito) para iniciar a implementação de código da Missão 7.
+
+---
+
 ## v2.5 (revisão 22) — 2026-08-03 — Auditoria completa pré-Missão 7 (Asset Engine)
 
 **Status:** documentação corrigida — **aguardando decisões arquiteturais e aprovação explícita do dono do produto antes de iniciar o doc-first da Missão 7**, seguindo o mesmo processo já usado antes de toda missão.
