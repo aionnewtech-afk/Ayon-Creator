@@ -2,6 +2,26 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.5.0] — 2026-08-03
+
+### Adicionado
+
+- **Missão 5 — O que está em Alta (Trend Engine)**: descoberta de tendências relevantes ao nicho da marca, sempre interpretadas pelo Intelligence Hub antes de chegar ao usuário — nunca uma lista bruta de resultados de busca.
+  - **`packages/core`**: `TrendSourceProvider` (contrato) + `AnthropicWebSearchTrendSourceProvider` (adapter sobre a ferramenta de busca web nativa da API da Anthropic), resolvido pelo Provider Gateway (`resolveTrendSourceProvider`) — o Trend Engine nunca conhece o fornecedor concreto. `TrendResearchRepository`. Módulo `trend-engine/` (`runTrendDiscovery`) orquestrando Trend Source Provider → Intelligence Hub (painel de Marketing + Branding, ampliados via `applies_to` — Specialist Registry, mudança de dado) → Coordinator → ranqueamento final.
+  - **Server Actions** (`apps/web/app/(platform)/o-que-esta-em-alta/actions.ts`): `runTrendDiscoveryAction`, restrita a `editor+` para disparar busca.
+  - **UI**: TREND-1 (lista de tendências ranqueadas) e TREND-2 (detalhe com justificativa "Por que fiz assim?" e link para a fonte), com handoff para "Criar Campanha" já com o tema pré-preenchido. Item de navegação "O que está em Alta" passa a `implemented: true`.
+  - **Banco**: migration `0006_trend_engine.sql` (`trend_research`, FK real de `campaigns.trend_research_id`, capability `trend_source` em `provider_configs`, `applies_to` de Marketing/Branding ampliado para `trend_ranking`).
+  - **Dependência**: `@anthropic-ai/sdk` atualizado de `0.32.1` para `^0.65.0` (suporte à ferramenta de busca web nativa).
+
+### Decisão arquitetural tomada durante a implementação (parada técnica, aprovada pelo dono do produto)
+
+- **Coordinator generalizado para ser independente do tipo de decisão**: o único Coordinator do Specialist Registry tinha, desde a Missão 3, um `system_prompt` com formato de saída JSON fixo, específico de estratégia de campanha — incompatível com o ranqueamento de tendências precisar de um formato diferente (lista ordenada). Resolvido sem duplicar o Coordinator: comportamento idêntico (nunca faz média, reconhece divergência real, ancora no Brand Brain), mas o formato de saída passa a ser declarado pela tarefa que o invoca, via mensagem do usuário — nunca mais fixo no `system_prompt` (migration `0007_coordinator_decision_agnostic.sql`).
+
+### Corrigido durante a validação real (Supabase + Anthropic reais, busca de tendências + regressão em Criar Campanha)
+
+- **Coordinator retornava formato errado em ambas as tarefas**: a generalização acima só funciona se a mensagem do usuário de cada tarefa declarar explicitamente o JSON esperado — `buildTrendRankingCoordinatorMessage` (nova, Missão 5) e `buildCoordinatorUserMessage` (existente, Missão 3) nunca faziam isso, contando implicitamente com o formato fixo que acabara de ser removido do `system_prompt`. **Sem essa correção, a primeira execução real de "Criar Campanha" em produção pós-generalização teria quebrado** — pego a tempo por um teste de regressão explícito depois de corrigir o caso de tendências. Corrigido adicionando a instrução de formato JSON explícita em ambas as mensagens.
+- **Sessão do Intelligence Hub presa em `running`** quando a descoberta de tendências falhava depois da sessão já criada (reproduzido ao vivo pelo bug acima) — `trend_research` era marcado `failed`, mas a sessão associada não. Corrigido em `trend-engine.ts`.
+
 ## [0.4.0] — 2026-08-03
 
 ### Adicionado

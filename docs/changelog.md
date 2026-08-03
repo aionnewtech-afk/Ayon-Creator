@@ -4,6 +4,55 @@
 
 ---
 
+## v2.2 (revisão 19) — 2026-08-03 — Missão 5 implementada e validada (O que está em Alta / Trend Engine)
+
+**Status:** implementado e validado com Supabase + Anthropic reais — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2, 3 e 4).
+
+**O que foi implementado:**
+
+- **Migration `0006_trend_engine.sql`:** tabela `trend_research` (schema idêntico ao já especificado desde a revisão 2); FK real de `campaigns.trend_research_id`; seed de `provider_configs` para o capability `trend_source` (3 tiers, mesmo `provider_key` da Anthropic); `applies_to` de `marketing_strategy` e `branding` ampliado para incluir `trend_ranking` (Copywriting ficou de fora — mensagem de peça não é decisão de ranqueamento).
+- **`packages/core`:** `TrendSourceProvider` (contrato) + `AnthropicWebSearchTrendSourceProvider` (adapter sobre a ferramenta de busca web nativa da API da Anthropic, `web_search_20250305`); `resolveTrendSourceProvider` no Provider Gateway; `TrendResearchRepository`; módulo `trend-engine/` (`trend-ranking-prompts.ts`, `run-trend-ranking-panel.ts`, `run-trend-coordinator.ts`, `trend-engine.ts` com `runTrendDiscovery`) — mesmo padrão de orquestração do Intelligence Hub (Missão 3), adaptado para `trend_research` em vez de `campaigns`.
+- **Server Actions** (`apps/web/app/(platform)/o-que-esta-em-alta/actions.ts`): `runTrendDiscoveryAction`, gated a `editor+` para disparar busca, leitura liberada a qualquer papel.
+- **UI:** TREND-1 (lista de tendências ranqueadas) e TREND-2 (detalhe com "Por que fiz assim?" e link para a fonte), como estados dentro do mesmo componente cliente (`trend-list.tsx`) — não como rotas separadas, já que candidatos de tendência não têm `id` próprio no schema (vivem dentro do jsonb `trend_research.summary`). Handoff para "Criar Campanha" com o tema pré-preenchido via query string (`?tema=`), completando a navegação TREND-2 → CAMP-1 de `ux-design.md`. Nav "O que está em Alta" passa a `implemented: true`.
+- **Dependência:** `@anthropic-ai/sdk` atualizado de `0.32.1` para `^0.65.0` — versão instalada não tinha suporte de tipos para a ferramenta de busca web; upgrade não quebrou nenhum uso existente (`AnthropicLlmProvider`), confirmado por typecheck limpo antes de qualquer mudança de código nova.
+
+**Parada técnica durante a implementação (antes de qualquer código de produto):** ver v2.1 (revisão 18) acima — generalização do `system_prompt` do Coordinator, aprovada pelo dono do produto antes de prosseguir.
+
+**Validado com Supabase + Anthropic reais** (marca de teste "Trilha Verde Turismo", ecoturismo, provisionada via Supabase Admin API para a validação):
+
+- Busca de tendências reais via web (4 candidatos genuínos: crescimento do ecoturismo, disposição a pagar mais por sustentabilidade, Brasil como destino de aventura, turismo + bem-estar), ranqueados pelo painel (Marketing + Branding) + Coordinator, com justificativa ancorada no Brand Brain de teste.
+- TREND-2 exibindo "Por que fiz assim?" e link para a fonte.
+- Handoff TREND-2 → Criar Campanha com o tema pré-preenchido, confirmado via inspeção do DOM.
+- "Buscar novidades" (nova busca sobre uma marca que já tinha `trend_research`) — segundo conjunto de tendências, todas frescas.
+- Teste de regressão em Criar Campanha (Missão 3) após a generalização do Coordinator — painel de 3 especialistas + Coordinator consolidando corretamente no formato de estratégia de campanha, sem nenhuma diferença de comportamento.
+- Estado do banco inspecionado diretamente: `trend_research`, `intelligence_hub_sessions` (`trigger_reason = trend_ranking`) e `campaigns` (`trigger_reason = campaign_strategy`) todos persistidos corretamente.
+
+**Bugs encontrados e corrigidos durante a validação:**
+
+1. **Coordinator retornava o formato errado para `trend_ranking`:** a generalização do `system_prompt` (revisão 18) delega o formato de saída para a mensagem do usuário de cada tarefa — mas `buildTrendRankingCoordinatorMessage` nunca declarava esse formato explicitamente, só descrevia a tarefa em prosa. Corrigido adicionando a instrução de formato JSON explícita na mensagem. **Achado o mesmo problema, por herança, em `buildCoordinatorUserMessage` (Missão 3)** — só funcionava até aqui porque o `system_prompt` antigo fixava o formato; deixou de funcionar assim que o prompt foi generalizado. Corrigido do mesmo jeito, validado com teste de regressão em Criar Campanha (ver acima). Nenhuma mudança de comportamento visível ao usuário — só corrige uma falha de parsing que teria acontecido na primeira execução real de `campaign_strategy` pós-generalização.
+2. **Sessão do Intelligence Hub não marcada como `failed`** quando `runTrendDiscovery` falhava depois da sessão já criada (ex.: erro de parsing do Coordinator) — só `trend_research` era marcado como `failed`, deixando a sessão presa em `running` para sempre. Reproduzido ao vivo pelo bug #1 acima. Corrigido em `trend-engine.ts`: o `catch` agora também marca a sessão como `failed` quando ela existe.
+
+**Próximo passo:** aguardando decisão do dono do produto — commit das funcionalidades, commit separado das correções encontradas na validação, tag `v0.5.0`, atualização do `CHANGELOG.md` raiz, e autorização para a próxima missão (Billing).
+
+---
+
+## v2.1 (revisão 18) — 2026-08-03 — Coordinator generalizado (achado durante a implementação da Missão 5)
+
+**Status:** aprovado — parada técnica durante a implementação de código, conforme regra explícita do dono do produto ("se surgir qualquer inconsistência arquitetural, pare imediatamente, apresente um relatório e aguarde nova aprovação").
+
+**O que foi encontrado:** ao implementar o ranqueamento de tendências (`trend_ranking`), ficou claro que o único Coordinator do Specialist Registry (`SpecialistRepository.findCoordinator()` — "assume-se um único registro com este papel") tinha, desde a Missão 3, um `system_prompt` com formato de saída JSON fixo no próprio texto do prompt (`{"consolidated_strategy", "rationale", "divergences"}`), específico de estratégia de campanha. Isso competiria diretamente com qualquer instrução de formato dada na mensagem do usuário para `trend_ranking`, arriscando falha real de parsing em produção — não uma questão de estilo.
+
+**Três saídas possíveis foram apresentadas ao dono do produto** (reescrever o `system_prompt` para ser agnóstico de formato; permitir mais de um Coordinator no registry, filtrado por tipo de decisão; ou não resolver, deixando `trend_ranking` sem Coordinator funcional). **Aprovada a primeira:** generalizar o `system_prompt` do Coordinator.
+
+**O que mudou:**
+
+- **Migration `0007_coordinator_decision_agnostic.sql`:** `system_prompt` do Coordinator reescrito — comportamento idêntico (nunca faz média, reconhece divergência real, ancora no Brand Brain, trata especialista ausente sem jargão técnico), mas o formato de saída fixo foi removido; o JSON exato esperado agora é definido pela tarefa que invoca o Coordinator, via instrução explícita na mensagem do usuário montada por cada Engine chamador. Nenhuma mudança de schema — um único Coordinator no registry, como antes.
+- **`docs/architecture.md`** (revisão 16), **`docs/prompts/coordinator.md`:** atualizados para refletir o novo `system_prompt`, com o antigo preservado como histórico, e a nova seção de Entradas/Saídas organizada por tarefa (`campaign_strategy`, `trend_ranking`).
+
+**Próximo passo:** prosseguir com a implementação de código da Missão 5 (Trend Engine, TrendResearchRepository, Server Actions, telas TREND-1/TREND-2), agora que o Coordinator suporta as duas tarefas.
+
+---
+
 ## v2.0 (revisão 17) — 2026-08-03 — Missão 5 aprovada (Trend Engine / "O que está em alta")
 
 **Status:** aprovado — dono do produto confirmou as duas decisões técnicas pendentes e liberou o início da implementação de código, seguindo o mesmo processo doc-first já usado nas Missões 2, 3 e 4.
