@@ -25,10 +25,12 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
   const [trendResearch, setTrendResearch] = useState<TrendResearchView | null>(initialTrendResearch);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   async function handleDiscover() {
     setMode("loading");
     setError(null);
+    setBlocked(false);
     setSelectedIndex(null);
 
     const response = await runTrendDiscoveryAction();
@@ -37,6 +39,7 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
 
     if (!response.ok || !response.rankings || !response.trendResearchId) {
       setError(response.error ?? "Algo deu errado. Tenta de novo?");
+      setBlocked(Boolean(response.blockedReason));
       return;
     }
 
@@ -70,7 +73,16 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
           }
           action={triggerButton}
         />
-        {error ? <p className="text-center text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <div className="text-center text-sm text-destructive">
+            <p>{error}</p>
+            {blocked ? (
+              <Link href="/configuracoes" className="underline underline-offset-4">
+                Ir para Configurações
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -147,7 +159,16 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
         {triggerButton}
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <div className="text-sm text-destructive">
+          <p>{error}</p>
+          {blocked ? (
+            <Link href="/configuracoes" className="underline underline-offset-4">
+              Ir para Configurações
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {trendResearch && trendResearch.rankings.length === 0 ? (
         <EmptyState

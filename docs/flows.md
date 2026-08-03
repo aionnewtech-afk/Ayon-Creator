@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 17 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
+> **Status:** v1.0 (revisão 18 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (18 — Missão 6 implementada e validada):** Fluxo 6 e Fluxo 12 confirmados em produção com Mercado Pago sandbox real — assinatura ativada via webhook, créditos concedidos, consumo debitado só após sucesso, bloqueio por saldo/assinatura testado e funcionando com CTA correto.
 > **Mudança desta revisão (17 — preparação Missão 6, Billing):** Fluxo 6 finalizado com o portão de crédito de verdade (checagem antes, cobrança só após sucesso, nunca depois de falha) e valores concretos de plano/preço. Novo Fluxo 12 — assinatura de plano e compra de créditos avulsos via Mercado Pago (Preapproval + Checkout Pro), incluindo o tratamento explícito de que o webhook, não o redirect do navegador, é a fonte de verdade.
 > **Mudança desta revisão (16 — Missão 5 implementada e validada):** Fluxo 2 confirmado em produção — Server Action direta (sem n8n), Trend Source Provider resolvido via Provider Gateway, candidatos sempre passando pelo Intelligence Hub antes de chegar à tela. Validado com Supabase + Anthropic reais.
 > **Mudança desta revisão (15 — aprovação da Missão 5, Trend Engine):** Fluxo 2 revisado e aprovado — Server Action direta, sem n8n (passo 2), Trend Source Provider resolvido via Provider Gateway sem o Trend Engine conhecer o fornecedor concreto (passo 3), e nova regra inegociável de que nenhuma tendência é exibida ao usuário sem passar pelo Intelligence Hub (passo 4). Ver [architecture.md §3.3/§8](architecture.md#33-trend-engine) e [docs/changelog.md](changelog.md).

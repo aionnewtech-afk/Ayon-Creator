@@ -11,13 +11,18 @@ import type {
   IntelligenceHubSessionStatus,
   KnowledgeBaseSourceType,
   OnboardingQuestionKey,
+  CreditLedgerEntryType,
+  CreditPackageStatus,
+  CreditPricingStatus,
   OrganizationMemberRole,
-  OrganizationPlan,
+  PlanStatus,
   ProviderCapability,
   ProviderConfigStatus,
   ProviderTier,
   SpecialistRole,
   SpecialistStatus,
+  SubscriptionPlan,
+  SubscriptionStatus,
   TrendResearchStatus,
 } from "./domain";
 
@@ -29,7 +34,6 @@ export interface Database {
           id: string;
           name: string;
           slug: string;
-          plan: OrganizationPlan;
           provider_tier: ProviderTier;
           created_by: string | null;
           created_at: string;
@@ -40,7 +44,6 @@ export interface Database {
           id?: string;
           name: string;
           slug: string;
-          plan?: OrganizationPlan;
           provider_tier?: ProviderTier;
           created_by?: string | null;
         };
@@ -404,6 +407,114 @@ export interface Database {
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["trend_research"]["Insert"]>;
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          plan: SubscriptionPlan;
+          status: SubscriptionStatus;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          billing_provider_ref: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          plan: SubscriptionPlan;
+          status?: SubscriptionStatus;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          billing_provider_ref?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      credit_ledger: {
+        Row: {
+          id: string;
+          organization_id: string;
+          type: CreditLedgerEntryType;
+          amount: number;
+          related_intelligence_hub_session_id: string | null;
+          external_payment_id: string | null;
+          description: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          type: CreditLedgerEntryType;
+          amount: number;
+          related_intelligence_hub_session_id?: string | null;
+          external_payment_id?: string | null;
+          description?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["credit_ledger"]["Insert"]>;
+        Relationships: [];
+      };
+      credit_pricing: {
+        Row: {
+          id: string;
+          trigger_reason: string;
+          tier: ProviderTier;
+          credits: number;
+          status: CreditPricingStatus;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          trigger_reason: string;
+          tier: ProviderTier;
+          credits: number;
+          status?: CreditPricingStatus;
+        };
+        Update: Partial<Database["public"]["Tables"]["credit_pricing"]["Insert"]>;
+        Relationships: [];
+      };
+      credit_packages: {
+        Row: {
+          id: string;
+          name: string;
+          credits: number;
+          price_cents: number;
+          status: CreditPackageStatus;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          credits: number;
+          price_cents: number;
+          status?: CreditPackageStatus;
+        };
+        Update: Partial<Database["public"]["Tables"]["credit_packages"]["Insert"]>;
+        Relationships: [];
+      };
+      plans: {
+        Row: {
+          plan: SubscriptionPlan;
+          brands_included: number;
+          tier_included: ProviderTier;
+          credits_per_month: number;
+          price_cents: number;
+          status: PlanStatus;
+          updated_at: string;
+        };
+        Insert: {
+          plan: SubscriptionPlan;
+          brands_included: number;
+          tier_included: ProviderTier;
+          credits_per_month: number;
+          price_cents: number;
+          status?: PlanStatus;
+        };
+        Update: Partial<Database["public"]["Tables"]["plans"]["Insert"]>;
         Relationships: [];
       };
     };

@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 15 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
+> **Status:** v1.3 (revisão 16 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (16 — Missão 6 implementada e validada):** CFG-2 e CFG-4 implementadas como uma única tela (`/configuracoes`) — CFG-1/3/5/6 seguem fora de escopo. Estados de bloqueio (créditos insuficientes/assinatura inativa) confirmados em produção com CTA funcionando em Criar Campanha e O que está em Alta.
 > **Mudança desta revisão (15 — preparação Missão 6, Billing):** CFG-2 (Plano e Cobrança) e CFG-4 (Créditos e Uso) detalhadas com os estados reais do Mercado Pago (processando pagamento aguardando webhook, `past_due`, checkout externo). Estado global "Créditos insuficientes" (§5) renomeado para "Créditos insuficientes ou assinatura inativa", cobrindo os dois motivos de bloqueio do portão de crédito (Fluxo 6).
 > **Mudança desta revisão (14 — Missão 4 implementada):** KB-1/2/3 implementadas e validadas em produção — upload de PDF/DOCX/TXT, nota manual, edição de tags e remoção, todos confirmados funcionando com Supabase real.
 > **Mudança desta revisão (13 — preparação da Missão 4):** §3.3 (KB-1/2/3) detalhado — formatos de arquivo aceitos (PDF/DOCX/TXT, até 10MB), estados de upload/extração, distinção entre item de arquivo (somente leitura) e nota manual, e itens de onboarding tratados como somente leitura nesta tela (edição continua só via Perfil da Marca).

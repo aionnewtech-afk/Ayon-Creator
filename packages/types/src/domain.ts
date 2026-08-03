@@ -1,6 +1,3 @@
-export const ORGANIZATION_PLANS = ["starter", "pro", "business"] as const;
-export type OrganizationPlan = (typeof ORGANIZATION_PLANS)[number];
-
 export const PROVIDER_TIERS = ["economico", "balanceado", "premium"] as const;
 export type ProviderTier = (typeof PROVIDER_TIERS)[number];
 
@@ -69,3 +66,21 @@ export const CAMPAIGN_STATUSES = [
   "failed",
 ] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
+
+export const SUBSCRIPTION_PLANS = ["starter", "pro", "business"] as const;
+export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
+
+export const SUBSCRIPTION_STATUSES = ["active", "past_due", "canceled"] as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+
+export const CREDIT_LEDGER_ENTRY_TYPES = ["grant_plan", "purchase", "consumption", "adjustment"] as const;
+export type CreditLedgerEntryType = (typeof CREDIT_LEDGER_ENTRY_TYPES)[number];
+
+export const CREDIT_PRICING_STATUSES = ["active", "inactive"] as const;
+export type CreditPricingStatus = (typeof CREDIT_PRICING_STATUSES)[number];
+
+export const CREDIT_PACKAGE_STATUSES = ["active", "inactive"] as const;
+export type CreditPackageStatus = (typeof CREDIT_PACKAGE_STATUSES)[number];
+
+export const PLAN_STATUSES = ["active", "inactive"] as const;
+export type PlanStatus = (typeof PLAN_STATUSES)[number];

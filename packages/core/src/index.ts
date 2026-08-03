@@ -14,6 +14,11 @@ export * from "./repositories/intelligence-hub-session.repository";
 export * from "./repositories/specialist-opinion.repository";
 export * from "./repositories/campaign.repository";
 export * from "./repositories/trend-research.repository";
+export * from "./repositories/subscription.repository";
+export * from "./repositories/credit-ledger.repository";
+export * from "./repositories/credit-pricing.repository";
+export * from "./repositories/credit-package.repository";
+export * from "./repositories/plan.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
@@ -38,6 +43,7 @@ export * from "./trend-engine/trend-ranking-prompts";
 export * from "./trend-engine/run-trend-ranking-panel";
 export * from "./trend-engine/run-trend-coordinator";
 export * from "./trend-engine/trend-engine";
+export * from "./billing/credit-gate";
 export * from "./knowledge-base/knowledge-source-labels";
 // `./knowledge-base/extract-document-text` fica FORA deste barrel de propósito:
 // depende de pdf-parse (acessa `fs`), e este arquivo é importado por Client
@@ -46,3 +52,8 @@ export * from "./knowledge-base/knowledge-source-labels";
 // tentar empacotar pdf-parse no bundle do client. Quem precisar da extração
 // (só a Server Action de upload da Missão 4) importa direto o arquivo:
 // `@ayon/core/src/knowledge-base/extract-document-text`.
+// `./billing/mercado-pago-client` e `./billing/mercado-pago-webhook-handler`
+// ficam FORA do barrel pelo mesmo motivo: importam o SDK do Mercado Pago
+// (Node-only), e este barrel é importado por Client Components. Quem precisar
+// (Server Actions de assinatura/compra de créditos, a rota de webhook) importa
+// direto o arquivo: `@ayon/core/src/billing/mercado-pago-client`.

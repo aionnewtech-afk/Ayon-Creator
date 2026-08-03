@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 16 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
+> **Status:** v1.0 (revisão 17 — Missão 6 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (17 — Missão 6 implementada e validada):** migrations `0008_billing.sql` (`subscriptions`, `credit_ledger`, `credit_pricing`, `credit_packages`), `0009_drop_organizations_plan.sql` (coluna morta desde a Sprint 1, nunca usada em código, substituída por `subscriptions.plan`) e `0010_plans.sql` (nova tabela `plans` — §7.5, achado durante a implementação) aplicadas e validadas em produção (Supabase + Mercado Pago sandbox reais). `organizations.plan` removida.
 > **Mudança desta revisão (16 — preparação Missão 6, Billing):** §7 (Billing) finalizada — `subscriptions`/`credit_ledger` com colunas ajustadas (`related_intelligence_hub_session_id` no lugar de `related_content_piece_id`, que não existe; `external_payment_id` único para idempotência de webhook); `credit_pricing` com chave `trigger_reason` + `tier` e seed concreto; nova tabela `credit_packages` (catálogo de créditos avulsos). §8 ganha notas de RLS para as 4 tabelas de billing. §10, item 1, resolvido.
 > **Mudança desta revisão (15 — Missão 5 implementada):** `trend_research` (§4.3) criada por `0006_trend_engine.sql` — schema idêntico ao já especificado desde a revisão 2, sem mudança de colunas; `provider_key`/`summary` documentados como nullable (preenchidos só na conclusão). `campaigns.trend_research_id` ganha FK real. Novo capability `trend_source` em `provider_configs`. `specialists.applies_to` de `marketing_strategy`/`branding` amplia para incluir `trend_ranking` (migration `0006`); `system_prompt` do Coordinator generalizado para ser independente de tipo de decisão (migration `0007_coordinator_decision_agnostic.sql` — achado durante a implementação, ver [docs/changelog.md](changelog.md)).
 > **Mudança desta revisão (14 — Missão 4 implementada):** `knowledge_base_items` validada em produção com upload real de PDF/DOCX/TXT e nota manual — nenhuma migration nova foi necessária, confirmando a previsão da revisão 13. `content_text`/`storage_path`/`tags` todos populados corretamente pelos três tipos de arquivo testados.
@@ -41,6 +42,7 @@ organizations 1───1 subscriptions
 organizations 1───N credit_ledger ──1 intelligence_hub_sessions (consumption, nullable)
 (global)      credit_pricing (por trigger_reason + tier — sem organization_id)
 (global)      credit_packages (catálogo de pacotes avulsos — sem organization_id)
+(global)      plans (números por plano — sem organization_id)
 brands        1───N publishing_channels (fora do MVP)
 content_pieces N───N publishing_channels via publications (fora do MVP)
 ```
@@ -465,6 +467,22 @@ Catálogo de pacotes de créditos avulsos disponíveis para compra via Checkout 
 | status | enum(`active`,`inactive`) | pacotes descontinuados ficam `inactive`, nunca são apagados (histórico de compras referenciando o pacote continua válido) |
 | created_at | timestamptz | |
 
+### 7.5 `plans` ★ novo (Missão 6, achado durante a implementação)
+
+Números de cada plano — dado, não código. Sem esta tabela, o handler de webhook do Mercado Pago (`packages/core`, nunca importa de `apps/web`) e a tela de Configurações (`apps/web`) precisariam de duas constantes hardcoded separadas para a mesma informação (quantos créditos conceder por plano), arriscando divergir. `plan` é a mesma chave usada em `subscriptions.plan`. Mesmo padrão de RLS de `credit_pricing`/`credit_packages`: leitura liberada a qualquer `authenticated`, escrita só via service role.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| plan | text PK | `starter`, `pro`, `business` |
+| brands_included | integer | |
+| tier_included | enum(`economico`,`balanceado`,`premium`) | |
+| credits_per_month | integer | concedido via lançamento `grant_plan` a cada ciclo (Fluxo 6, passo 4) |
+| price_cents | integer | preço mensal em centavos (BRL) — **valor de exemplo, nunca discutido/aprovado explicitamente** (só os números de crédito/marcas/tier foram decisão de produto confirmada); ajustar é um `UPDATE`, sem migration |
+| status | enum(`active`,`inactive`) | |
+| updated_at | timestamptz | |
+
+**Seed inicial (PRD.md §8, arch. §12.5):** Starter (1 marca, econômico, 100 créditos, R$97,00) · Pro (1 marca, balanceado, 500 créditos, R$297,00) · Business (5 marcas, premium, 1.500 créditos, R$697,00).
+
 ## 8. Multi-tenancy e RLS
 
 - Toda tabela com `organization_id` (direto ou via `brand_id`) restringe leitura/escrita a usuários membros da organização e, quando aplicável, membros da marca.
@@ -476,7 +494,7 @@ Catálogo de pacotes de créditos avulsos disponíveis para compra via Checkout 
 - `audit_logs`: select restrito a `admin`/`owner` da `organization_id`; insert só via service role (Repository, nunca client).
 - `feature_flags`: select liberado a qualquer usuário autenticado (tabela global, sem dado sensível); insert/update/delete só via service role.
 - `subscriptions`/`credit_ledger` (Missão 6): select restrito a membros da organização (CFG-2/CFG-4 precisam ler); insert/update **só via service role** — nunca o client grava diretamente (grants/consumo vêm do portão de crédito no Server Action, compras/mudanças de assinatura vêm de webhook do Mercado Pago, ambos rodando com service role). Nenhum usuário, nem admin, altera saldo diretamente pela aplicação.
-- `credit_pricing`/`credit_packages` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço deve ser visível, ex. CFG-4 mostrando quanto custa cada geração), insert/update/delete só via service role.
+- `credit_pricing`/`credit_packages`/`plans` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço/números devem ser visíveis, ex. CFG-2/CFG-4), insert/update/delete só via service role.
 
 ## 9. Plataforma — Auditoria e Feature Flags ★ novo (revisão 5)
 

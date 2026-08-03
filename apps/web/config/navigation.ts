@@ -94,10 +94,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "configuracoes",
     label: "Configurações",
-    description: "Em breve você vai poder gerenciar plano, créditos, marcas e time por aqui.",
+    description: "Gerencie plano, cobrança, créditos e histórico de uso.",
     icon: Settings,
-    minRole: "viewer",
-    implemented: false,
+    minRole: "admin",
+    implemented: true,
   },
 ];
 

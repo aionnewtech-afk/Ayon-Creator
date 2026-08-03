@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Textarea } from "@ayon/ui";
 import {
   approveCampaignStrategyAction,
@@ -30,6 +31,7 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
   const [result, setResult] = useState<StrategyResult | null>(null);
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -38,11 +40,13 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
 
     setMode("loading");
     setError(null);
+    setBlocked(false);
 
     const response = await createCampaignStrategyAction(trimmed);
 
     if (!response.ok || !response.campaignId || !response.opinions || !response.consolidatedStrategy || !response.rationale) {
       setError(response.error ?? "Algo deu errado. Tenta de novo?");
+      setBlocked(Boolean(response.blockedReason));
       setMode("form");
       return;
     }
@@ -161,7 +165,16 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
           className="min-h-[120px]"
           disabled={mode === "loading"}
         />
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <div className="text-sm text-destructive">
+            <p>{error}</p>
+            {blocked ? (
+              <Link href="/configuracoes" className="underline underline-offset-4">
+                Ir para Configurações
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
         <Button type="submit" size="lg" disabled={mode === "loading" || !objective.trim()}>
           {mode === "loading" ? "A equipe está analisando..." : "Reunir a equipe de especialistas"}
         </Button>

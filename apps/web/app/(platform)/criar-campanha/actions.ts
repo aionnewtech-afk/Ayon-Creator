@@ -1,7 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AuditRepository, CampaignRepository, hasMinimumRole, logger, runCampaignStrategySession } from "@ayon/core";
+import {
+  AuditRepository,
+  CampaignRepository,
+  InactiveSubscriptionError,
+  InsufficientCreditsError,
+  ensureSufficientCredits,
+  hasMinimumRole,
+  logger,
+  recordConsumption,
+  runCampaignStrategySession,
+} from "@ayon/core";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -22,9 +32,11 @@ export interface CreateCampaignStrategyResult {
   rationale?: string;
   divergences?: string | null;
   error?: string;
+  blockedReason?: "inactive_subscription" | "insufficient_credits";
 }
 
 const FRIENDLY_ERROR = "Não consegui reunir a equipe de especialistas agora. Pode tentar de novo em instantes?";
+const CAMPAIGN_STRATEGY_TRIGGER_REASON = "campaign_strategy";
 
 /**
  * Aciona uma sessão completa do Intelligence Hub para estratégia de campanha
@@ -51,6 +63,13 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
     const serviceRoleDb = createServiceRoleClient();
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;
 
+    const { costCredits } = await ensureSufficientCredits({
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      triggerReason: CAMPAIGN_STRATEGY_TRIGGER_REASON,
+      tier,
+    });
+
     const result = await runCampaignStrategySession({
       db: sessionDb,
       serviceRoleDb,
@@ -59,6 +78,14 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
       brandName: session.brand.name,
       objective: trimmedObjective,
       actorUserId: session.user.id,
+    });
+
+    await recordConsumption({
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      costCredits,
+      intelligenceHubSessionId: result.sessionId,
+      description: `Estratégia de campanha — ${session.brand.name}`,
     });
 
     revalidatePath("/criar-campanha");
@@ -78,6 +105,21 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
       divergences: result.divergences,
     };
   } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para criar essa campanha. Compre mais créditos em Configurações.",
+      };
+    }
+
     logger.error("intelligence_hub.campaign_strategy_failed", {
       brandId: session.brand.id,
       reason: error instanceof Error ? error.message : String(error),

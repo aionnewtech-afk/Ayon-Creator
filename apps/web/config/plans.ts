@@ -1,20 +1,22 @@
-import type { OrganizationPlan } from "@ayon/types";
+import type { SubscriptionPlan } from "@ayon/types";
 
 /**
- * Rótulos/descrições de plano — PRD.md §8. Limites numéricos exatos são
- * decisão em aberto (PRD §13.5); não representados aqui ainda.
+ * Rótulos/descrições de plano (copy de UI) — PRD.md §8. Números (créditos/mês,
+ * marcas inclusas, tier incluso, preço) vêm da tabela `plans`
+ * (`PlanRepository`, Missão 6) — dado, não código, única fonte da verdade
+ * compartilhada com o handler de webhook do Mercado Pago.
  */
-export const PLAN_LABELS: Record<OrganizationPlan, { label: string; description: string }> = {
+export const PLAN_LABELS: Record<SubscriptionPlan, { label: string; description: string }> = {
   starter: {
     label: "Starter",
-    description: "Pequenos negócios testando o produto — 1 marca.",
+    description: "Pequenos negócios testando o produto.",
   },
   pro: {
     label: "Pro",
-    description: "Negócios com produção recorrente — todos os formatos.",
+    description: "Negócios com produção recorrente.",
   },
   business: {
     label: "Business",
-    description: "Múltiplas marcas, times e permissões.",
+    description: "Múltiplos clientes/marcas, times e permissões.",
   },
 };
