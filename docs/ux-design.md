@@ -1,9 +1,11 @@
 # UX Design — Ayon Creator
 
-> **Status:** Rascunho v1.0 — aguardando aprovação
-> **Última atualização:** 2026-08-01
+> **Status:** v1.2 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-02
+> **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha os itens 8/11 expandidos e um novo item 12 (nenhum atalho de "geração rápida" pula o Brand Brain); §4.11 (Bloco de Justificativa de Marca) formaliza a affordance nomeada **"Por que fiz assim?"**; §4.1 e §4.2 passam a mencionar explicitamente referência a campanhas/aprendizados anteriores (memória de longo prazo).
 > Este documento especifica telas, componentes, estados, navegação, microinterações e jornadas de uso, correspondentes ao escopo de [PRD.md](../PRD.md) e aos fluxos de [flows.md](flows.md). Nenhuma interface é implementada sem que a tela/componente correspondente esteja aqui e aprovado. Toda nova tela nasce daqui, não do código.
 > **Fora de escopo deste documento:** sistema visual (paleta de cores, tipografia, tokens, logotipo). Este documento define *o quê* existe e *como se comporta* — o *como se parece visualmente* é uma fase seguinte, deliberadamente adiada (ver §10).
+> **Mudança desta revisão (7 — Princípio do Consultor Permanente):** §1 ganha os princípios do [PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7); §3.2 e §4.2 reescritos — a experiência "Conheça sua empresa" deixa de ser uma entrevista com reflexo de bloco e barra de progresso numérica/pontilhada, e passa a ser uma conversa contínua com reação a cada turno, callback obrigatório entre temas e um painel vivo de conhecimento ("O que a Ayon já sabe") no lugar de qualquer indicador de progresso por contagem; novo §4.10 formaliza o painel **"O que a Ayon já sabe"** e novo §4.11 formaliza o **Bloco de Justificativa de Marca**, reutilizado em CAMP-2 (§4.1), CAMP-3, CAMP-5 (§4.6) e TREND-2 — numeração dos componentes existentes (§4.1–§4.9) preservada. Termo "entrevista" removido do corpo vivo do documento.
 
 ---
 
@@ -11,10 +13,21 @@
 
 1. **Nunca mostrar jargão técnico.** Todo texto de interface usa a linguagem de negócio definida em [PRD §2](../PRD.md#2-linguagem-motores-internos-vs-produto). Nomes de engines (Brand Brain, Knowledge Base, Trend Engine, Asset Engine, Learning Engine) não aparecem em nenhum rótulo, botão, título de tela ou mensagem de erro.
 2. **O Intelligence Hub é exceção deliberada.** Ele não é escondido — é comunicado como o motivo pelo qual o usuário pode confiar na estratégia gerada ("sua campanha foi pensada por uma equipe de especialistas de IA, não por um robô único"). A visualização do painel de especialistas (§4.1) é o momento de maior construção de confiança do produto — deve parecer substancial, não decorativo.
-3. **Nenhuma operação de IA longa fica com "spinner cego".** Toda geração assíncrona (entrevista → perfil, tendências, estratégia, peças, pacote) mostra o que está acontecendo, com linguagem humana ("Nossos especialistas estão analisando sua marca...", não "Processando...").
+3. **Nenhuma operação de IA longa fica com "spinner cego".** Toda geração assíncrona (conversa "Conheça sua empresa", tendências, estratégia, peças, pacote) mostra o que está acontecendo, com linguagem humana ("Nossos especialistas estão analisando sua marca...", não "Processando...").
 4. **Aprovação humana é sempre visível, nunca automática nos bastidores.** Isso vale tanto para peças de conteúdo (Fluxo 4) quanto para sugestões do Brand Evolution (Fluxo 8) — a interface nunca aplica nada sem uma ação explícita e reversível do usuário.
-5. **Conversa em vez de formulário sempre que envolver identidade de marca.** O onboarding e a ampliação de conhecimento da marca favorecem interação conversacional a campos de formulário engessados.
-6. **Progresso é sempre reversível ou visível.** Rejeitar, editar e desfazer são sempre baratos e claros — o usuário nunca se sente "preso" a uma geração.
+5. **Progresso é sempre reversível ou visível.** Rejeitar, editar e desfazer são sempre baratos e claros — o usuário nunca se sente "preso" a uma geração.
+
+### 1.1 Princípio do Consultor Permanente (aplicado à interface) ★ novo (revisão 7)
+
+Tradução direta, em termos de UX, do princípio de produto definido em [PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7) — vale para **toda** tela onde a Ayon fala com o usuário, não só "Conheça sua empresa":
+
+6. **Nunca sensação de formulário, cadastro ou entrevista.** A palavra "entrevista" não existe em nenhum texto de interface. Nenhuma tela deve fazer o usuário sentir que está "preenchendo" algo — mesmo telas objetivamente estruturadas (ex: Perfil da Marca, ONB-4) se apresentam como o que a Ayon já sabe, editável, não como um cadastro.
+7. **Reação antes da próxima pergunta, sempre.** Toda resposta do usuário na conversa "Conheça sua empresa" é seguida por uma observação, hipótese ou provocação inteligente da Ayon — nunca por uma pergunta "fria" enfileirada (ver §4.2).
+8. **Memória de longo prazo, não histórico passivo.** A Ayon reconecta pontos ditos anteriormente — na conversa atual, em campanhas passadas e em aprendizados já aplicados via Brand Evolution — sem que o usuário precise pedir ou repetir. Obrigatório nas transições de tema (§4.2) e nas telas de campanha (ex: Painel de Especialistas citando uma campanha anterior ou algo aprendido no onboarding).
+9. **Progresso é conhecimento, nunca contagem.** Nenhuma tela do produto mostra "X de Y perguntas/campos". Onde progresso precisa ser comunicado, ele representa o quanto a Ayon já entende da empresa (ver §4.10, painel "O que a Ayon já sabe").
+10. **Encerramento é integração de equipe, não conclusão de tarefa.** Qualquer fluxo que aprofunde o conhecimento da Ayon sobre a marca termina comunicando que ela passou a fazer parte do time, não que "um formulário foi salvo" (ver §4.2, estado `concluído`).
+11. **Toda decisão estratégica importante carrega uma justificativa consultável.** Estratégias (CAMP-2/3), peças de conteúdo (CAMP-5) e tendências ranqueadas (TREND-2) sempre exibem, junto do resultado, uma explicação em linguagem de negócio de por que aquilo reflete a marca — sempre acessível através do bloco padrão **"Por que fiz assim?"** (ver §4.11, Bloco de Justificativa de Marca) — nunca um resultado "mudo".
+12. **Nenhuma tela oferece geração de conteúdo sem contexto de marca.** Não existe, em lugar nenhum da interface, um atalho de "gerar rápido" que produza campanha, roteiro, vídeo, imagem, carrossel ou e-mail sem antes passar pelo Brand Brain — mesmo em telas futuras de produtividade avançada.
 
 ## 2. Arquitetura de Informação (Navegação)
 
@@ -25,7 +38,7 @@ Ayon Creator
 ├── Painel (Home)
 ├── Criar Campanha  ────────────────► fluxo guiado (não é uma "tela", é uma sequência — ver §7, Jornada 2)
 ├── Conheça sua Empresa
-│   ├── Entrevista (chat)
+│   ├── Conversa com o Consultor (chat)
 │   └── Perfil da Marca (resumo editável)
 ├── Ensine sua Empresa para a IA
 │   ├── Biblioteca de Conhecimento
@@ -53,7 +66,7 @@ Ayon Creator
 |---|---|---|---|
 | Painel | Home/Dashboard | — (agregador) | Todos |
 | Criar Campanha | Fluxo guiado E1–E6 (§3.5) | Trend Engine + Intelligence Hub + Asset Engine | Todos (editor+) |
-| Conheça sua Empresa | Entrevista + Perfil da Marca | Brand Brain | Todos (admin+ edita, demais visualizam) |
+| Conheça sua Empresa | Conversa com o Consultor + Perfil da Marca | Brand Brain | Todos (admin+ edita, demais visualizam) |
 | Ensine sua Empresa para a IA | Biblioteca de Conhecimento | Knowledge Base | Todos (editor+) |
 | O que está em Alta | Lista de Tendências | Trend Engine | Todos |
 | Campanhas | Histórico de Campanhas | Asset Engine | Todos |
@@ -87,16 +100,18 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 | AUTH-3 | Criar primeira marca | Nome + nicho da marca (mínimo indispensável) | carregando | AUTH-2 | ONB-1 |
 | AUTH-4 | Recuperar senha | Reset de senha | e-mail enviado, erro | AUTH-1 | AUTH-1 |
 
-> Propositalmente mínimo: a AUTH-3 não pede identidade de marca (tom, público etc.) — isso é function da entrevista (ONB), não do cadastro.
+> Propositalmente mínimo: a AUTH-3 não pede identidade de marca (tom, público etc.) — isso é função da conversa com a Ayon (ONB), não do cadastro.
 
 ### 3.2 Conheça sua Empresa (`ONB`)
 
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
-| ONB-1 | Boas-vindas à entrevista | Preparar o usuário para a conversa (o que esperar, quanto tempo leva) | — | AUTH-3 / menu "Conheça sua Empresa" | ONB-2 |
-| ONB-2 | Entrevista (chat) | Conduzir a conversa que popula o Brand Brain (§4.2 detalha o componente) | digitando, aguardando resposta do usuário, retomando entrevista incompleta | ONB-1 | ONB-3 |
-| ONB-3 | Resumo gerado | Mostrar o perfil sintetizado a partir da entrevista para confirmação | gerando resumo, editando campo individual | ONB-2 | Painel / KB-1 |
+| ONB-1 | Convite para a conversa | Preparar o usuário para conversar com a Ayon (o que esperar, quanto tempo leva) — nunca "vamos fazer algumas perguntas" | — | AUTH-3 / menu "Conheça sua Empresa" | ONB-2 |
+| ONB-2 | Conversa com o Consultor | Conduzir a conversa que popula o Brand Brain, com reação, memória e justificativa a cada turno (§4.2 detalha o componente) | ia_digitando, aguardando_usuario, refletindo (fim de tema, com callback obrigatório), retomando conversa, sintetizando | ONB-1 | ONB-3 |
+| ONB-3 | O que a Ayon entendeu até agora | Apresentar a síntese da conversa para confirmação — enquadrada como checagem de um consultor, não revisão de formulário | sintetizando, editando campo individual | ONB-2 | Painel / KB-1 |
 | ONB-4 | Perfil da Marca | Visão persistente e editável da identidade (história, produtos, clientes, tom, concorrentes, objetivos, diferenciais, palavras proibidas/favoritas) | editando, salvo | Menu "Conheça sua Empresa" a qualquer momento | — |
+
+> Nenhuma tela desta área usa a palavra "entrevista" ou comunica progresso por contagem de perguntas/campos — ver Princípio do Consultor Permanente (§1.1).
 
 ### 3.3 Ensine sua Empresa para a IA (`KB`)
 
@@ -111,7 +126,7 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
 | TREND-1 | Lista de Tendências | Mostrar tendências ranqueadas para a marca | carregando (buscando tendências), vazio, erro parcial | Menu / Painel | TREND-2, CAMP-1 |
-| TREND-2 | Detalhe da Tendência | Contexto de por que a tendência foi ranqueada assim (explicação do Coordinator, em linguagem simples) | — | TREND-1 | CAMP-1 |
+| TREND-2 | Detalhe da Tendência | Contexto de por que a tendência foi ranqueada assim para esta marca, especificamente — explicação ancorada no Brand Brain, não genérica (Bloco de Justificativa de Marca, §4.11) | — | TREND-1 | CAMP-1 |
 
 ### 3.5 Criar Campanha (`CAMP`) — fluxo guiado
 
@@ -119,7 +134,7 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 |---|---|---|---|---|---|
 | CAMP-1 | Ponto de partida | Escolher a tendência (ou iniciar tema livre — ver decisão em aberto §10) | — | TREND-1/2, Painel, "Criar Campanha" no menu | CAMP-2 |
 | CAMP-2 | Painel de Especialistas (Intelligence Hub) | Visualizar a estratégia sendo formada — momento de maior confiança do produto (§4.1) | especialistas analisando, um especialista falhou (parcial), consolidando | CAMP-1 | CAMP-3 |
-| CAMP-3 | Revisão da Estratégia | Mostrar temas, formatos previstos, calendário sugerido; aprovar ou pedir ajuste | ajustando, aprovado | CAMP-2 | CAMP-4 |
+| CAMP-3 | Revisão da Estratégia | Mostrar temas, formatos previstos, calendário sugerido, cada um com "Por que sugerimos isso" (§4.11); aprovar ou pedir ajuste | ajustando, aprovado | CAMP-2 | CAMP-4 |
 | CAMP-4 | Gerando Pacote | Checklist de formatos sendo produzidos em tempo real | gerando (por formato), erro em um formato | CAMP-3 | CAMP-5 |
 | CAMP-5 | Revisão e Aprovação | Revisar cada peça (por formato), aprovar/editar/rejeitar | aguardando aprovação, editando, regenerando | CAMP-4 | CAMP-5 (loop) → CAMP-6 |
 | CAMP-6 | Pacote Pronto | Confirmar conclusão e oferecer download | montando pacote, pronto | CAMP-5 | HIST-2, download |
@@ -176,15 +191,40 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 2. Cada cartão transita por três estados visuais: **aguardando → analisando → opinião pronta** (com um resumo de 1 linha da opinião, não o texto bruto).
 3. Quando todos concluem (ou o tempo/retry limite é atingido — ver Fluxo 10, passo 7), uma animação de "convergência" leva as 7 opiniões a um único cartão final: a estratégia consolidada (Coordinator AI), com uma frase de transição tipo "Consolidando em uma estratégia única...".
 4. Se um especialista falha, seu cartão mostra um estado neutro ("não conseguiu opinar desta vez") sem bloquear os demais nem assustar o usuário com "erro".
+5. **Memória de longo prazo (§1.1, item 8):** quando relevante, a opinião de um especialista ou a estratégia consolidada cita explicitamente uma campanha anterior ou um aprendizado já aplicado (ex: "a última campanha de vídeos curtos teve boa aprovação — mantivemos esse formato aqui") — nunca trata a marca como se essa fosse a primeira campanha.
 
 **Variantes de uso:** versão completa (CAMP-2, estratégia de campanha) e versão compacta (quando uma peça principal aciona uma nova sessão — ver Fluxo 3.1 — pode usar uma versão reduzida/mais rápida do mesmo componente).
 
-### 4.2 Chat de Entrevista (Onboarding Conversacional)
+**Justificativa (§4.11):** o resumo de 1 linha de cada opinião e a estratégia consolidada final já cumprem o papel de Bloco de Justificativa de Marca — ambos citam explicitamente o que vêm do Brand Brain (`opinion.rationale`/`consolidated_result.rationale`), nunca apenas a recomendação.
 
-- Bolhas de conversa (IA à esquerda, usuário à direita), indicador de digitação da IA.
-- Barra de progresso discreta e não-numérica (ex: pontos preenchendo, não "3/9 perguntas") — evita sensação de formulário.
-- Ao final de cada bloco temático (ex: após "concorrentes"), a IA reflete brevemente o que entendeu ("Entendi — vocês competem principalmente com X e Y. Certo?") antes de seguir, permitindo correção imediata.
-- Suporta pausar e retomar depois sem perder contexto (retoma exatamente na última pergunta pendente).
+### 4.2 Conversa com o Consultor (Onboarding Conversacional)
+
+Não é um chat de perguntas e respostas — é a primeira aparição da Ayon como consultora permanente (Princípio do Consultor Permanente, §1.1). Cobre os mesmos 9 dados estruturados do PRD §4.5 (história, produtos, clientes, tom de voz, concorrentes, objetivos, diferenciais, palavras proibidas, palavras favoritas), organizados em 5 temas — mas o usuário nunca vê "temas" nem "blocos": só vive a conversa fluindo de um assunto a outro.
+
+**Temas (organização interna, nunca exposta como etapas na UI):**
+1. Sobre a empresa (história + produtos)
+2. Clientes
+3. Concorrência + diferenciais
+4. Objetivos
+5. Tom de voz + palavras
+
+**Bolhas de conversa** (Ayon à esquerda, usuário à direita), indicador de digitação da Ayon (3 pontos pulsando, 800ms–1.5s — nunca instantâneo).
+
+**Regra de ouro — reação antes de seguir (todo turno, sem exceção):** cada resposta do usuário dispara duas camadas, nunca uma só:
+- **Micro-reação** (todo turno): uma frase curta que prova compreensão e agrega algo — nunca "ok, próxima pergunta". Varia entre validar, conectar com o que já foi dito, ou trazer uma leitura própria da Ayon. Exemplo real do produto (PRD §1.1): em vez de perguntar "qual é o seu diferencial?", a Ayon diz *"Empresas do seu segmento normalmente competem por preço. Você comentou que o atendimento é muito importante — você acredita que esse é o verdadeiro diferencial da empresa?"*
+- **Reflexo de tema** (nas transições, a partir do segundo tema): paráfrase mais completa do tema encerrado + **callback obrigatório** a algo dito em um tema anterior + ponte natural para o próximo tema. Nunca "Agora vamos falar de clientes" cru. Se a Ayon não tiver uma conexão genuína para propor, ela nomeia explicitamente o que já sabe em vez de forçar uma ligação artificial.
+
+**Painel "O que a Ayon já sabe"** (ver §4.10) substitui qualquer barra de progresso — cresce com insights sintetizados, não respostas cruas, e é a única forma de "progresso" visível nesta tela.
+
+**Correção imediata:** ao fim de cada reflexo de tema, o usuário pode confirmar ("Isso mesmo") ou corrigir ("Quase, deixa eu ajustar") — reabre apenas o ponto específico, nunca o tema inteiro.
+
+**Entrada opcional de contexto** (no convite, ONB-1): campo para colar link do site/Instagram — se preenchido, a Ayon chega com "dever de casa feito" e transforma perguntas abertas em confirmações (ex: *"Vi no seu Instagram que vocês postam bastante sobre roteiros na Europa — é o foco principal ou só uma parte do que fazem?"*). Depende de capacidade de leitura externa ainda não modelada em `architecture.md` (ver decisão em aberto §10).
+
+**Resposta "não sei"/"pular" é válida:** a Ayon aceita, marca o campo como pendente sem travar a conversa; aparece depois em ONB-4 com destaque leve, nunca bloqueia.
+
+**Retomada (estado `retomando`):** suporta pausar e retomar a qualquer momento sem perder contexto. Nunca "paramos na pergunta 4 de 9" — a Ayon recapitula citando algo específico já dito: *"Da última vez você me contou que a [Empresa] ganha no atendimento, não no preço — isso ficou na minha cabeça. Vamos continuar por aí?"*
+
+**Encerramento (estado `sintetizando` → ONB-3):** transição com 2–3 frases sequenciais ("Formando minha visão sobre a [Empresa]...") — nunca spinner isolado. Ao chegar em ONB-3, o cabeçalho é "O que a Ayon entendeu até agora" (nunca "seu perfil de marca"), com subtítulo "Me corrija se eu peguei algo errado — quero começar com o pé direito." Cada campo mostra a leitura da Ayon + a citação original do usuário como lastro. Botão de confirmação: **"Isso mesmo, pode seguir"** (nunca "Confirmar perfil"). Só depois dessa confirmação a Ayon fecha com a mensagem de integração: *"A partir de agora eu penso na [Empresa] como parte do que eu faço — toda campanha que eu ajudar a criar vai passar por esse entendimento. E isso não precisa parar aqui: sempre que você quiser me contar mais, a conversa continua em 'Ensine sua empresa pra IA'."* CTA primário: "Vamos criar sua primeira campanha"; secundário: "Ver o que aprendi, com calma".
 
 ### 4.3 Cartão de Sugestão (Brand Evolution / "O que Funcionou")
 
@@ -206,6 +246,7 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 
 ### 4.6 Cartão de Revisão de Peça
 
+- **Justificativa de marca (§4.11) sempre visível**, acima ou ao lado do preview: `content_pieces.brand_rationale`, curta e em linguagem de negócio — nunca escondida atrás de um "saiba mais" (Princípio do Consultor Permanente, §1.1, item 11).
 - Área de preview adaptada ao formato: player de vídeo (video/stories/carrossel), leitor de texto com edição inline (legenda/blog/email/roteiro/teleprompter), visualizador de imagem (thumbnail).
 - Ações: **Aprovar**, **Editar** (só habilitado para formatos textuais — formatos de vídeo não têm editor manual no MVP, apenas aprovar/rejeitar/regenerar), **Rejeitar** (com motivo opcional, usado pelo Learning Engine).
 - Atalhos de teclado para revisão rápida em campanhas com muitas peças (ex: `A` aprovar, `R` rejeitar) — ver decisão em aberto §10.
@@ -231,13 +272,38 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 | Modal de Confirmação | Ações destrutivas (remover item da Knowledge Base, arquivar marca) |
 | Estado Vazio (padrão) | Ilustração leve + frase de orientação + CTA único — usado em KB-1, MEDIA-1, HIST-1, EVOL-1 |
 
+### 4.10 Painel "O que a Ayon já sabe" ★ novo (revisão 7)
+
+Substitui qualquer indicador de progresso por contagem em ONB-2 (Princípio do Consultor Permanente, §1.1, item 9). É um painel vivo, colapsável em mobile, que a Ayon vai populando com **insights sintetizados** — nunca respostas cruas — conforme a conversa avança.
+
+- Cada item é uma leitura consolidada, não uma transcrição: ex. "Agência de viagens de roteiros personalizados", "Ganha no atendimento, não no preço", "Quer ser a primeira lembrança desse público, não só 'vender mais'".
+- Cada item aparece com fade suave logo após o reflexo de tema correspondente (§4.2) — nunca por resposta bruta isolada.
+- O cabeçalho do painel muda qualitativamente conforme o número de itens cresce, nunca em fração ou porcentagem: "Começando a te conhecer" → "Já tenho uma ideia boa de quem vocês são" → "Tenho uma visão sólida da [Empresa]".
+- Reaproveitável fora do onboarding: qualquer tela onde a Ayon acumula entendimento sobre a marca ao longo de uma sessão (ex: uma sessão de "Ensine sua empresa para a IA" mais longa) pode usar a mesma lógica de painel.
+
+### 4.11 Bloco de Justificativa de Marca ★ novo (revisão 7)
+
+Componente reutilizável que materializa os itens 6/11 do Princípio do Consultor Permanente ([PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7) / ux-design §1.1): nenhuma saída de IA aparece "muda". Tem duas camadas, sempre presentes juntas:
+
+1. **Justificativa curta, sempre visível** (1–2 frases, em linha com o resultado) — nunca escondida, nunca opcional.
+2. **Affordance nomeada e padronizada: "Por que fiz assim?"** — um rótulo consistente em toda a plataforma (mesmo texto, mesmo lugar relativo ao resultado) que expande para o raciocínio completo: quais atributos específicos do Brand Brain pesaram, e — quando aplicável — qual campanha ou aprendizado anterior foi considerado (memória de longo prazo, §1.1 item 8). Nunca um rótulo genérico tipo "saiba mais" ou "detalhes".
+
+Usado em:
+
+- **CAMP-2** (Painel de Especialistas, §4.1) — o resumo de 1 linha de cada especialista e a estratégia consolidada final já cumprem a camada 1; "Por que fiz assim?" expande para a opinião completa de cada especialista.
+- **CAMP-3** (Revisão da Estratégia) — cada tema/formato sugerido vem com a camada 1 ("Por que sugerimos isso") e o link "Por que fiz assim?" para o raciocínio completo, ancorado em atributos específicos do Brand Brain (nunca uma justificativa genérica tipo "é uma boa prática de marketing").
+- **CAMP-5** (Cartão de Revisão de Peça, §4.6) — exibe `content_pieces.brand_rationale` como camada 1, acima ou ao lado do preview; "Por que fiz assim?" abre o detalhe completo.
+- **TREND-2** (Detalhe da Tendência) — a explicação de por que a tendência foi ranqueada assim cita explicitamente o Brand Brain, não só "o Coordinator decidiu".
+
+**Comportamento comum:** linguagem de negócio em ambas as camadas, nunca jargão técnico; a camada 1 nunca é um tooltip nem um accordion fechado — é parte do resultado, não um detalhe opcional.
+
 ## 5. Estados (Padrões Globais)
 
 | Estado | Quando ocorre | Como se comunica |
 |---|---|---|
 | **Vazio** | Primeira vez em uma tela sem dados ainda (KB-1, MEDIA-1, HIST-1, EVOL-1) | Frase de orientação + 1 CTA claro, nunca tela em branco |
 | **Carregando** | Busca de dados já existentes | Skeleton/placeholder, nunca spinner genérico isolado |
-| **Processando (IA)** | Entrevista, tendências, Intelligence Hub, geração de peça | Copy específica da etapa em andamento (nunca "carregando..." genérico) — ver §1, princípio 3 |
+| **Processando (IA)** | Conversa "Conheça sua empresa", tendências, Intelligence Hub, geração de peça | Copy específica da etapa em andamento (nunca "carregando..." genérico) — ver §1, princípio 3 |
 | **Sucesso** | Conclusão normal | Confirmação clara, sem exagero, com próximo passo óbvio |
 | **Erro total** | Falha que impede continuar | Explica o que aconteceu em linguagem simples + ação de retry |
 | **Erro parcial** | Ex: 1 especialista falhou, 1 formato falhou | Não bloqueia o restante; sinaliza o item afetado isoladamente |
@@ -250,7 +316,8 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 | Microinteração | Onde | Propósito |
 |---|---|---|
 | Convergência do Painel de Especialistas | CAMP-2 | Tornar tangível o valor do Intelligence Hub — construir confiança |
-| Indicador de digitação + reflexo de entendimento | ONB-2 | Fazer a entrevista parecer conversa real, não formulário disfarçado |
+| Reação + micro-insight a cada turno | ONB-2 | Fazer a Ayon parecer consultora reagindo de verdade, nunca formulário disfarçado (§1.1) |
+| Chip surgindo no painel "O que a Ayon já sabe" | ONB-2 | Tornar tangível o crescimento do entendimento — substitui qualquer barra de progresso (§4.10) |
 | Checklist de formatos preenchendo em tempo real | CAMP-4 | Dar sensação de progresso tangível durante geração longa |
 | Confirmação sutil ao aceitar sugestão | EVOL-2 | Reforçar positivamente o loop de aprendizado sem ser infantil |
 | Celebração da entrega do pacote | CAMP-6 | Marcar o fim do "trabalho pesado" como conquista do usuário |
@@ -282,7 +349,7 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 
 - **Desktop-first** para os fluxos de criação/estratégia (CAMP-1 a CAMP-4) e para a Biblioteca de Conhecimento (upload em lote).
 - **Revisão e aprovação (CAMP-5)** deve funcionar bem também em mobile/tablet — é plausível que o dono do negócio aprove conteúdo pelo celular entre outras tarefas.
-- **Entrevista (ONB-2)** funciona bem em qualquer dispositivo, por ser uma interface conversacional simples.
+- **Conversa com o Consultor (ONB-2)** funciona bem em qualquer dispositivo, por ser uma interface conversacional simples — o painel "O que a Ayon já sabe" (§4.10) colapsa em mobile.
 - Configurações administrativas (CFG-5/CFG-6, gestão de time/marcas) podem assumir uso majoritariamente desktop no MVP.
 
 ## 9. Acessibilidade
@@ -299,6 +366,9 @@ O componente mais importante do produto: transforma o Intelligence Hub (arquitet
 4. **Notificações:** central in-app (GLOBAL-1) é suficiente no MVP, ou e-mail transacional também é necessário desde o início (alinhado à decisão em aberto de flows.md)?
 5. **Retry manual vs. automático em erro parcial** (ex: um especialista ou um formato falhou): o usuário aciona o retry, ou o sistema tenta novamente sozinho antes de expor o erro?
 6. **Localização:** interface só em português no MVP, ou já nasce preparada para outros idiomas (dado potencial de expansão)?
+7. ~~**Persona da Ayon:** primeira pessoa sem nome próprio ou identidade mais pessoal com nome?~~ **Resolvido (revisão técnica pré-Missão 2):** "Ayon" é o nome — ver [PRD.md §13.8](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo).
+8. **Atalho de contexto por link:** aceitar link de site/Instagram no convite de ONB-1 é MVP ou fica para depois? Ver [PRD.md §13.9](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo) — **adiado para depois da v1 da Missão 2**, não bloqueia o início da implementação.
+9. ~~**Painel "O que a Ayon já sabe" (§4.10):** fica sempre visível ou some por padrão? Persiste depois da conversa?~~ **Resolvido (revisão técnica pré-Missão 2):** sempre visível por padrão no desktop; colapsável em mobile (já alinhado com §8). Não persiste como tela própria após a conversa — a mesma informação já vive, sintetizada, em ONB-3/ONB-4; o painel é exclusivo da conversa em andamento.
 
 ## 11. Histórico
 

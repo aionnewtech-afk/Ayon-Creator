@@ -1,8 +1,10 @@
 # PRD — Ayon Creator
 
-> **Status do documento:** Rascunho v1.0 (revisão 3 — filosofia de produto e Intelligence Hub) — aguardando aprovação
-> **Última atualização:** 2026-08-01
+> **Status do documento:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **filosofia de produto aprovada e consolidada; documento liberado como fonte oficial da verdade para o início da implementação de código**. Decisões residuais não relacionadas à filosofia seguem listadas em §13 e podem ser resolvidas durante o desenvolvimento, conforme necessidade.
+> **Última atualização:** 2026-08-02
 > **Regra do projeto:** Nenhuma linha de código é escrita sem que a funcionalidade correspondente esteja documentada aqui (e nos documentos irmãos: [architecture.md](docs/architecture.md), [database.md](docs/database.md), [flows.md](docs/flows.md)) **e aprovada pelo dono do produto**. Todo pedido de nova funcionalidade dispara atualização destes 4 documentos, nessa ordem, antes de qualquer implementação. Histórico de mudanças em [docs/changelog.md](docs/changelog.md).
+> **Mudança da revisão 7:** novo §1.1 — **Princípio do Consultor Permanente** — elevado a princípio permanente de produto, válido para toda a Ayon Creator, não só o onboarding. A palavra "entrevista" é removida de todo o vocabulário do produto (interface e documentação viva). Ver [docs/changelog.md](docs/changelog.md) para o detalhamento completo do que mudou em cada documento.
+> **Mudança da revisão 8 (consolidação final antes da Missão 2):** §1.1 ganha 3 regras adicionais: memória de longo prazo explícita (item 3, expandido), o bloco **"Por que fiz assim?"** como affordance padrão e nomeado para justificativa (item 6, expandido), e a regra inegociável de que nenhum conteúdo nasce sem passar pelo Brand Brain (novo item 7). Aprovado pelo dono do produto — §1.1 está consolidado; próximas mudanças estruturais na filosofia só após a implementação da Missão 2.
 
 ---
 
@@ -13,6 +15,25 @@
 Ela não entrega "peças avulsas" — ela conhece a empresa do cliente, entende o que está em alta no mercado dele, pensa a estratégia como faria uma equipe de especialistas de marketing, produz o material necessário para executar essa estratégia, e aprende continuamente o que funciona, sempre devolvendo essa aprendizagem ao usuário como sugestão — nunca como mudança automática e silenciosa de comportamento.
 
 Ela substitui o papel que hoje seria de uma pequena equipe (estrategista, redator, designer, social media, analista de dados) por um sistema orientado por IA, operado por um único usuário.
+
+### 1.1 Princípio do Consultor Permanente ★ novo (revisão 7)
+
+Este é um **princípio permanente de produto** — vale para toda interação da Ayon com o usuário, em qualquer tela ou fluxo, não apenas no onboarding.
+
+**A Ayon nunca deve parecer uma IA fazendo perguntas ou um cadastro sendo preenchido. Ela deve parecer um consultor estratégico permanente que acabou de entrar para a equipe da empresa.**
+
+Isso se desdobra em regras concretas:
+
+1. **Nunca sensação de formulário, cadastro ou entrevista.** Nenhuma interação do produto — onboarding ou não — deve fazer o usuário sentir que está "preenchendo" algo. A palavra "entrevista" é removida de todo o vocabulário do produto, inclusive da documentação interna (ver [docs/changelog.md](docs/changelog.md)).
+2. **A Ayon agrega valor a cada troca, não só pergunta.** Toda resposta do usuário é seguida por uma observação, hipótese ou provocação inteligente — nunca por uma pergunta "fria" enfileirada logo em seguida. Exemplo real de produto:
+   > Em vez de "Qual é o seu diferencial?", a Ayon diz: *"Empresas do seu segmento normalmente competem por preço. Você comentou que o atendimento é muito importante pra vocês — você acredita que esse é o verdadeiro diferencial da empresa?"*
+3. **Memória de longo prazo.** A Ayon não lembra só da conversa atual — lembra de decisões, campanhas e aprendizados anteriores da empresa, via Brand Brain, Knowledge Base, histórico de campanhas e Brand Evolution. Nenhuma interação trata a marca como se fosse a primeira vez, e nenhuma decisão nova ignora o que já foi decidido, testado ou aprendido antes.
+4. **Progresso é conhecimento, não formulário.** Qualquer indicador de progresso comunica o quanto a Ayon já entende da empresa — nunca quantas perguntas faltam ou quantos campos estão preenchidos.
+5. **Encerramento é integração, não conclusão de tarefa.** Ao final de qualquer sessão de aprofundamento sobre a marca, o usuário sente que ganhou um membro de equipe permanente — não que "terminou um formulário".
+6. **Toda decisão estratégica importante carrega uma justificativa consultável.** Estratégias de campanha, roteiros, vídeos, carrosséis e qualquer outra peça gerada vêm acompanhados de uma justificativa em linguagem de negócio, ancorada no que a Ayon aprendeu sobre a empresa (Brand Brain) — nunca uma geração "muda", sem explicação do porquê daquela escolha. Essa justificativa é sempre acessível através de um bloco padrão **"Por que fiz assim?"** — nunca opcional, nunca escondida atrás de várias etapas. Vale igualmente para o Intelligence Hub (§4.1) e o Asset Engine (§4.3).
+7. **Nenhum conteúdo nasce sem passar pelo Brand Brain.** Toda geração de campanha, vídeo, imagem, roteiro, carrossel ou e-mail nasce do entendimento da empresa (Brand Brain) — nunca apenas do prompt solicitado. Não existe, e nunca deve existir, um atalho técnico ou modo de "geração rápida" que produza conteúdo pulando esse carregamento de contexto — regra inegociável, no mesmo nível da regra de aprovação humana do Brand Evolution (§4.4).
+
+> Princípio referenciado a partir de [docs/ux-design.md §1](docs/ux-design.md#1-princípios-de-ux) (como aparece na interface) e [docs/architecture.md §1.1](docs/architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7) (o que isso exige tecnicamente).
 
 ## 2. Linguagem: Motores Internos vs. Produto
 
@@ -28,6 +49,8 @@ Este é um princípio de produto, não um detalhe de implementação: **o usuár
 | **Intelligence Hub** | Não é escondido como os demais — é comunicado como diferencial ("sua campanha é pensada por uma equipe de especialistas de IA, não por um único robô"), mas os nomes internos dos especialistas (ver §4.1) não precisam aparecer literalmente na UI. |
 
 > Qualquer novo módulo interno criado no futuro deve ganhar, obrigatoriamente, uma entrada nesta tabela antes de ser exposto ao usuário.
+
+> Além de nunca expor jargão técnico, toda comunicação segue o **Princípio do Consultor Permanente** (§1.1): a Ayon nunca apenas informa um resultado — ela explica o raciocínio por trás dele.
 
 ## 3. Problema
 
@@ -54,6 +77,8 @@ O diferencial central do produto. Nenhuma decisão estratégica importante — d
 - Especialista em Dados
 
 Cada especialista gera sua opinião de forma independente. Em seguida, um **Coordinator AI** consolida todas as opiniões em uma única estratégia coerente, resolvendo divergências e priorizando de acordo com o Brand Brain da marca. Isso garante que a estratégia entregue ao usuário nunca dependa do "palpite" de um único modelo de IA — é sempre o resultado de um painel + uma síntese.
+
+> **Princípio do Consultor Permanente (§1.1):** toda estratégia consolidada pelo Coordinator AI vem acompanhada de uma justificativa em linguagem de negócio, ancorada no Brand Brain da marca — nunca apenas o resultado, sempre o porquê.
 
 > Detalhamento técnico (quando o Hub é acionado, como os especialistas são configurados) em [docs/architecture.md](docs/architecture.md#4-intelligence-hub) e [docs/flows.md](docs/flows.md#fluxo-10--coordenação-de-especialistas-intelligence-hub).
 
@@ -85,6 +110,8 @@ Ao final de uma campanha, o usuário recebe um **pacote de conteúdo completo pa
 
 > **Importante:** o MVP **não publica automaticamente** em nenhuma rede social — ver §9.2. A entrega é sempre um pacote para download; publicação automática é evolução futura.
 
+> **Princípio do Consultor Permanente (§1.1):** toda peça do pacote, ao chegar para revisão humana, vem com uma justificativa curta de por que aquela escolha reflete a marca — não é um resultado "mudo".
+
 ### 4.4 Brand Evolution — aprendizado contínuo com aprovação humana
 
 A Ayon Creator aprende continuamente com o uso (aprovações, rejeições, edições, e futuramente performance publicada), mas **nunca altera o comportamento da marca automaticamente**. Toda aprendizagem vira uma sugestão explícita, apresentada em linguagem simples, que o usuário aceita ou recusa. Exemplo de interação real do produto:
@@ -95,7 +122,7 @@ Na interface, esta capacidade aparece como **"O que funcionou"**.
 
 ### 4.5 Onboarding Conversacional
 
-Não há formulário de cadastro de marca. O onboarding é uma **entrevista conduzida pela IA** ("Conheça sua empresa"), que conversa com o cliente para extrair:
+Não há formulário de cadastro de marca, e não é uma entrevista. O onboarding é uma **conversa estratégica com a Ayon** ("Conheça sua empresa") — a mesma Ayon que depois vai pensar as campanhas, agindo desde o primeiro instante como consultora, não como formulário: ela reage ao que ouve, traz observações e conecta o que já sabe (Princípio do Consultor Permanente, §1.1), enquanto forma uma visão sobre:
 
 - História da empresa
 - Produtos
@@ -107,7 +134,7 @@ Não há formulário de cadastro de marca. O onboarding é uma **entrevista cond
 - Palavras proibidas
 - Palavras favoritas
 
-As respostas alimentam diretamente o Brand Brain (identidade operante da marca) e ficam também registradas como conhecimento bruto pesquisável ("Ensine sua empresa para a IA").
+O que é dito alimenta diretamente o Brand Brain (identidade operante da marca) e fica também registrado como conhecimento bruto pesquisável ("Ensine sua empresa para a IA"). Ao final, o usuário não "conclui um cadastro" — sente que a Ayon passou a fazer parte da equipe (ver [docs/ux-design.md §4.2](docs/ux-design.md#42-conversa-com-o-consultor-onboarding-conversacional) para o desenho completo da experiência).
 
 ## 5. Público-alvo (ICP)
 
@@ -132,7 +159,7 @@ Exemplos de nicho: agências de viagem, imobiliárias, clínicas, personal train
 - **Sistema Operacional de Marketing**, não gerador de conteúdo pontual — conhece a empresa, pensa estratégia, produz e aprende;
 - **Intelligence Hub**: estratégia decidida por um painel de especialistas de IA + Coordinator, nunca por um único modelo;
 - **Brand Evolution**: aprendizado contínuo, sempre com aprovação humana explícita — nunca muda a marca "nas costas" do usuário;
-- **Onboarding conversacional**: a IA entrevista o cliente, em vez de formulários frios;
+- **Consultor estratégico permanente**: a Ayon conhece a empresa numa conversa real desde o primeiro contato — nunca formulário, nunca entrevista — e continua a agregar valor, com memória e justificativa, em cada campanha depois (Princípio do Consultor Permanente, §1.1);
 - **Pacote de conteúdo completo** por campanha (vídeo, legenda, stories, carrossel, thumbnail, blog, email, roteiro, teleprompter);
 - **Simplicidade de fornecedor**: o cliente escolhe um nível de qualidade/custo (Econômico, Balanceado, Premium) — nunca precisa saber ou escolher qual IA está por trás;
 - **Arquitetura modular e agnóstica de fornecedor** internamente — protege o produto de dependência de qualquer IA específica (ver [docs/architecture.md](docs/architecture.md));
@@ -168,7 +195,7 @@ O sistema decide internamente, por trás do tier escolhido, quais fornecedores c
 
 ### 9.1 Incluído no MVP
 
-1. **Onboarding conversacional** ("Conheça sua empresa") — entrevista guiada por IA que popula o Brand Brain.
+1. **Onboarding conversacional** ("Conheça sua empresa") — conversa estratégica com a Ayon que popula o Brand Brain (Princípio do Consultor Permanente, §1.1).
 2. **Ensinar a empresa à IA** ("Ensine sua empresa para a IA") — upload de documentos/materiais/conteúdos passados para a base de conhecimento da marca.
 3. **O que está em alta** — descoberta e ranqueamento de tendências relevantes ao nicho da marca.
 4. **Criar campanha** — geração de estratégia via Intelligence Hub (painel de especialistas + Coordinator) e produção do pacote de conteúdo completo (§4.3) no(s) modo(s) de produção aplicável(is).
@@ -209,7 +236,7 @@ Detalhamento de como essas peças se conectam em [docs/architecture.md](docs/arc
 
 ## 11. Métricas de Sucesso
 
-- Tempo médio de "briefing/entrevista → pacote de conteúdo pronto";
+- Tempo médio de "conversa inicial → pacote de conteúdo pronto";
 - Nº de campanhas geradas por marca ativa/mês;
 - Taxa de aprovação sem retrabalho;
 - **Taxa de aceitação de sugestões do "O que funcionou"** (sinal de que o Brand Evolution está gerando valor real);
@@ -245,7 +272,9 @@ Detalhamento de como essas peças se conectam em [docs/architecture.md](docs/arc
 4. Quais formatos do pacote de conteúdo (§4.3) são gerados sempre, e quais são opcionais/configuráveis por campanha?
 5. Limites numéricos exatos por plano (cota de campanhas, nº de marcas no Starter/Pro).
 6. Banco de vídeos públicos licenciados: qual provedor/fonte será integrado como Media Provider inicial?
-7. A entrevista de onboarding ("Conheça sua empresa") é síncrona (chat em tempo real) ou pode ser feita em etapas assíncronas (ex: e-mail com perguntas)?
+7. ~~A conversa inicial de onboarding ("Conheça sua empresa") é síncrona (chat em tempo real) ou pode ser feita em etapas assíncronas (ex: e-mail com perguntas)?~~ **Resolvido (revisão técnica pré-Missão 2):** síncrona — interface de chat em tempo real, com persistência por resposta permitindo pausar/retomar a qualquer momento (nunca por e-mail em etapas). Já especificado em detalhe em [ux-design.md §4.2](docs/ux-design.md#42-conversa-com-o-consultor-onboarding-conversacional) e [architecture.md §6](docs/architecture.md#6-conversa-de-onboarding-arquitetura).
+8. ~~**Persona da Ayon:** ela se apresenta sempre na primeira pessoa sem nome próprio, ou ganha um nome/identidade mais pessoal?~~ **Resolvido (revisão técnica pré-Missão 2):** "Ayon" é o nome da consultora — já usado consistentemente em primeira pessoa em todo exemplo de copy deste documento e de `ux-design.md`. Não é "sem nome": a interface pode e deve se referir a ela como Ayon (ex: cabeçalho da conversa, mensagens).
+9. **Atalho de contexto por link:** vale, já no MVP, aceitar um link de site/Instagram no início da conversa "Conheça sua empresa" para a Ayon chegar com "dever de casa feito" (reduz o que precisa ser perguntado do zero)? Implica capacidade de leitura externa ainda não modelada em [docs/architecture.md](docs/architecture.md). **Ainda em aberto** — recomendação: adiar para depois da v1 da Missão 2, não bloqueia o início da implementação.
 
 ## 14. Histórico
 

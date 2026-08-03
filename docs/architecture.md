@@ -1,11 +1,13 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** Rascunho v1.0 (revisão 5 — fundação técnica da Sprint 1) — aguardando aprovação
-> **Última atualização:** 2026-08-01
+> **Status:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-02
+> **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha 3 regras: contexto de entrada do Intelligence Hub/Asset Engine passa a incluir explicitamente histórico de campanhas e aprendizados aplicados (memória de longo prazo, não só o Brand Brain do instante); a justificativa em linguagem de negócio ganha nome de affordance padrão — **"Por que fiz assim?"**; e uma regra inegociável nova — nenhum caminho de geração de conteúdo pode pular o carregamento do Brand Brain. Ver [PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7).
 > Este documento descreve a arquitetura correspondente ao escopo definido em [PRD.md](../PRD.md). Qualquer nova funcionalidade aprovada no PRD deve refletir aqui antes de virar código.
 > **Mudança da revisão 3:** a Ayon Creator é reposicionada como Sistema Operacional de Marketing orientado por IA. Adicionado o **Intelligence Hub** (painel de especialistas + Coordinator AI) como novo Core Engine. Nomes de módulos internos permanecem — mas nunca são expostos ao usuário (ver PRD §2). Onboarding vira entrevista conversacional. Provider Layer passa a ser resolvida por **tier** (Econômico/Balanceado/Premium), nunca por escolha direta de fornecedor. MVP não inclui publicação automática.
 > **Mudança da revisão 5 (fundação técnica, sem mudança de escopo de produto):** nova §2.1 define a estrutura de projeto (monorepo) e resolve a decisão em aberto sobre onde a lógica de negócio roda (Server Actions + camada de Repository) — ver §10, item 1, agora marcado como resolvido. Adicionados buckets de Supabase Storage (§9.1) e convenções de plataforma transversais (ThemeProvider, Error Boundaries, logger, Estado Vazio padronizado). Detalhamento operacional dessas convenções em [CONVENTIONS.md](../CONVENTIONS.md).
 > **Mudança desta revisão (6 — provisionamento inicial de conta):** nova §2.2 documenta que a confirmação de e-mail do Supabase Auth permanece ativa e que a criação de organization/brand/member/profile é feita por um serviço de Provisionamento Inicial idempotente, acionado no primeiro acesso autenticado — não mais no `signUp`. Ver também [flows.md — Fluxo 1](flows.md#fluxo-1--conheça-sua-empresa-onboarding-conversacional), passo 1, atualizado.
+> **Mudança desta revisão (7 — Princípio do Consultor Permanente):** nova §1.1 traduz o princípio de produto ([PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)) em exigência arquitetural: toda saída do Intelligence Hub e do Asset Engine carrega uma justificativa em linguagem de negócio ancorada no Brand Brain. §3.1/3.2/3.4/3.5/§6 atualizadas; termo "entrevista" removido do corpo vivo do documento (mantido apenas em notas históricas de revisões anteriores). Implicações em [database.md](database.md) (`content_pieces.brand_rationale`, estrutura de `specialist_opinions.opinion`/`intelligence_hub_sessions.consolidated_result`) e [flows.md](flows.md) (Fluxos 1, 2, 3, 4, 10).
 
 ---
 
@@ -20,6 +22,19 @@ Fornecedor troca?           → só a Provider Layer muda.
 Regra de negócio muda?      → só os Core Engines mudam.
 Cliente vê algo técnico?    → nunca. Sempre linguagem de negócio (ver PRD §2).
 ```
+
+### 1.1 Princípio Consultor Permanente: Justificativa Fundamentada em Marca ★ novo (revisão 7)
+
+Consequência arquitetural do princípio de produto definido em [PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7): a Ayon nunca é tratada, em nenhuma camada, como uma IA que só pergunta ou só gera — é um consultor permanente que **justifica toda decisão com base no que já sabe sobre a marca**. Isso é exigência técnica, não só de copy:
+
+- Toda saída do **Intelligence Hub** (opinião de cada especialista e resultado consolidado do Coordinator) inclui um campo de **justificativa em linguagem de negócio**, referenciando explicitamente atributos do Brand Brain usados naquela decisão — nunca apenas o resultado (ver §4). Na interface, essa justificativa é sempre acessível através do bloco padrão **"Por que fiz assim?"** ([ux-design.md §4.11](ux-design.md#411-bloco-de-justificativa-de-marca-★-novo-revisão-7)).
+- Toda **peça de conteúdo** do Asset Engine que chega à revisão humana (Fluxo 4) vem com uma justificativa curta e legível de por que aquela escolha reflete a marca — não é um campo opcional de debug, é parte do contrato de saída (`content_pieces.brand_rationale`, [database.md §4.6](database.md#46-content_pieces--content_versions--content_packages)).
+- **Memória de longo prazo:** o contexto de entrada de qualquer decisão do Intelligence Hub ou do Asset Engine inclui não só o estado atual do Brand Brain, mas um resumo do histórico recente de campanhas da marca e dos aprendizados já aplicados via Brand Evolution (§3.6) — a Ayon nunca decide como se fosse a primeira campanha ou a primeira interação com a marca (ver §4).
+- **Regra inegociável — Brand Brain como portão obrigatório:** nenhum caminho de geração de conteúdo (Asset Engine, Intelligence Hub, ou qualquer atalho futuro) pode chamar LLM/Avatar/Voice/Media Provider sem primeiro carregar o contexto do Brand Brain. Não existe, e nunca deve existir, um modo "geração rápida" que pule esse carregamento — mesmo nível de regra inegociável que a aprovação humana do Learning Engine (§3.6).
+- A **conversa de onboarding** ("Conheça sua empresa" — §6) não é uma sequência de perguntas e respostas: cada turno da Ayon reage ao que acabou de ouvir e, sempre que fizer sentido, conecta com algo dito anteriormente na mesma conversa (ou já conhecido via Brand Brain/Knowledge Base, em interações futuras).
+- Nenhum campo de justificativa é jargão técnico — é texto em linguagem de negócio, sujeito à mesma regra do PRD §2.
+
+> Ver [docs/ux-design.md §1](ux-design.md#1-princípios-de-ux) para como isso aparece na interface, e §4 (Painel de Especialistas, Cartão de Revisão de Peça) para onde a justificativa é exibida.
 
 ## 2. Visão Geral em Camadas
 
@@ -113,7 +128,7 @@ Nenhum destes nomes aparece na interface (ver mapeamento em PRD §2). São módu
 
 ### 3.1 Brand Brain
 
-A identidade operante de cada marca. Alimentado inicialmente pela **entrevista de onboarding conversacional** (§6) e continuamente pelo **Learning Engine**.
+A identidade operante de cada marca. Alimentado inicialmente pela **conversa de onboarding** (§6) e continuamente pelo **Learning Engine**.
 
 - **Responsabilidade:** manter identidade (tom de voz, público, diretrizes visuais, avatar/voz padrão, história, produtos, concorrentes, objetivos, diferenciais, palavras proibidas/favoritas) e preferências aprendidas; expor uma capacidade interna de **"gerar texto/roteiro consistente com a marca"**, usada por Trend Engine, Intelligence Hub e Asset Engine.
 - **Depende de:** Knowledge Base (contexto/retrieval), LLM Provider, Learning Engine.
@@ -121,9 +136,9 @@ A identidade operante de cada marca. Alimentado inicialmente pela **entrevista d
 
 ### 3.2 Knowledge Base
 
-O corpus de conhecimento retrivável de cada marca (RAG), incluindo a transcrição bruta da entrevista de onboarding.
+O corpus de conhecimento retrivável de cada marca (RAG), incluindo a transcrição bruta da conversa de onboarding.
 
-- **Responsabilidade:** ingerir documentos, conteúdos passados, FAQs, notas manuais, transcrição da entrevista de onboarding; disponibilizar retrieval para o Brand Brain e para o Intelligence Hub.
+- **Responsabilidade:** ingerir documentos, conteúdos passados, FAQs, notas manuais, transcrição da conversa de onboarding; disponibilizar retrieval para o Brand Brain e para o Intelligence Hub.
 - **Armazenamento:** `knowledge_base_items` (ver [database.md](database.md#42-knowledge_base_items)).
 
 ### 3.3 Trend Engine
@@ -137,10 +152,12 @@ Orquestra a descoberta de tendências relevantes ao nicho/marca ("O que está em
 
 O mecanismo central de "como a Ayon Creator pensa" (PRD §4.1). Garante que nenhuma decisão estratégica dependa de um único modelo de IA.
 
-- **Responsabilidade:** para uma decisão importante (ex: estratégia de campanha), acionar um painel de **Specialist Agents** — cada um um papel especializado (`marketing`, `copywriting`, `branding`, `niche`, `seo`, `social_media`, `data`) — que geram opiniões independentes a partir do mesmo contexto (Brand Brain + Knowledge Base + tendências do Trend Engine); em seguida, acionar o **Coordinator AI**, que consolida as opiniões em uma única estratégia coerente.
+- **Responsabilidade:** para uma decisão importante (ex: estratégia de campanha), acionar um painel de **Specialist Agents** — cada um um papel especializado (`marketing`, `copywriting`, `branding`, `niche`, `seo`, `social_media`, `data`) — que geram opiniões independentes a partir do mesmo contexto (Brand Brain + Knowledge Base + tendências do Trend Engine + histórico de campanhas/aprendizados da marca — ver "Memória de longo prazo" abaixo); em seguida, acionar o **Coordinator AI**, que consolida as opiniões em uma única estratégia coerente.
 - **Diversidade de modelo:** cada Specialist Agent pode ser resolvido para um `provider_key`/modelo diferente dentro do tier ativo (ver §5.1), maximizando a diversidade de "opiniões" e reduzindo dependência de um único LLM — mesmo quando o Coordinator também é, tecnicamente, uma chamada ao LLM Provider.
 - **Quando é acionado:** toda geração de estratégia de campanha (Fluxo 2) e toda peça de conteúdo classificada como "principal" de uma campanha (ex: o vídeo/roteiro central). Peças derivadas/secundárias (ex: variações de legenda) podem reaproveitar a decisão já consolidada, sem novo painel completo — ver decisão em aberto PRD §13.1.
-- **Depende de:** LLM Provider (para cada Specialist e para o Coordinator), Brand Brain, Knowledge Base, Trend Engine.
+- **Justificativa obrigatória (Princípio do Consultor Permanente, §1.1):** cada opinião e o resultado consolidado do Coordinator incluem uma justificativa em linguagem de negócio ancorada no Brand Brain — nunca apenas a recomendação nua. Exibida na interface como **"Por que fiz assim?"**.
+- **Memória de longo prazo (Princípio do Consultor Permanente, §1.1):** o contexto de entrada não se limita ao estado atual do Brand Brain — inclui um resumo do histórico recente de `campaigns` da marca e dos `learning_insights` já aplicados, para que a estratégia nunca ignore decisões, testes ou aprendizados anteriores.
+- **Depende de:** LLM Provider (para cada Specialist e para o Coordinator), Brand Brain, Knowledge Base, Trend Engine, histórico de campanhas.
 - **Armazenamento:** `intelligence_hub_sessions`, `specialist_opinions` (ver [database.md](database.md#44-intelligence_hub_sessions--specialist_opinions)).
 
 ### 3.5 Asset Engine
@@ -148,6 +165,8 @@ O mecanismo central de "como a Ayon Creator pensa" (PRD §4.1). Garante que nenh
 Orquestra a materialização de cada peça do **pacote de conteúdo** (PRD §4.3), qualquer que seja o modo de produção.
 
 - **Responsabilidade:** para cada `content_piece`, (1) obter o script/copy (via Brand Brain, ou via resultado já consolidado do Intelligence Hub quando a peça é "principal"); (2) conforme o `production_mode`, acionar Avatar Provider e/ou Voice Provider e/ou Media Provider e/ou a biblioteca de mídia própria; (3) compor o resultado final (inclusive em modo híbrido); (4) persistir a saída como nova `content_versions`; (5) ao concluir todas as peças da campanha, montar o **Pacote de Conteúdo** (`content_packages`) para download.
+- **Justificativa de marca (Princípio do Consultor Permanente, §1.1):** toda peça que chega à revisão humana (Fluxo 4) inclui uma justificativa curta de por que aquela escolha reflete a marca, persistida em `content_pieces.brand_rationale` ([database.md §4.6](database.md#46-content_pieces--content_versions--content_packages)), exibida na interface como **"Por que fiz assim?"**.
+- **Regra inegociável — Brand Brain como portão obrigatório (Princípio do Consultor Permanente, §1.1):** o Asset Engine nunca chama LLM/Avatar/Voice/Media Provider para gerar uma peça sem primeiro carregar o Brand Brain da marca (diretamente, ou via resultado já consolidado do Intelligence Hub, que por sua vez já parte do Brand Brain). Não existe modo de "geração rápida" que pule esse carregamento — mesmo nível de regra inegociável que a aprovação humana obrigatória do Learning Engine (§3.6).
 - **Sem publicação automática no MVP:** o Asset Engine entrega sempre um pacote para download — não existe, no MVP, um passo de publicação em canal externo (ver §7).
 - **Armazenamento:** `content_pieces`, `content_versions`, `content_packages` (ver [database.md](database.md#45-content_pieces--content_versions--content_packages)).
 
@@ -161,11 +180,14 @@ Loop de aprendizado contínuo por marca, exposto ao usuário como **"O que funci
 
 ## 4. Intelligence Hub — Detalhamento
 
+> **Memória de longo prazo (Princípio do Consultor Permanente, §1.1):** o "Contexto de entrada" do diagrama abaixo não é só o snapshot atual do Brand Brain — inclui também um resumo do histórico recente de campanhas da marca (`campaigns`) e dos aprendizados já aplicados (`learning_insights`), montado pelo Intelligence Hub antes de acionar os especialistas.
+
 ```
                  ┌───────────────────────────────────────────┐
                  │        Contexto de entrada                 │
                  │  (Brand Brain + Knowledge Base + Trend     │
-                 │   Engine, conforme a decisão em questão)   │
+                 │   Engine + histórico de campanhas,         │
+                 │   conforme a decisão em questão)           │
                  └───────────────────┬─────────────────────────┘
                                      │
         ┌────────────┬──────────────┼──────────────┬────────────┬──────────────┬────────────┐
@@ -189,6 +211,8 @@ Loop de aprendizado contínuo por marca, exposto ao usuário como **"O que funci
 
 Cada Specialist Agent e o Coordinator são, tecnicamente, chamadas ao **LLM Provider** com um prompt/papel diferente — a "equipe de especialistas" é uma composição arquitetural sobre o mesmo Provider Layer, não fornecedores distintos por especialista (embora o tier Premium possa, opcionalmente, atribuir modelos diferentes a especialistas diferentes para maximizar diversidade — ver §5.1 e decisão em aberto PRD §13.2).
 
+Cada opinião e a estratégia final carregam uma justificativa em linguagem de negócio (não apenas o resultado) — Princípio do Consultor Permanente (§1.1), persistida em `specialist_opinions.opinion.rationale` / `intelligence_hub_sessions.consolidated_result.rationale` ([database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions)).
+
 ## 5. Provider Layer (adapters plugáveis, resolvidos por Tier)
 
 Cada tipo de provider tem um **contrato fixo**. Novos fornecedores só precisam satisfazer o contrato.
@@ -211,11 +235,15 @@ Cada tipo de provider tem um **contrato fixo**. Novos fornecedores só precisam 
 
 > Fluxo operacional de troca de fornecedor documentado em [flows.md — Fluxo 9](flows.md#fluxo-9--troca-de-provedor-provider-swap).
 
-## 6. Onboarding Conversacional (arquitetura)
+## 6. Conversa de Onboarding (arquitetura)
 
-- Implementado como uma interface de chat (Next.js) apoiada por uma sequência de perguntas-guia (história, produtos, clientes, tom de voz, concorrentes, objetivos, diferenciais, palavras proibidas, palavras favoritas), conduzida via **LLM Provider**.
-- Cada resposta é gravada de duas formas: (1) estruturada, atualizando os campos correspondentes de `brand_brain_profiles`; (2) bruta/literal, como um novo item em `knowledge_base_items` (permitindo que o Brand Brain e o Intelligence Hub recuperem contexto adicional além dos campos estruturados).
-- A entrevista pode ser retomada/complementada a qualquer momento — não é um passo único e travado do cadastro.
+- Implementada como uma interface de chat (Next.js), conduzida via **LLM Provider** — mas o modelo de comportamento não é "perguntar e registrar resposta": é o **Princípio do Consultor Permanente** (§1.1) aplicado ao primeiro contato com a marca.
+- Os 9 dados estruturados (história, produtos, clientes, tom de voz, concorrentes, objetivos, diferenciais, palavras proibidas, palavras favoritas) continuam sendo o que precisa ser capturado, mas o prompt que conduz a conversa é responsável por: (1) reagir a cada resposta antes de seguir adiante; (2) trazer observações/hipóteses/provocações baseadas no que já foi dito, não só extrair o próximo dado; (3) conectar espontaneamente respostas de temas diferentes quando fizer sentido (ex: relacionar um diferencial citado com o tom de voz descrito depois).
+- Cada resposta continua sendo gravada de duas formas: (1) estruturada, atualizando os campos correspondentes de `brand_brain_profiles`; (2) bruta/literal, como um novo item em `knowledge_base_items` (`source_type = onboarding_conversation`), permitindo que o Brand Brain e o Intelligence Hub recuperem contexto adicional além dos campos estruturados.
+- A conversa pode ser retomada/complementada a qualquer momento — não é um passo único e travado do cadastro. Ao retomar, o contexto já capturado é reinjetado no prompt para que a Ayon recapitule com uma referência específica ao que já foi dito, nunca um "continuando de onde paramos" genérico.
+- Nenhum indicador de progresso baseado em contagem de campos é exposto à UI, nem deve existir como conceito no backend voltado à interface — o que a UI consome é uma síntese incremental de entendimento (ver [ux-design.md §4.2](ux-design.md#42-conversa-com-o-consultor-onboarding-conversacional)), não uma fração de campos preenchidos.
+- **Caminho de execução (esclarecido na revisão técnica pré-Missão 2):** cada turno da conversa é uma chamada síncrona **Server Action → LLM Provider**, direta, sem passar pelo n8n — a latência-alvo da reação da Ayon (800ms–1.5s, [ux-design.md §4.2](ux-design.md#42-conversa-com-o-consultor-onboarding-conversacional)) é incompatível com o overhead de um round-trip via webhook do n8n. O n8n (§8) fica reservado para os passos verdadeiramente assíncronos e não conversacionais desse fluxo — ex: extração/gravação em `knowledge_base_items` e a síntese final que gera o Perfil da Marca (ONB-3) — nunca a troca de mensagens em si.
+- Uma resposta do usuário pode atualizar **mais de um campo estruturado ao mesmo tempo** (ex: uma única resposta no tema "concorrência + diferenciais" pode gerar registros para `competitors` e `differentiators` simultaneamente) — a extração não assume relação 1:1 entre resposta e `question_key`.
 
 ## 7. Publicação (fora do MVP)
 
@@ -225,7 +253,7 @@ O MVP entrega exclusivamente um **Pacote de Conteúdo para download** (PRD §4.3
 
 O n8n orquestra **sequências de chamadas aos Core Engines e ao Provider Gateway**, sem conter lógica específica de fornecedor:
 
-1. Processos longos/assíncronos e multi-etapas (entrevista → Brand Brain, tendências, sessão do Intelligence Hub, geração de cada peça, montagem do pacote);
+1. Processos longos/assíncronos e multi-etapas (tendências, sessão do Intelligence Hub, geração de cada peça, montagem do pacote, extração/gravação pós-turno da conversa de onboarding — nunca a troca de mensagens em si, ver §6);
 2. Retentativas, timeouts e tratamento de falha entre etapas;
 3. Atualização de status das entidades no Supabase a cada etapa concluída (refletido na UI via Realtime).
 

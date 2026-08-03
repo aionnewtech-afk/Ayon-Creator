@@ -4,7 +4,7 @@ Sistema Operacional de Marketing orientado por IA — não um gerador de conteú
 
 ## Estado do projeto
 
-**Fase atual: documentação.** Nenhuma linha de código de produto foi escrita ainda — este repositório contém apenas a especificação do produto, que deve ser lida e aprovada antes de qualquer implementação.
+**Sprint 1 (fundação de plataforma) implementada:** monorepo, autenticação, provisionamento inicial de conta, layout base. **Filosofia de produto consolidada** (Princípio do Consultor Permanente — ver [PRD.md §1.1](PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)) e documentação aprovada como fonte oficial da verdade após revisão técnica (ver [docs/changelog.md](docs/changelog.md), revisão 9). **Em implementação: Missão 2 — "Conheça sua empresa"** (onboarding conversacional).
 
 ## Estrutura
 

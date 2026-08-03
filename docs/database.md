@@ -1,8 +1,10 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** Rascunho v1.0 (revisão 5 — fundação técnica da Sprint 1) — aguardando aprovação
-> **Última atualização:** 2026-08-01
+> **Status:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-02
 > Banco: Supabase (Postgres). Este documento descreve o modelo de dados correspondente ao escopo do [PRD.md](../PRD.md) e da [architecture.md](architecture.md). Tipos de coluna são indicativos (refinar em fase de implementação aprovada).
+> **Mudança desta revisão (7 — Princípio do Consultor Permanente):** nova coluna `content_pieces.brand_rationale`; `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` passam a exigir uma chave `rationale` (ver [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)); enum `knowledge_base_items.source_type` renomeia `onboarding_interview` → `onboarding_conversation`.
+> **Mudança desta revisão (8 — consolidação final antes da Missão 2):** nenhuma tabela/coluna nova além das já existentes — apenas notas explícitas em §4.4/§4.5 esclarecendo que o contexto de entrada do Intelligence Hub inclui histórico de `campaigns`/`learning_insights` (memória de longo prazo) e que `brand_rationale`/`rationale` são a base de dados do bloco "Por que fiz assim?" (ver [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)).
 > **Mudança da revisão 3:** `brand_brain_profiles` ganha campos da entrevista de onboarding; nova tabela `brand_onboarding_answers`; novas tabelas `intelligence_hub_sessions`/`specialist_opinions`; `provider_configs` ganha `tier` e passa a ser resolvida por (capability, tier) em vez de escolha direta do cliente; `content_pieces.format` expandido para os formatos do pacote de conteúdo; nova tabela `content_packages`; `publishing_channels`/`publications` marcadas como fora do MVP.
 > **Mudança desta revisão (5 — fundação técnica, sem mudança de escopo de produto):** `organizations` ganha `slug`; `brands` passa a ter uma linha padrão criada automaticamente no cadastro (ver [flows.md — Fluxo 1](flows.md#fluxo-1--conheça-sua-empresa-onboarding-conversacional)); novas tabelas de plataforma `user_profiles`, `audit_logs`, `feature_flags`; convenção de colunas de auditoria (`created_by`, `updated_at`, `deleted_at` — ver [CONVENTIONS.md](../CONVENTIONS.md)) aplicada a `organizations`, `organization_members`, `brands`, `user_profiles`, `feature_flags` desde já — demais tabelas adotam a convenção quando forem implementadas.
 
@@ -65,14 +67,14 @@ content_pieces N───N publishing_channels via publications (fora do MVP)
 
 ### 2.3 `brands`
 
-> **Criação automática (revisão 5):** no cadastro (`Fluxo 1`, passo 1), uma brand padrão é criada junto com a organização — `name` = nome da organização, `niche` nulo (preenchido depois pela entrevista "Conheça sua empresa", fora de escopo da Sprint 1 de implementação). Isso garante que toda organização já tem um `brand_id` válido antes do onboarding conversacional existir.
+> **Criação automática (revisão 5):** no cadastro (`Fluxo 1`, passo 1), uma brand padrão é criada junto com a organização — `name` = nome da organização, `niche` nulo (preenchido depois, na conversa "Conheça sua empresa", fora de escopo da Sprint 1 de implementação). Isso garante que toda organização já tem um `brand_id` válido antes do onboarding conversacional existir.
 
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | organization_id | uuid FK → organizations | |
 | name | text | |
-| niche | text (nullable) | usado pelo Trend Engine e pelo Especialista de Nicho; nulo até a entrevista de onboarding |
+| niche | text (nullable) | usado pelo Trend Engine e pelo Especialista de Nicho; nulo até a conversa de onboarding |
 | provider_tier | enum(`economico`,`balanceado`,`premium`) (nullable) | override do tier da organização para esta marca (plano Business) |
 | status | enum(`active`,`archived`) | |
 | created_by | uuid FK → auth.users (nullable) | |
@@ -108,7 +110,7 @@ Perfil de aplicação por usuário, separado de `auth.users` (gerida pelo Supaba
 
 ### 3.1 `brand_onboarding_answers`
 
-Registro histórico das respostas dadas na entrevista "Conheça sua empresa" — fonte de verdade do que foi perguntado/respondido.
+Registro histórico do que foi dito na conversa "Conheça sua empresa" — fonte de verdade do que foi tratado/respondido.
 
 | Coluna | Tipo | Notas |
 |---|---|---|
@@ -130,9 +132,9 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 |---|---|---|
 | id | uuid PK | |
 | brand_id | uuid FK → brands (unique) | |
-| company_history | text | da entrevista de onboarding |
+| company_history | text | da conversa de onboarding |
 | products_summary | text | idem |
-| target_audience | text | "clientes", da entrevista |
+| target_audience | text | "clientes", da conversa de onboarding |
 | tone_of_voice | text | idem |
 | competitors | text[] | idem |
 | objectives | text | idem |
@@ -144,6 +146,11 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | default_voice_ref | text | referência lógica à voz padrão (idem) |
 | learned_preferences | jsonb | ajustes aceitos via "O que funcionou" (Learning Engine) |
 | last_learning_update_at | timestamptz (nullable) | |
+| onboarding_completed_at | timestamptz (nullable) | necessidade descoberta na implementação da Missão 2: marca quando os 5 temas da conversa foram cobertos e a síntese (ONB-3) está pronta para revisão |
+| onboarding_confirmed_at | timestamptz (nullable) | marca quando o usuário confirma a síntese ("Isso mesmo, pode seguir") — distingue "conversa concluída" de "conversa confirmada" para fins de retomada/roteamento |
+| onboarding_synthesis | jsonb (nullable) | síntese computada (sem chamada de IA extra) a partir dos campos de `brand_brain_profiles` + citações de `brand_onboarding_answers`, usada para renderizar ONB-3 |
+| created_by | uuid FK → auth.users (nullable) | ausente até a implementação da Missão 2 (revisão 9); sem `deleted_at` de propósito — o perfil vive/morre com o `brand` |
+| created_at | timestamptz | idem |
 | updated_at | timestamptz | |
 
 ### 4.2 `knowledge_base_items`
@@ -152,13 +159,16 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 |---|---|---|
 | id | uuid PK | |
 | brand_id | uuid FK → brands | |
-| source_type | enum(`document`,`past_content`,`faq`,`performance_note`,`manual_note`,`onboarding_interview`) | |
+| source_type | enum(`document`,`past_content`,`faq`,`performance_note`,`manual_note`,`onboarding_conversation`) | |
 | title | text | |
 | content_text | text | |
 | storage_path | text (nullable) | |
-| embedding | vector (nullable) | depende da decisão sobre `pgvector` (architecture.md §10.3) |
+| embedding | vector (nullable) | **ainda não criada** — depende da decisão sobre `pgvector` (architecture.md §10.3); adicionar via migration incremental quando resolvida |
 | tags | text[] | |
+| created_by | uuid FK → auth.users (nullable) | |
 | created_at | timestamptz | |
+| updated_at | timestamptz | ausente até a Missão 2 (revisão 9) — necessário porque KB-3 permite editar tags/remover item |
+| deleted_at | timestamptz (nullable) | soft delete — KB-3 "remover item" |
 
 ### 4.3 `trend_research`
 
@@ -176,6 +186,8 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 
 **`intelligence_hub_sessions`** — uma execução do painel de especialistas + Coordinator para uma decisão específica.
 
+> **Memória de longo prazo (Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)):** ao montar o contexto de entrada para especialistas e Coordinator, o Intelligence Hub consulta também `campaigns` (histórico recente da marca) e `learning_insights` já `applied` — não apenas o snapshot atual de `brand_brain_profiles`. Nenhuma sessão decide como se fosse a primeira campanha da marca.
+
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
@@ -184,7 +196,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | related_entity_id | uuid | polimórfico |
 | trigger_reason | text | ex: "estratégia de campanha", "roteiro da peça principal" |
 | status | enum(`running`,`completed`,`failed`) | |
-| consolidated_result | jsonb | saída final do Coordinator AI |
+| consolidated_result | jsonb | saída final do Coordinator AI — **deve incluir a chave `rationale`** (texto em linguagem de negócio, ancorado no Brand Brain, explicando o porquê da estratégia — Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)) além do conteúdo estruturado da estratégia |
 | coordinator_provider_key | text | qual `provider_key` de LLM Provider atuou como Coordinator nesta sessão |
 | created_at | timestamptz | |
 | completed_at | timestamptz (nullable) | |
@@ -196,7 +208,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | id | uuid PK | |
 | session_id | uuid FK → intelligence_hub_sessions | |
 | specialist_type | enum(`marketing`,`copywriting`,`branding`,`niche`,`seo`,`social_media`,`data`) | |
-| opinion | jsonb | opinião estruturada do especialista |
+| opinion | jsonb | opinião estruturada do especialista — **deve incluir a chave `rationale`** (justificativa em linguagem de negócio, ancorada no Brand Brain — Princípio do Consultor Permanente, architecture.md §1.1) além da recomendação |
 | llm_provider_key | text | `provider_key` usado para gerar esta opinião |
 | created_at | timestamptz | |
 
@@ -207,7 +219,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | id | uuid PK | |
 | brand_id | uuid FK → brands | |
 | trend_research_id | uuid FK → trend_research (nullable) | |
-| intelligence_hub_session_id | uuid FK → intelligence_hub_sessions | sessão que gerou a estratégia desta campanha |
+| intelligence_hub_session_id | uuid FK → intelligence_hub_sessions | sessão que gerou a estratégia desta campanha — **NOT NULL de propósito**: nenhuma campanha existe sem ter passado pelo Brand Brain via Intelligence Hub (regra inegociável, Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)) |
 | title | text | |
 | strategy_summary | jsonb | = `intelligence_hub_sessions.consolidated_result` desta sessão, desnormalizado para leitura rápida |
 | status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`package_ready`,`failed`) | substituído `published` por `package_ready` — MVP não publica |
@@ -227,6 +239,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | is_primary | boolean | `true` para a peça "principal" da campanha (passa pelo Intelligence Hub completo — architecture.md §3.4) |
 | intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | preenchido quando a peça é principal |
 | script | text | |
+| brand_rationale | text | justificativa curta em linguagem de negócio de por que esta peça reflete a marca (Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)); dado-fonte do bloco **"Por que fiz assim?"** no Cartão de Revisão de Peça ([ux-design.md §4.6](ux-design.md#46-cartão-de-revisão-de-peça)) |
 | status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`rejected`) | sem status `published` no MVP |
 | approved_by | uuid FK → auth.users (nullable) | |
 | approved_at | timestamptz (nullable) | |
@@ -423,7 +436,7 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 ## 10. Decisões em Aberto (banco de dados)
 
 1. `credit_pricing`: desenhar tabela de conversão custo→crédito por `capability` + `tier`, alinhada à decisão de produto PRD §13.2/§8.1.
-2. Estrutura exata de `visual_guidelines`, `specialist_opinions.opinion`, `intelligence_hub_sessions.consolidated_result` e `learning_insights.summary` (jsonb) — fixar após prototipagem dos prompts de cada Core Engine.
+2. Estrutura exata de `visual_guidelines`, `specialist_opinions.opinion`, `intelligence_hub_sessions.consolidated_result` e `learning_insights.summary` (jsonb) — fixar após prototipagem dos prompts de cada Core Engine. **Já decidido (revisão 7):** `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` incluem obrigatoriamente uma chave `rationale`; o restante da estrutura permanece em aberto.
 3. Confirmar uso de `pgvector` para `knowledge_base_items.embedding`.
 4. `provider_configs.specialist_type`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.
 5. Se `content_packages` deve versionar (permitir gerar o pacote mais de uma vez após reaprovações) ou é sempre 1:1 com a campanha.
