@@ -18,6 +18,7 @@ import type {
   ProviderTier,
   SpecialistRole,
   SpecialistStatus,
+  TrendResearchStatus,
 } from "./domain";
 
 export interface Database {
@@ -380,6 +381,29 @@ export interface Database {
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["campaigns"]["Insert"]>;
+        Relationships: [];
+      };
+      trend_research: {
+        Row: {
+          id: string;
+          brand_id: string;
+          provider_key: string | null;
+          summary: Record<string, unknown> | null;
+          intelligence_hub_session_id: string | null;
+          status: TrendResearchStatus;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          provider_key?: string | null;
+          summary?: Record<string, unknown> | null;
+          intelligence_hub_session_id?: string | null;
+          status?: TrendResearchStatus;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["trend_research"]["Insert"]>;
         Relationships: [];
       };
     };

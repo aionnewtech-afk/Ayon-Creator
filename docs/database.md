@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 14 — Missão 4 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 15 — Missão 5 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (15 — Missão 5 implementada):** `trend_research` (§4.3) criada por `0006_trend_engine.sql` — schema idêntico ao já especificado desde a revisão 2, sem mudança de colunas; `provider_key`/`summary` documentados como nullable (preenchidos só na conclusão). `campaigns.trend_research_id` ganha FK real. Novo capability `trend_source` em `provider_configs`. `specialists.applies_to` de `marketing_strategy`/`branding` amplia para incluir `trend_ranking` (migration `0006`); `system_prompt` do Coordinator generalizado para ser independente de tipo de decisão (migration `0007_coordinator_decision_agnostic.sql` — achado durante a implementação, ver [docs/changelog.md](changelog.md)).
 > **Mudança desta revisão (14 — Missão 4 implementada):** `knowledge_base_items` validada em produção com upload real de PDF/DOCX/TXT e nota manual — nenhuma migration nova foi necessária, confirmando a previsão da revisão 13. `content_text`/`storage_path`/`tags` todos populados corretamente pelos três tipos de arquivo testados.
 > **Mudança desta revisão (13 — preparação da Missão 4):** nota de `knowledge_base_items.embedding` (§4.2) atualizada — recomendação é adiar `pgvector`, MVP da Knowledge Base usa retrieval por recência + tags. Nenhuma mudança de schema necessária para a Missão 4: a tabela já existe desde a Missão 2.
 > **Mudança desta revisão (11 — Missão 3 implementada):** migration `0004_intelligence_hub.sql` aplicada em produção — `specialists`, `intelligence_hub_sessions`, `specialist_opinions` e `campaigns` (§4.4/§4.5) existem de fato; `provider_configs.specialist_type` (enum) foi removida e substituída por `provider_configs.specialist_id` (FK → `specialists`, nullable). `campaigns.trend_research_id` existe como `uuid` **sem FK real** — `trend_research` ainda não tem migration própria, então a referência é só de convenção até essa tabela ser criada. Seed inicial do registry: 3 especialistas (`marketing_strategy`, `branding`, `copywriting`, todos com `applies_to = ['campaign_strategy']`) + 1 `coordinator`.
@@ -177,15 +178,20 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 
 ### 4.3 `trend_research`
 
+Implementada e validada na Missão 5 (migration `0006_trend_engine.sql`) — schema idêntico ao já especificado desde a revisão 2, sem mudança.
+
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | brand_id | uuid FK → brands | |
-| provider_key | text | qual Trend Source Provider gerou este resultado |
-| summary | jsonb | tendências identificadas (ranqueamento final vem do Intelligence Hub) |
+| provider_key | text (nullable) | qual Trend Source Provider gerou este resultado — nullable porque só é preenchido quando a busca termina (mesmo padrão de `intelligence_hub_sessions.coordinator_provider_key`); linha nasce em `pending` sem esse valor |
+| summary | jsonb (nullable) | `{"rankings": [{"title", "summary", "rationale", "source_url"}], "overall_rationale"}` — ranqueamento final consolidado pelo Intelligence Hub, nunca os candidatos brutos do Trend Source Provider |
 | intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | sessão que produziu o ranqueamento estratégico |
 | status | enum(`pending`,`completed`,`failed`) | |
+| created_by | uuid FK → auth.users (nullable) | |
 | created_at | timestamptz | |
+
+`campaigns.trend_research_id` ganhou FK real para esta tabela na mesma migration (antes era `uuid` sem constraint, já que `trend_research` não existia — ver revisão 11).
 
 ### 4.4 `intelligence_hub_sessions` / `specialist_opinions` / `specialists`
 

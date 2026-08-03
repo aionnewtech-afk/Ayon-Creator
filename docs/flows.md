@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 15 — Missão 5 liberada para código) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 16 — Fluxo 2 implementado e validado) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (16 — Missão 5 implementada e validada):** Fluxo 2 confirmado em produção — Server Action direta (sem n8n), Trend Source Provider resolvido via Provider Gateway, candidatos sempre passando pelo Intelligence Hub antes de chegar à tela. Validado com Supabase + Anthropic reais.
 > **Mudança desta revisão (15 — aprovação da Missão 5, Trend Engine):** Fluxo 2 revisado e aprovado — Server Action direta, sem n8n (passo 2), Trend Source Provider resolvido via Provider Gateway sem o Trend Engine conhecer o fornecedor concreto (passo 3), e nova regra inegociável de que nenhuma tendência é exibida ao usuário sem passar pelo Intelligence Hub (passo 4). Ver [architecture.md §3.3/§8](architecture.md#33-trend-engine) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (14 — Missão 4 implementada):** Fluxo 11 implementado e validado em produção — upload de PDF/DOCX/TXT (extração síncrona confirmada) e nota manual, ambos passando por `knowledge_base_items`. Retrieval por recência + tags confirmado como decisão final (não mais pendente).
 > **Mudança desta revisão (13 — preparação da Missão 4):** novo Fluxo 11 — "Ensine sua Empresa para a IA" (Knowledge Base), reutilizando `knowledge_base_items` já existente desde a Missão 2. Retrieval no MVP é por recência + tags, não por embeddings — decisão pendente de confirmação do dono do produto (ver [architecture.md §10, item 3](architecture.md#10-decisões-em-aberto-arquitetura)).

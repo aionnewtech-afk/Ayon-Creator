@@ -20,11 +20,13 @@ type Mode = "form" | "loading" | "results" | "approved";
 
 export interface CampaignStrategyFlowProps {
   brandName: string;
+  /** Pré-preenchido ao vir de uma tendência selecionada (TREND-2 → CAMP-1, Fluxo 2). */
+  initialObjective?: string;
 }
 
-export function CampaignStrategyFlow({ brandName }: CampaignStrategyFlowProps) {
+export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignStrategyFlowProps) {
   const [mode, setMode] = useState<Mode>("form");
-  const [objective, setObjective] = useState("");
+  const [objective, setObjective] = useState(initialObjective ?? "");
   const [result, setResult] = useState<StrategyResult | null>(null);
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -62,10 +62,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "o-que-esta-em-alta",
     label: "O que está em Alta",
-    description: "Em breve você vai ver as tendências mais relevantes para o seu nicho, já priorizadas para você.",
+    description: "Veja as tendências mais relevantes para o seu nicho, já avaliadas pela equipe de especialistas da Ayon.",
     icon: TrendingUp,
     minRole: "viewer",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "campanhas",

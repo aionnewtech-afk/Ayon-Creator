@@ -13,9 +13,12 @@ export * from "./repositories/specialist.repository";
 export * from "./repositories/intelligence-hub-session.repository";
 export * from "./repositories/specialist-opinion.repository";
 export * from "./repositories/campaign.repository";
+export * from "./repositories/trend-research.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
+export * from "./providers/trend-source-provider";
+export * from "./providers/anthropic-web-search-trend-source-provider";
 export * from "./providers/provider-gateway";
 export * from "./brand-brain/onboarding-themes";
 export * from "./brand-brain/knowledge-panel";
@@ -31,6 +34,10 @@ export * from "./intelligence-hub/intelligence-hub-prompts";
 export * from "./intelligence-hub/run-specialist-panel";
 export * from "./intelligence-hub/run-coordinator";
 export * from "./intelligence-hub/intelligence-hub-engine";
+export * from "./trend-engine/trend-ranking-prompts";
+export * from "./trend-engine/run-trend-ranking-panel";
+export * from "./trend-engine/run-trend-coordinator";
+export * from "./trend-engine/trend-engine";
 export * from "./knowledge-base/knowledge-source-labels";
 // `./knowledge-base/extract-document-text` fica FORA deste barrel de propósito:
 // depende de pdf-parse (acessa `fs`), e este arquivo é importado por Client

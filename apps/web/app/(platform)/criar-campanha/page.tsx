@@ -12,7 +12,11 @@ import { CampaignStrategyFlow } from "./campaign-strategy-flow";
  * consolidada + justificativa ("Por que fiz assim?"). Ainda sem geração de
  * conteúdo (PRD §7, escopo da Missão 3).
  */
-export default async function CriarCampanhaPage() {
+export default async function CriarCampanhaPage({
+  searchParams,
+}: {
+  searchParams: { tema?: string };
+}) {
   const session = await getCurrentSession();
 
   if (!session?.brand || !session.membership) {
@@ -31,5 +35,5 @@ export default async function CriarCampanhaPage() {
     );
   }
 
-  return <CampaignStrategyFlow brandName={session.brand.name} />;
+  return <CampaignStrategyFlow brandName={session.brand.name} initialObjective={searchParams.tema} />;
 }

@@ -57,6 +57,9 @@ export type IntelligenceHubRelatedEntityType = (typeof INTELLIGENCE_HUB_RELATED_
 export const INTELLIGENCE_HUB_SESSION_STATUSES = ["running", "completed", "failed"] as const;
 export type IntelligenceHubSessionStatus = (typeof INTELLIGENCE_HUB_SESSION_STATUSES)[number];
 
+export const TREND_RESEARCH_STATUSES = ["pending", "completed", "failed"] as const;
+export type TrendResearchStatus = (typeof TREND_RESEARCH_STATUSES)[number];
+
 export const CAMPAIGN_STATUSES = [
   "draft",
   "generating",
