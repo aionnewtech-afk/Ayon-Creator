@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 11 — Specialist Registry implementado) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 13 — recomendação de retrieval para a Missão 4) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (13 — preparação da Missão 4):** nota de `knowledge_base_items.embedding` (§4.2) atualizada — recomendação é adiar `pgvector`, MVP da Knowledge Base usa retrieval por recência + tags. Nenhuma mudança de schema necessária para a Missão 4: a tabela já existe desde a Missão 2.
 > **Mudança desta revisão (11 — Missão 3 implementada):** migration `0004_intelligence_hub.sql` aplicada em produção — `specialists`, `intelligence_hub_sessions`, `specialist_opinions` e `campaigns` (§4.4/§4.5) existem de fato; `provider_configs.specialist_type` (enum) foi removida e substituída por `provider_configs.specialist_id` (FK → `specialists`, nullable). `campaigns.trend_research_id` existe como `uuid` **sem FK real** — `trend_research` ainda não tem migration própria, então a referência é só de convenção até essa tabela ser criada. Seed inicial do registry: 3 especialistas (`marketing_strategy`, `branding`, `copywriting`, todos com `applies_to = ['campaign_strategy']`) + 1 `coordinator`.
 > **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis, Missão 3 redefinida):** nova tabela `specialists` (§4.4) — especialistas do Intelligence Hub (e o Coordinator) deixam de ser um enum fixo e passam a ser dados. `provider_configs.specialist_type` (enum) é substituído por `provider_configs.specialist_id` (FK → `specialists`); `specialist_opinions.specialist_type` (enum) idem. Ver [architecture.md §4.1](architecture.md#41-specialist-registry-especialistas-plugáveis-★-novo-revisão-10).
 > Banco: Supabase (Postgres). Este documento descreve o modelo de dados correspondente ao escopo do [PRD.md](../PRD.md) e da [architecture.md](architecture.md). Tipos de coluna são indicativos (refinar em fase de implementação aprovada).
@@ -166,7 +167,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | title | text | |
 | content_text | text | |
 | storage_path | text (nullable) | |
-| embedding | vector (nullable) | **ainda não criada** — depende da decisão sobre `pgvector` (architecture.md §10.3); adicionar via migration incremental quando resolvida |
+| embedding | vector (nullable) | **ainda não criada** — recomendação da revisão 13 é adiar (architecture.md §10, item 3): MVP da Missão 4 usa retrieval por recência + `tags`/`source_type`, sem embeddings; coluna reservada para quando essa decisão for confirmada, sem migration destrutiva |
 | tags | text[] | |
 | created_by | uuid FK → auth.users (nullable) | |
 | created_at | timestamptz | |

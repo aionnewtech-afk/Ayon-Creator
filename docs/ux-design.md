@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.2 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
-> **Última atualização:** 2026-08-02
+> **Status:** v1.3 (revisão 13 — Ensine sua Empresa detalhado para a Missão 4) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-03
+> **Mudança desta revisão (13 — preparação da Missão 4):** §3.3 (KB-1/2/3) detalhado — formatos de arquivo aceitos (PDF/DOCX/TXT, até 10MB), estados de upload/extração, distinção entre item de arquivo (somente leitura) e nota manual, e itens de onboarding tratados como somente leitura nesta tela (edição continua só via Perfil da Marca).
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha os itens 8/11 expandidos e um novo item 12 (nenhum atalho de "geração rápida" pula o Brand Brain); §4.11 (Bloco de Justificativa de Marca) formaliza a affordance nomeada **"Por que fiz assim?"**; §4.1 e §4.2 passam a mencionar explicitamente referência a campanhas/aprendizados anteriores (memória de longo prazo).
 > Este documento especifica telas, componentes, estados, navegação, microinterações e jornadas de uso, correspondentes ao escopo de [PRD.md](../PRD.md) e aos fluxos de [flows.md](flows.md). Nenhuma interface é implementada sem que a tela/componente correspondente esteja aqui e aprovado. Toda nova tela nasce daqui, não do código.
 > **Fora de escopo deste documento:** sistema visual (paleta de cores, tipografia, tokens, logotipo). Este documento define *o quê* existe e *como se comporta* — o *como se parece visualmente* é uma fase seguinte, deliberadamente adiada (ver §10).
@@ -113,13 +114,24 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 
 > Nenhuma tela desta área usa a palavra "entrevista" ou comunica progresso por contagem de perguntas/campos — ver Princípio do Consultor Permanente (§1.1).
 
-### 3.3 Ensine sua Empresa para a IA (`KB`)
+### 3.3 Ensine sua Empresa para a IA (`KB`) ★ detalhado (revisão 13, Missão 4)
 
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
-| KB-1 | Biblioteca de Conhecimento | Listar documentos, conteúdos passados, FAQs, notas | vazio (primeira vez), carregando | Menu / ONB-3 | KB-2, KB-3 |
-| KB-2 | Adicionar Conhecimento | Upload de arquivo ou nota manual, com tags | enviando, erro de formato/tamanho | KB-1 | KB-1 |
-| KB-3 | Detalhe do item | Visualizar/editar tags, remover item | — | KB-1 | KB-1 |
+| KB-1 | Biblioteca de Conhecimento | Listar documentos, conteúdos passados, FAQs, notas | vazio (primeira vez, com CTA "Adicionar Conhecimento" — nunca tela em branco), carregando | Menu / ONB-3 | KB-2, KB-3 |
+| KB-2 | Adicionar Conhecimento | Upload de arquivo ou nota manual, com tags | escolhendo tipo (arquivo vs. nota), enviando/extraindo texto, erro de formato/tamanho, sucesso | KB-1 | KB-1 |
+| KB-3 | Detalhe do item | Visualizar/editar tags, remover item | editando tags, confirmando remoção | KB-1 | KB-1 |
+
+**KB-1 — Biblioteca de Conhecimento:** cada item mostra título, `source_type` traduzido para linguagem de negócio (ex.: "Documento", "Conteúdo antigo", "Pergunta frequente", "Nota", "Conversa com a Ayon" para os itens de `onboarding_conversation`), tags e data. Itens vindos da conversa de onboarding são **somente leitura** aqui (editáveis apenas via edição do Perfil da Marca, ONB-4) — evita duplicar a mesma superfície de edição em dois lugares.
+
+**KB-2 — Adicionar Conhecimento:**
+- Duas entradas: "Enviar um arquivo" ou "Escrever uma nota".
+- Arquivo: aceita PDF, DOCX ou TXT, até 10MB. Erro de formato/tamanho é específico ("Esse arquivo é maior que 10MB — tenta um resumo ou divide em partes?"), nunca um erro genérico.
+- Nota manual: campo de texto livre + título opcional (se vazio, primeiras palavras viram o título).
+- Ambos os caminhos pedem `source_type` (documento, conteúdo antigo, FAQ, nota) e tags opcionais antes de salvar.
+- Estado "enviando/extraindo texto" é sempre visível para arquivo (a extração acontece de forma síncrona, arquitetura §3.2) — nunca um upload que trava sem feedback.
+
+**KB-3 — Detalhe do item:** mostra o `content_text` extraído (somente leitura para itens de arquivo — se a extração ficou ruim, o caminho é remover e reenviar, não editar o texto extraído diretamente), tags editáveis, e remoção (soft delete) com confirmação.
 
 ### 3.4 O que está em Alta (`TREND`)
 

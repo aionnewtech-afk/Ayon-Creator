@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 11 — Fluxo 10 implementado, versão simplificada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 13 — Fluxo 11 registrado para a Missão 4) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (13 — preparação da Missão 4):** novo Fluxo 11 — "Ensine sua Empresa para a IA" (Knowledge Base), reutilizando `knowledge_base_items` já existente desde a Missão 2. Retrieval no MVP é por recência + tags, não por embeddings — decisão pendente de confirmação do dono do produto (ver [architecture.md §10, item 3](architecture.md#10-decisões-em-aberto-arquitetura)).
 > **Mudança desta revisão (11 — Missão 3 implementada):** Fluxo 10 implementado e em produção, mas só para o gatilho `campaign_strategy` (tela "Criar Campanha", CAMP-1/2/3 simplificado) — painel de especialistas + Coordinator rodam de ponta a ponta (`Promise.allSettled`, falha de um especialista nunca bloqueia os demais nem o Coordinator, passo 7 confirmado em produção, não mais decisão em aberto). O gatilho `trend_ranking` (Fluxo 2, passo 4) ainda não está ligado ao Intelligence Hub porque o Trend Engine em si não foi implementado; geração de conteúdo (Fluxo 3) também não consome o Intelligence Hub ainda — ambos permanecem como especificado, aguardando suas próprias missões.
 > **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis):** Fluxo 10 (passos 1 e 3) reescrito — o Intelligence Hub resolve quais especialistas participam consultando o Specialist Registry (`specialists`, filtrado por `applies_to`), não mais uma lista fixa de 7 papéis no código. Ver [architecture.md §4.1](architecture.md#41-specialist-registry-especialistas-plugáveis-★-novo-revisão-10).
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** Fluxo 10 (passo 2) explicita que o contexto montado pelo Intelligence Hub inclui histórico de campanhas e aprendizados aplicados, não só o Brand Brain do instante; Fluxo 3 ganha nota da regra inegociável de que nenhuma peça é gerada sem carregar o Brand Brain.
@@ -143,6 +144,17 @@ Sub-fluxo reutilizado pelos Fluxos 2 e 3 sempre que uma decisão é classificada
 5. Resultado gravado em `intelligence_hub_sessions.consolidated_result`, `status = completed`.
 6. A entidade solicitante (`trend_research.summary`, `campaigns.strategy_summary` ou `content_pieces.script`) referencia a sessão via `intelligence_hub_session_id` e desnormaliza o resultado consolidado para leitura rápida.
 7. Em caso de falha de qualquer especialista, o Coordinator consolida com os que responderam com sucesso, registrando a ausência no `consolidated_result` (nunca bloqueia a campanha inteira por falha de um único especialista) — **implementado e confirmado** (revisão 11): `runSpecialistPanel` usa `Promise.allSettled`, cada falha é logada e simplesmente omitida do contexto enviado ao Coordinator.
+
+## Fluxo 11 — "Ensine sua Empresa para a IA" (Knowledge Base) ★ novo (revisão 13, Missão 4)
+
+Disponível a qualquer momento após o Provisionamento Inicial (Fluxo 1) — nunca bloqueia nem é bloqueado pela conversa de onboarding. Reutiliza a tabela `knowledge_base_items` já criada na Missão 2 (§4.2).
+
+1. Usuário acessa **"Ensine sua Empresa para a IA"** (KB-1 — Biblioteca de Conhecimento) e vê a lista de itens já cadastrados (documentos, conteúdos passados, FAQs, notas manuais, e também os itens gerados automaticamente pela conversa de onboarding, `source_type = onboarding_conversation`).
+2. Usuário aciona **"Adicionar Conhecimento"** (KB-2) e escolhe entre: (a) enviar um arquivo (PDF, DOCX ou TXT — ver limites em [ux-design.md §3.3](ux-design.md#33-ensine-sua-empresa-para-a-ia-kb)); ou (b) escrever uma nota manual diretamente.
+3. Para upload de arquivo: o arquivo vai para o Supabase Storage (bucket `knowledge-base`); o texto é extraído **na mesma Server Action**, de forma síncrona (arquitetura §3.2 — decisão deliberada de não usar n8n aqui, mesma lógica de latência do Fluxo 1). Para nota manual, não há arquivo — o texto vai direto para `content_text`.
+4. Sistema cria um `knowledge_base_items` com `source_type` (`document`, `past_content`, `faq`, `performance_note` ou `manual_note`, conforme escolha do usuário), `title`, `content_text`, `storage_path` (quando houver arquivo) e `tags` opcionais.
+5. Item aparece na Biblioteca de Conhecimento (KB-1); usuário pode abrir o detalhe (KB-3) para editar tags ou remover (soft delete, `deleted_at`).
+6. Itens da Knowledge Base entram no contexto do Brand Brain e do Intelligence Hub (Fluxo 10, passo 2) por **recência + filtro de `tags`/`source_type`** — sem embeddings/retrieval semântico nesta versão (decisão registrada em [architecture.md §10, item 3](architecture.md#10-decisões-em-aberto-arquitetura), aguardando confirmação do dono do produto antes do código desta missão).
 
 ---
 

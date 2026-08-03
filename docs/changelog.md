@@ -4,6 +4,44 @@
 
 ---
 
+## v1.7 (revisão 14) — 2026-08-03 — Preparação doc-first da Missão 4 (Ensine sua Empresa para a IA)
+
+**Status:** documentação pronta para revisão — **aguardando confirmação do dono do produto antes do código**, seguindo o mesmo processo doc-first já usado nas Missões 2 e 3.
+
+**O que mudou:**
+
+- **`docs/architecture.md`:** §3.2 (Knowledge Base) detalhada com o pipeline de ingestão (upload → Storage → extração de texto síncrona → `knowledge_base_items`); §10, item 3 (pgvector) resolvido com uma recomendação explícita: **adiar embeddings/pgvector**, já que nenhum provider de embedding está integrado hoje (a Anthropic não expõe API de embeddings) e adicionar um fornecedor novo agora atrasaria a Missão 4 sem necessidade clara. MVP da Knowledge Base usa retrieval por recência + `tags`/`source_type`.
+- **`docs/database.md`:** nota de `knowledge_base_items.embedding` (§4.2) atualizada para refletir a recomendação acima. **Nenhuma migration nova necessária** — a tabela já existe desde a Missão 2 (migration `0002_conheca_sua_empresa.sql`).
+- **`docs/flows.md`:** novo Fluxo 11 — "Ensine sua Empresa para a IA", cobrindo upload de arquivo (PDF/DOCX/TXT) ou nota manual, extração síncrona de texto, e o critério de retrieval por recência/tags.
+- **`docs/ux-design.md`:** §3.3 (KB-1/2/3) detalhado — formatos aceitos, limite de 10MB, estados de upload/extração, itens de onboarding tratados como somente leitura nesta tela.
+
+**Decisão explícita pendente de confirmação antes do código:** adiar `pgvector`/embeddings (ver `architecture.md` §10, item 3, e `database.md` §4.2) — é uma decisão de produto/infra (adiciona ou não um fornecedor novo de embeddings), não só técnica.
+
+**Próximo passo:** após confirmação do dono do produto sobre a decisão de retrieval acima, iniciar a implementação de código da Missão 4.
+
+---
+
+## v1.6 (revisão 13) — 2026-08-03 — Reordenação do roadmap pós-Missão 3 + documentação de prompts
+
+**Status:** aprovado — dono do produto aprovou o encerramento da Missão 3 e definiu a nova ordem do roadmap de implementação, sem mudança de escopo de produto em nenhuma das missões futuras.
+
+**Nova ordem do roadmap (a partir da Missão 4):**
+1. **Missão 4 — Ensine sua Empresa para a IA** (Knowledge Base / Learning Engine de ingestão)
+2. Trend Engine ("O que está em Alta")
+3. Billing (`subscriptions`/`credit_ledger`, hoje só documentados, sem migration)
+4. Asset Engine (geração de conteúdo — vídeo, legenda, carrossel etc.)
+5. Learning Engine ("O que Funcionou")
+
+Essa ordem já havia sido sugerida no checkpoint técnico pós-Missão 3; o dono do produto a confirmou como a sequência oficial.
+
+**Nova documentação — `docs/prompts/`:** um documento por especialista do Specialist Registry (objetivo, responsabilidades, system prompt, entradas, saídas, exemplos, restrições, critérios de qualidade). Não substitui `docs/engine-behavior.md` (que documenta o comportamento das Engines como um todo) nem o `system_prompt` em produção (que continua sendo dado, na tabela `specialists`) — é a referência oficial para evoluir cada especialista de forma deliberada, com histórico de decisão, em vez de editar o prompt em produção sem registro.
+
+**Tool Registry registrado como evolução arquitetural futura (não implementado):** análogo ao Provider Gateway e ao Specialist Registry — permitiria que qualquer especialista usasse ferramentas externas (busca na web, consulta a APIs, cálculos) de forma plugável, sem hardcode. Ver [architecture.md §11](architecture.md#11-tool-registry-ferramentas-plugáveis-para-especialistas-★-evolução-futura-não-implementada).
+
+**Próximo passo:** revisão doc-first (PRD/architecture/database/flows/ux-design) da Missão 4 antes de qualquer código, seguindo o mesmo processo já usado nas Missões 2 e 3.
+
+---
+
 ## v1.5 (revisão 12) — 2026-08-03 — Validação real da Missão 3 concluída e aprovada
 
 **Status:** aprovado — dono do produto validou o Intelligence Hub em produção (Supabase + Anthropic reais) com foco na qualidade estratégica, não apenas no funcionamento técnico, e aprovou a Missão 3 em nível de arquitetura, implementação e validação funcional.

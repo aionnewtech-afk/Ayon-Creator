@@ -4,7 +4,7 @@ Sistema Operacional de Marketing orientado por IA — não um gerador de conteú
 
 ## Estado do projeto
 
-**Sprint 1**, **Missão 2 — "Conheça sua empresa"** (onboarding conversacional) e **Missão 3 — Specialist Registry + primeiro Intelligence Hub funcional** implementadas e validadas ponta a ponta (Supabase + Anthropic reais) — ver [CHANGELOG.md](CHANGELOG.md) (`v0.3.0`). **Filosofia de produto consolidada** (Princípio do Consultor Permanente — ver [PRD.md §1.1](PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)). Painel de 3 especialistas (Marketing, Branding, Copy) + Coordinator AI resolvidos via Specialist Registry — nunca hardcoded — validados quanto a personalidade distinta, divergência real e consolidação ancorada no Brand Brain. Aguardando autorização para a Missão 4.
+**Sprint 1**, **Missão 2 — "Conheça sua empresa"** (onboarding conversacional) e **Missão 3 — Specialist Registry + primeiro Intelligence Hub funcional** implementadas e validadas ponta a ponta (Supabase + Anthropic reais) — ver [CHANGELOG.md](CHANGELOG.md) (`v0.3.0`). **Filosofia de produto consolidada** (Princípio do Consultor Permanente — ver [PRD.md §1.1](PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)). Painel de 3 especialistas (Marketing, Branding, Copy) + Coordinator AI resolvidos via Specialist Registry — nunca hardcoded — validados quanto a personalidade distinta, divergência real e consolidação ancorada no Brand Brain. Roadmap confirmado a partir daqui: **Missão 4 — Ensine sua Empresa para a IA** (Knowledge Base), depois Trend Engine, Billing, Asset Engine e Learning Engine, nessa ordem. Nova documentação de referência para evolução dos especialistas em [docs/prompts/](docs/prompts/).
 
 ## Estrutura
 
@@ -20,7 +20,8 @@ ayon-creator/
     ├── flows.md             # fluxos de uso e de pipeline (nível de engine)
     ├── ux-design.md         # telas, componentes, estados, navegação, microinterações (nível de produto/UI)
     ├── engine-behavior.md   # comportamento de IA esperado de cada Core Engine (tom, princípios, não estrutura/processo)
-    └── changelog.md         # histórico de mudanças de escopo/documentação
+    ├── changelog.md         # histórico de mudanças de escopo/documentação
+    └── prompts/             # um documento por especialista do Specialist Registry — referência oficial para evoluí-los
 ```
 
 ## Princípio de linguagem
@@ -40,6 +41,7 @@ O usuário nunca vê jargão técnico. Nomes como *Brand Brain*, *Trend Engine*,
    7. Só então — e somente após aprovação — iniciar código.
 3. Decisões em aberto ficam explícitas em cada documento (seção "Decisões em Aberto") até serem resolvidas.
 4. `docs/engine-behavior.md` é atualizado sempre que o comportamento esperado de um Core Engine muda — não é um gate de aprovação de escopo como os 5 acima, é a referência de tom/princípios para quem escreve prompts.
+5. `docs/prompts/` documenta cada especialista do Specialist Registry individualmente (objetivo, responsabilidades, system prompt, entradas/saídas, exemplos, restrições, critérios de qualidade) — referência oficial para evoluí-los deliberadamente, separando comportamento de IA da implementação em código.
 
 ## Stack (planejada)
 
@@ -53,3 +55,4 @@ Next.js · React · TypeScript · Supabase · Tailwind CSS · OpenAI · Claude �
 4. [`docs/flows.md`](docs/flows.md) — fluxos passo a passo, incluindo o Fluxo 10 (Intelligence Hub).
 5. [`docs/ux-design.md`](docs/ux-design.md) — telas, componentes, estados, navegação e microinterações.
 6. [`docs/engine-behavior.md`](docs/engine-behavior.md) — comportamento de IA esperado de cada Core Engine (tom, princípios de raciocínio) — referência para quem escreve prompts.
+7. [`docs/prompts/`](docs/prompts/) — um documento por especialista do Specialist Registry.
