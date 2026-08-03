@@ -2,6 +2,26 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.6.0] — 2026-08-03
+
+### Adicionado
+
+- **Missão 6 — Billing**: planos (Starter/Pro/Business), créditos, dedução por uso dos módulos, integração com Mercado Pago, bloqueio quando não há créditos ou assinatura ativa, telas de assinatura/consumo/histórico.
+  - **Banco**: migrations `0008_billing.sql` (`subscriptions`, `credit_ledger`, `credit_pricing`, `credit_packages`), `0009_drop_organizations_plan.sql` (remove coluna morta da Sprint 1), `0010_plans.sql` (números de cada plano como dado, não código).
+  - **`packages/core`**: repositories de billing; módulo `billing/` com adapter do Mercado Pago (`mercado-pago-client.ts`, SDK oficial `mercadopago`), portão de crédito (`credit-gate.ts`: `ensureSufficientCredits`/`recordConsumption`) e handler de webhook (`mercado-pago-webhook-handler.ts`).
+  - **Server Actions**: portão de crédito integrado a Criar Campanha e O que está em Alta (checagem antes de qualquer chamada de IA, débito só após sucesso); novas actions de assinatura/compra de créditos, restritas a `admin+`.
+  - **UI**: `/configuracoes` — plano atual, planos disponíveis, saldo de créditos, pacotes avulsos, histórico de lançamentos. CTA de bloqueio ("Ir para Configurações") nas telas que consomem crédito.
+  - **Webhook**: `/api/webhooks/mercado-pago`, assinatura validada antes de processar qualquer notificação.
+
+### Corrigido durante a validação real (Supabase + Mercado Pago reais, sandbox)
+
+- **`organizations.provider_tier` nunca sincronizado com o plano ativo**: PRD promete tier Balanceado incluso no Pro e Premium no Business, mas nada atualizava o tier da organização quando a assinatura era ativada — cliente pagando Pro continuava recebendo preço/qualidade de tier Econômico. Reproduzido ao vivo (campanha de teste debitou 5 créditos em vez de 10) e corrigido no handler de webhook, que agora sincroniza o tier na mesma transição que concede os créditos do ciclo.
+
+### Observado, não corrigido (fora de escopo da Missão 6)
+
+- Checkout de sandbox de ponta a ponta (pagamento real de teste aprovado) não pôde ser completado nesta sessão — o Mercado Pago exige uma conta vendedora de teste dedicada, que requer configuração adicional no painel do Mercado Pago. O ramo "pagamento aprovado" do webhook foi validado por chamada direta ao handler/repositories reais contra dados reais da API, não por um payload inventado — ver `docs/changelog.md` (v2.4) para o detalhamento. Registrado como possível trabalho futuro se um teste de checkout visual completo for necessário.
+- Dois arquivos `.env.local` (raiz e `apps/web/.env.local`) mantidos manualmente em sincronia desde a Sprint 1 — `apps/web/.env.local` é o que `next dev` de fato lê. Causou confusão durante a validação desta missão; não é um bug de produto, é uma decisão de tooling fora de escopo aqui.
+
 ## [0.5.0] — 2026-08-03
 
 ### Adicionado

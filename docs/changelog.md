@@ -4,6 +4,42 @@
 
 ---
 
+## v2.4 (revisão 21) — 2026-08-03 — Missão 6 implementada e validada (Billing)
+
+**Status:** implementado e validado com Supabase + Mercado Pago reais (sandbox) — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2-5.
+
+**O que foi implementado:**
+
+- **Migrations:** `0008_billing.sql` (`subscriptions`, `credit_ledger`, `credit_pricing` com seed 1/2/4 e 5/10/20, `credit_packages` com seed de 3 pacotes), `0009_drop_organizations_plan.sql` (remove coluna morta desde a Sprint 1, nunca usada em código — `subscriptions.plan` passa a ser a única fonte da verdade), `0010_plans.sql` (**nova tabela, achado durante a implementação** — ver abaixo).
+- **`packages/core`**: `SubscriptionRepository`, `CreditLedgerRepository`, `CreditPricingRepository`, `CreditPackageRepository`, `PlanRepository`; `OrganizationRepository` ganhou `update` (não existia). Módulo `billing/`: `mercado-pago-client.ts` (adapter sobre o SDK oficial `mercadopago`, fora do barrel de `@ayon/core` pelo mesmo motivo de `pdf-parse` — depende de Node, quebraria bundle de Client Component), `credit-gate.ts` (`ensureSufficientCredits`/`recordConsumption`, exportado no barrel), `mercado-pago-webhook-handler.ts` (processa `payment` e `subscription_preapproval`, fora do barrel).
+- **Server Actions**: `createCampaignStrategyAction`/`runTrendDiscoveryAction` ganharam o portão de crédito (checagem antes, débito só após sucesso); novo `apps/web/app/(platform)/configuracoes/actions.ts` (`subscribeToPlanAction`, `buyCreditsAction`), gated a `admin+`.
+- **UI**: `/configuracoes` (CFG-2 + CFG-4 numa página só — planos com preço/créditos/marcas, saldo, pacotes avulsos, histórico), link de bloqueio "Ir para Configurações" em Criar Campanha e O que está em Alta. Nav "Configurações" passa a `implemented: true`, `minRole: admin`.
+- **Webhook**: `apps/web/app/api/webhooks/mercado-pago/route.ts`, assinatura validada via `WebhookSignatureValidator` do SDK oficial antes de processar qualquer payload.
+- **Dependência nova**: `mercadopago` (SDK oficial, `^3.2.1`).
+
+**Achado durante a implementação (fora do doc-first original) — nova tabela `plans`:** o handler de webhook (`packages/core`, nunca importa de `apps/web`) precisa saber quantos créditos conceder por plano na ativação — mas isso vivia só em `apps/web/config/plans.ts` (hardcoded, inacessível ao pacote core). Resolvido criando `plans` (migration `0010`) como fonte única da verdade para os números de cada plano (créditos/mês, marcas, tier, preço), lida tanto pelo webhook handler quanto pela UI — mesmo padrão de dado-não-código já usado em `credit_pricing`/`credit_packages`/`provider_configs`/`specialists`. `apps/web/config/plans.ts` foi reduzido a só rótulos/descrições de UI.
+
+**Validado com Supabase + Mercado Pago reais (sandbox)** — marca de teste "Clínica Bemviver", organização "Clinica Bemviver":
+
+- Criação real de assinatura (Preapproval) e preferência de compra (Preference) via UI — `init_point` genuíno do Mercado Pago, `back_url`/`notification_url` validados pela API real (erro real de formato capturado e corrigido: `NEXT_PUBLIC_APP_URL` local não é aceito como `back_url`, documentado como limitação de teste, não bug de produção).
+- Processamento do webhook de assinatura contra um Preapproval real: transição `pending → past_due` (sem conceder crédito, correto) e `→ active` (grant_plan de 500 créditos para o plano Pro, correto).
+- Portão de crédito bloqueando corretamente por saldo insuficiente e por assinatura inativa, com CTA "Ir para Configurações" nos dois casos, testado nas duas Server Actions (Criar Campanha e O que está em Alta).
+- Consumo de crédito debitado corretamente após sessão bem-sucedida do Intelligence Hub, vinculado à sessão certa.
+- Idempotência de webhook confirmada contra o constraint real do Postgres (`credit_ledger_external_payment_id_key`, erro `23505` na segunda tentativa).
+- UI de `/configuracoes` conferida visualmente (planos, saldo, "Plano atual" desabilitado corretamente, histórico).
+
+**Limitação de escopo da validação, documentada com transparência:** o Mercado Pago exige que **tanto vendedor quanto comprador sejam contas de teste dedicadas** para completar um checkout de sandbox de ponta a ponta — a conta vendedora usada (token `TEST-...` de uma conta real em modo de teste) não se qualifica, e criar uma conta vendedora de teste completa exige configuração adicional no painel do Mercado Pago (fora do escopo desta sessão). Por isso, o ramo "pagamento aprovado/assinatura autorizada" do webhook foi validado por injeção direta do handler real (`handleMercadoPagoWebhook`) contra um Preapproval real (para o mapeamento pending→past_due) e por chamada direta às mesmas repositories reais que o handler usa (para o ramo active→grant_plan+sync de tier, incluindo o bug abaixo) — nunca por um payload inventado à mão. O transporte HTTP do webhook em si (assinatura `x-signature`) usa a implementação oficial do SDK do Mercado Pago, não código próprio.
+
+**Bug encontrado e corrigido durante a validação:**
+
+- **`organizations.provider_tier` nunca sincronizado com o plano ativo.** PRD §8 promete "Pro inclui tier Balanceado", "Business inclui tier Premium" — mas nada no código atualizava `organizations.provider_tier` quando uma assinatura era ativada. Reproduzido ao vivo: assinatura Pro ativada, primeira campanha debitou 5 créditos (preço de tier Econômico) em vez de 10 (preço de tier Balanceado) porque a organização continuava com o tier padrão da Sprint 1. Corrigido em `mercado-pago-webhook-handler.ts` — `activatePlan` (renomeado de `grantPlanCredits`) agora também atualiza `organizations.provider_tier` para o `tier_included` do plano, na mesma transição que concede os créditos. Confirmado corrigido: segunda campanha de teste debitou os 10 créditos corretos.
+
+**Achado incidental de infraestrutura, sem relação com o código da Missão 6:** o projeto tem dois arquivos `.env.local` (raiz e `apps/web/.env.local`), mantidos manualmente em sincronia — `apps/web/.env.local` é o que o `next dev` de fato lê. Isso já existia desde a Sprint 1, mas causou confusão real durante esta validação (as credenciais do Mercado Pago foram adicionadas só na raiz primeiro). Registrado aqui para consciência futura, não corrigido nesta missão (mudar isso é decisão de tooling, não de produto).
+
+**Próximo passo:** aguardando decisão do dono do produto — commit das funcionalidades, commit separado da correção encontrada na validação, tag `v0.6.0`, atualização do `CHANGELOG.md` raiz, e autorização para a próxima missão (Asset Engine).
+
+---
+
 ## v2.3 (revisão 20) — 2026-08-03 — Preparação doc-first da Missão 6 (Billing)
 
 **Status:** documentação pronta — **aguardando confirmação final do dono do produto antes do código**, seguindo o mesmo processo doc-first já usado nas Missões 2-5.
