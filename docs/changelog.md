@@ -4,7 +4,23 @@
 
 ---
 
-## v1.4 (revisão 11) — 2026-08-03 — Missão 3 implementada: Specialist Registry + primeiro Intelligence Hub funcional
+## v1.5 (revisão 12) — 2026-08-03 — Validação real da Missão 3 concluída e aprovada
+
+**Status:** aprovado — dono do produto validou o Intelligence Hub em produção (Supabase + Anthropic reais) com foco na qualidade estratégica, não apenas no funcionamento técnico, e aprovou a Missão 3 em nível de arquitetura, implementação e validação funcional.
+
+**O que foi validado:** 5 sessões reais do Intelligence Hub, incluindo um objetivo convergente, um objetivo claramente incompatível com a marca (guerra de descontos) e um objetivo genuinamente ambíguo (desenhado para forçar divergência real entre especialistas). Confirmado: personalidades distintas por especialista, divergência real capturada e resolvida pelo Coordinator (nunca média das opiniões), justificativa sempre ancorada em campos específicos do Brand Brain, e degradação graciosa em falha (parcial ou total).
+
+**Bug encontrado e corrigido antes da tag `v0.3.0`:** o especialista de Branding falhava sistematicamente por truncamento de resposta (`maxTokens: 512` insuficiente para um prompt sem limite de frases, ao contrário do de Marketing). Corrigido no código (`maxTokens` → 1024) e reforçado nos prompts de Branding/Copy via migration `0005_intelligence_hub_prompt_fixes.sql`. Ver [CHANGELOG.md](../CHANGELOG.md) `[0.3.0]` para o detalhamento técnico completo.
+
+**Decisão explícita do dono do produto:** o bug de citações trocadas na tela "O que eu entendi até agora" (Missão 2, já lançada como `v0.2.0`), encontrado incidentalmente ao montar a marca de teste para esta validação, **não foi corrigido agora** — fica registrado como tarefa isolada para uma missão de manutenção dedicada, para não misturar uma correção de Missão 2 dentro da tag de Missão 3.
+
+**Sugestões registradas para a Missão 4 (não bloqueiam a aprovação):** retry com backoff no Provider Gateway para falhas de conexão transitórias; revelação progressiva das opiniões dos especialistas (a espera em bloco de ~45s em média começa a incomodar).
+
+**Próximo passo:** checkpoint técnico atualizado pós-Missão 3, aguardando autorização do dono do produto para iniciar a Missão 4.
+
+---
+
+## v1.4 (revisão 11) — 2026-08-03 — Missão 3 implementada: Specialist Registry e primeiro Intelligence Hub funcional
 
 **Status:** aprovado e implementado — escopo ampliado pelo dono do produto após aprovar o design do Specialist Registry: em vez de só a infraestrutura, a Missão 3 entrega um Intelligence Hub funcional de ponta a ponta (3 especialistas + Coordinator + tela "Criar Campanha").
 

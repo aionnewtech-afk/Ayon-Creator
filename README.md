@@ -4,7 +4,7 @@ Sistema Operacional de Marketing orientado por IA — não um gerador de conteú
 
 ## Estado do projeto
 
-**Sprint 1** (fundação de plataforma) e **Missão 2 — "Conheça sua empresa"** (onboarding conversacional) implementadas e validadas ponta a ponta (Supabase + Anthropic reais) — ver [CHANGELOG.md](CHANGELOG.md) (`v0.2.0`). **Filosofia de produto consolidada** (Princípio do Consultor Permanente — ver [PRD.md §1.1](PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)). **Missão 3 — Specialist Registry + primeiro Intelligence Hub funcional** implementada (migration, repositories, painel de 3 especialistas + Coordinator, tela "Criar Campanha") — `pnpm -r typecheck`/`lint`/`build` passam no workspace inteiro; ainda pendente de validação ponta a ponta com Anthropic real antes de virar release (`CHANGELOG.md`). Próxima missão candidata: "Ensine sua empresa para a IA" ou expansão do Intelligence Hub com mais especialistas.
+**Sprint 1**, **Missão 2 — "Conheça sua empresa"** (onboarding conversacional) e **Missão 3 — Specialist Registry + primeiro Intelligence Hub funcional** implementadas e validadas ponta a ponta (Supabase + Anthropic reais) — ver [CHANGELOG.md](CHANGELOG.md) (`v0.3.0`). **Filosofia de produto consolidada** (Princípio do Consultor Permanente — ver [PRD.md §1.1](PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7)). Painel de 3 especialistas (Marketing, Branding, Copy) + Coordinator AI resolvidos via Specialist Registry — nunca hardcoded — validados quanto a personalidade distinta, divergência real e consolidação ancorada no Brand Brain. Aguardando autorização para a Missão 4.
 
 ## Estrutura
 
