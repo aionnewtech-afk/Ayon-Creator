@@ -3,6 +3,7 @@ import type { Database } from "@ayon/types";
 
 type OrganizationRow = Database["public"]["Tables"]["organizations"]["Row"];
 type OrganizationInsert = Database["public"]["Tables"]["organizations"]["Insert"];
+type OrganizationUpdate = Database["public"]["Tables"]["organizations"]["Update"];
 type OrganizationMemberRow = Database["public"]["Tables"]["organization_members"]["Row"];
 type OrganizationMemberInsert = Database["public"]["Tables"]["organization_members"]["Insert"];
 
@@ -31,6 +32,13 @@ export class OrganizationRepository {
       .eq("id", id)
       .is("deleted_at", null)
       .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async update(id: string, patch: OrganizationUpdate): Promise<OrganizationRow> {
+    const { data, error } = await this.db.from("organizations").update(patch).eq("id", id).select().single();
 
     if (error) throw error;
     return data;
