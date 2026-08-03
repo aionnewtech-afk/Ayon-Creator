@@ -1,5 +1,6 @@
 import type { Database } from "@ayon/types";
 import type { ExtractedField } from "./process-onboarding-turn";
+import { splitListValue } from "./onboarding-themes";
 
 type BrandBrainProfileRow = Database["public"]["Tables"]["brand_brain_profiles"]["Row"];
 
@@ -20,10 +21,7 @@ export function applyExtractedFieldsToProfilePatch(
     column: "competitors" | "forbidden_words" | "favorite_words",
     rawValue: string,
   ): void => {
-    const newItems = rawValue
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const newItems = splitListValue(rawValue);
     const alreadyInPatch = patch[column] as string[] | undefined;
     const existing = alreadyInPatch ?? currentProfile?.[column] ?? [];
     patch[column] = Array.from(new Set([...existing, ...newItems]));

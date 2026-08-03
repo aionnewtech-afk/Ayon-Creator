@@ -3,6 +3,22 @@ import type { Database, OnboardingQuestionKey } from "@ayon/types";
 type BrandBrainProfileRow = Database["public"]["Tables"]["brand_brain_profiles"]["Row"];
 
 /**
+ * Divide o valor de um campo de lista (competitors/forbidden_words/favorite_words)
+ * em itens curtos. O prompt (onboarding-prompt.ts) instrui o modelo a nunca
+ * colocar vírgula dentro de um item, mas isso é reforço de defesa, não a
+ * única garantia — por isso remove parênteses antes de dividir (achado em
+ * teste E2E real: "Booking, 123Milhas" dentro de um parêntese explicativo
+ * estava sendo cortado ao meio pelo split ingênuo em vírgula).
+ */
+export function splitListValue(rawValue: string): string[] {
+  return rawValue
+    .replace(/\([^)]*\)/g, "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
  * Os 5 temas da conversa "Conheça sua empresa" (ux-design.md §4.2) — nunca
  * expostos ao usuário como etapas, só usados para organizar o prompt e
  * decidir quando fazer o reflexo de tema com callback obrigatório.

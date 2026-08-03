@@ -79,16 +79,16 @@ export async function runOnboardingTurn(params: RunOnboardingTurnParams): Promis
     });
   }
 
-  // Transcrição bruta do turno (para reconstrução da UI e retrieval futuro).
-  if (params.userMessage !== null) {
-    await knowledgeBaseRepository.create({
-      brand_id: params.brandId,
-      source_type: "onboarding_conversation",
-      title: "Conversa — Conheça sua empresa",
-      content_text: encodeConversationTurnLog(params.userMessage, turn.reply),
-      created_by: params.actorUserId,
-    });
-  }
+  // Transcrição bruta do turno (para reconstrução da UI e retrieval futuro) —
+  // inclusive o turno de abertura (kickoff), para que a retomada nunca perca
+  // a primeira mensagem da Ayon (bug encontrado em teste E2E real).
+  await knowledgeBaseRepository.create({
+    brand_id: params.brandId,
+    source_type: "onboarding_conversation",
+    title: "Conversa — Conheça sua empresa",
+    content_text: encodeConversationTurnLog(params.userMessage, turn.reply),
+    created_by: params.actorUserId,
+  });
 
   if (!turn.conversationComplete) {
     return { reply: turn.reply, knowledgeChip: turn.knowledgeChip, conversationComplete: false };

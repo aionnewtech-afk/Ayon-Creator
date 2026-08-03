@@ -1,4 +1,5 @@
 import type { OnboardingQuestionKey } from "@ayon/types";
+import { splitListValue } from "./onboarding-themes";
 
 /**
  * Patch de **substituição direta** de um campo do Perfil da Marca — usado
@@ -28,17 +29,10 @@ export function replaceProfileFieldPatch(
     case "differentiators":
       return { differentiators: value };
     case "competitors":
-      return { competitors: splitList(value) };
+      return { competitors: splitListValue(value) };
     case "forbidden_words":
-      return { forbidden_words: splitList(value) };
+      return { forbidden_words: splitListValue(value) };
     case "favorite_words":
-      return { favorite_words: splitList(value) };
+      return { favorite_words: splitListValue(value) };
   }
-}
-
-function splitList(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
