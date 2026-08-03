@@ -46,10 +46,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "conheca-sua-empresa",
     label: "Conheça sua Empresa",
-    description: "Em breve uma entrevista guiada por IA vai conhecer a sua empresa para deixar tudo com a sua cara.",
+    description: "Converse com a Ayon, sua consultora de marketing permanente, para ela conhecer a sua empresa de verdade.",
     icon: Building2,
     minRole: "viewer",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "ensine-sua-empresa",

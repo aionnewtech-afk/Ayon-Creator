@@ -9,9 +9,12 @@
   },
   "dependencies": {
     "@ayon/types": "workspace:*",
-    "@supabase/supabase-js": "^2.45.4"
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "@types/node": "^20"
   }
 }

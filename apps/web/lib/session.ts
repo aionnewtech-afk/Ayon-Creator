@@ -1,5 +1,5 @@
 import "server-only";
-import { OrganizationRepository, UserRepository, ensureInitialProvisioning } from "@ayon/core";
+import { BrandRepository, OrganizationRepository, UserRepository, ensureInitialProvisioning } from "@ayon/core";
 import { createClient } from "./supabase/server";
 
 export async function getCurrentSession() {
@@ -14,6 +14,7 @@ export async function getCurrentSession() {
 
   const organizationRepository = new OrganizationRepository(supabase);
   const userRepository = new UserRepository(supabase);
+  const brandRepository = new BrandRepository(supabase);
 
   let memberships = await organizationRepository.findMembershipsByUserId(user.id);
 
@@ -31,5 +32,15 @@ export async function getCurrentSession() {
     memberships[0] ? organizationRepository.findById(memberships[0].organization_id) : null,
   ]);
 
-  return { user, profile, membership: memberships[0] ?? null, organization };
+  // Single-brand-por-organização nesta fase (multi-marca é plano Business,
+  // fora do escopo da Missão 2) — sempre a primeira/única brand da org.
+  const brands = organization ? await brandRepository.findByOrganizationId(organization.id) : [];
+
+  return {
+    user,
+    profile,
+    membership: memberships[0] ?? null,
+    organization,
+    brand: brands[0] ?? null,
+  };
 }

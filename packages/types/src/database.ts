@@ -6,9 +6,14 @@
  */
 import type {
   BrandStatus,
+  KnowledgeBaseSourceType,
+  OnboardingQuestionKey,
   OrganizationMemberRole,
   OrganizationPlan,
+  ProviderCapability,
+  ProviderConfigStatus,
   ProviderTier,
+  SpecialistType,
 } from "./domain";
 
 export interface Database {
@@ -143,6 +148,127 @@ export interface Database {
           enabled?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["feature_flags"]["Insert"]>;
+        Relationships: [];
+      };
+      brand_brain_profiles: {
+        Row: {
+          id: string;
+          brand_id: string;
+          company_history: string | null;
+          products_summary: string | null;
+          target_audience: string | null;
+          tone_of_voice: string | null;
+          competitors: string[];
+          objectives: string | null;
+          differentiators: string | null;
+          forbidden_words: string[];
+          favorite_words: string[];
+          visual_guidelines: Record<string, unknown>;
+          default_avatar_ref: string | null;
+          default_voice_ref: string | null;
+          learned_preferences: Record<string, unknown>;
+          last_learning_update_at: string | null;
+          onboarding_completed_at: string | null;
+          onboarding_confirmed_at: string | null;
+          onboarding_synthesis: unknown[] | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          company_history?: string | null;
+          products_summary?: string | null;
+          target_audience?: string | null;
+          tone_of_voice?: string | null;
+          competitors?: string[];
+          objectives?: string | null;
+          differentiators?: string | null;
+          forbidden_words?: string[];
+          favorite_words?: string[];
+          visual_guidelines?: Record<string, unknown>;
+          default_avatar_ref?: string | null;
+          default_voice_ref?: string | null;
+          learned_preferences?: Record<string, unknown>;
+          last_learning_update_at?: string | null;
+          onboarding_completed_at?: string | null;
+          onboarding_confirmed_at?: string | null;
+          onboarding_synthesis?: unknown[] | null;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["brand_brain_profiles"]["Insert"]>;
+        Relationships: [];
+      };
+      brand_onboarding_answers: {
+        Row: {
+          id: string;
+          brand_id: string;
+          question_key: OnboardingQuestionKey;
+          answer_text: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          question_key: OnboardingQuestionKey;
+          answer_text: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["brand_onboarding_answers"]["Insert"]>;
+        Relationships: [];
+      };
+      provider_configs: {
+        Row: {
+          id: string;
+          capability: ProviderCapability;
+          tier: ProviderTier;
+          specialist_type: SpecialistType | null;
+          provider_key: string;
+          credentials_ref: string | null;
+          priority: number;
+          fallback_provider_key: string | null;
+          status: ProviderConfigStatus;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          capability: ProviderCapability;
+          tier: ProviderTier;
+          specialist_type?: SpecialistType | null;
+          provider_key: string;
+          credentials_ref?: string | null;
+          priority?: number;
+          fallback_provider_key?: string | null;
+          status?: ProviderConfigStatus;
+        };
+        Update: Partial<Database["public"]["Tables"]["provider_configs"]["Insert"]>;
+        Relationships: [];
+      };
+      knowledge_base_items: {
+        Row: {
+          id: string;
+          brand_id: string;
+          source_type: KnowledgeBaseSourceType;
+          title: string;
+          content_text: string | null;
+          storage_path: string | null;
+          tags: string[];
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          source_type: KnowledgeBaseSourceType;
+          title: string;
+          content_text?: string | null;
+          storage_path?: string | null;
+          tags?: string[];
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["knowledge_base_items"]["Insert"]>;
         Relationships: [];
       };
     };
