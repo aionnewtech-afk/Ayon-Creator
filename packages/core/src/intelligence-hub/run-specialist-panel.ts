@@ -54,7 +54,7 @@ export async function runSpecialistPanel(params: RunSpecialistPanelParams): Prom
       const completion = await llmProvider.complete({
         system: specialist.system_prompt,
         messages: [{ role: "user", content: userMessage }],
-        maxTokens: 512,
+        maxTokens: 1024,
       });
 
       const parsed = SpecialistOpinionSchema.parse(parseLlmJson(completion.text));
