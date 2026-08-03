@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 13 — Ensine sua Empresa detalhado para a Missão 4) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.3 (revisão 14 — Ensine sua Empresa implementado e validado) — **aprovado, fonte oficial da verdade para a implementação**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (14 — Missão 4 implementada):** KB-1/2/3 implementadas e validadas em produção — upload de PDF/DOCX/TXT, nota manual, edição de tags e remoção, todos confirmados funcionando com Supabase real.
 > **Mudança desta revisão (13 — preparação da Missão 4):** §3.3 (KB-1/2/3) detalhado — formatos de arquivo aceitos (PDF/DOCX/TXT, até 10MB), estados de upload/extração, distinção entre item de arquivo (somente leitura) e nota manual, e itens de onboarding tratados como somente leitura nesta tela (edição continua só via Perfil da Marca).
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha os itens 8/11 expandidos e um novo item 12 (nenhum atalho de "geração rápida" pula o Brand Brain); §4.11 (Bloco de Justificativa de Marca) formaliza a affordance nomeada **"Por que fiz assim?"**; §4.1 e §4.2 passam a mencionar explicitamente referência a campanhas/aprendizados anteriores (memória de longo prazo).
 > Este documento especifica telas, componentes, estados, navegação, microinterações e jornadas de uso, correspondentes ao escopo de [PRD.md](../PRD.md) e aos fluxos de [flows.md](flows.md). Nenhuma interface é implementada sem que a tela/componente correspondente esteja aqui e aprovado. Toda nova tela nasce daqui, não do código.

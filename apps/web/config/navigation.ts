@@ -54,10 +54,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "ensine-sua-empresa",
     label: "Ensine sua Empresa para a IA",
-    description: "Em breve você vai poder enviar documentos e materiais para enriquecer o conhecimento da sua marca.",
+    description: "Envie documentos, conteúdos passados e notas para enriquecer o conhecimento que a Ayon tem da sua marca.",
     icon: BookOpen,
     minRole: "editor",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "o-que-esta-em-alta",

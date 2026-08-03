@@ -272,7 +272,9 @@ export interface Database {
           tags?: string[];
           created_by?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["knowledge_base_items"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["knowledge_base_items"]["Insert"]> & {
+          deleted_at?: string | null;
+        };
         Relationships: [];
       };
       specialists: {

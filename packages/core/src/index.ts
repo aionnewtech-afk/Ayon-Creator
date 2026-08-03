@@ -31,3 +31,11 @@ export * from "./intelligence-hub/intelligence-hub-prompts";
 export * from "./intelligence-hub/run-specialist-panel";
 export * from "./intelligence-hub/run-coordinator";
 export * from "./intelligence-hub/intelligence-hub-engine";
+export * from "./knowledge-base/knowledge-source-labels";
+// `./knowledge-base/extract-document-text` fica FORA deste barrel de propósito:
+// depende de pdf-parse (acessa `fs`), e este arquivo é importado por Client
+// Components (ex.: apps/web/components/layout/sidebar.tsx, só por causa de
+// `hasMinimumRole`) — reexportar a extração aqui quebra o build do Next.js ao
+// tentar empacotar pdf-parse no bundle do client. Quem precisar da extração
+// (só a Server Action de upload da Missão 4) importa direto o arquivo:
+// `@ayon/core/src/knowledge-base/extract-document-text`.

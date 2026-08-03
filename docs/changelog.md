@@ -4,6 +4,29 @@
 
 ---
 
+## v1.8 (revisão 15) — 2026-08-03 — Missão 4 implementada e validada (Ensine sua Empresa para a IA)
+
+**Status:** implementado e validado com Supabase real — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2 e 3).
+
+**O que foi implementado:**
+
+- **`packages/core`:** `extract-document-text.ts` (extração síncrona de PDF via `pdf-parse`, DOCX via `mammoth`, TXT direto), `knowledge-source-labels.ts` (rótulos em linguagem de negócio); `KnowledgeBaseItemRepository` ganhou `findById`/`update`/`softDelete`.
+- **Server Actions** (`apps/web/app/(platform)/ensine-sua-empresa/actions.ts`): upload de arquivo, nota manual, editar tags, remover (soft delete) — todos gated a `editor+`.
+- **UI:** KB-1 (Biblioteca de Conhecimento), KB-2 (Adicionar Conhecimento — arquivo ou nota), KB-3 (Detalhe/edição de tags/remoção). Nav "Ensine sua Empresa para a IA" passa a `implemented: true`.
+- **Correção estrutural durante a implementação (não é bug de validação, é uma decisão de arquitetura de módulos):** `extract-document-text.ts` foi **excluído do barrel de exports** de `@ayon/core` porque `pdf-parse` depende de `fs`, e o barrel único (`index.ts`) é importado por Client Components (ex.: `sidebar.tsx`, só por causa de `hasMinimumRole`) — isso quebrava o build do Next.js tentando empacotar `pdf-parse` no bundle do client. Resolvido importando o módulo por caminho direto (`@ayon/core/src/knowledge-base/extract-document-text`) só de onde é realmente usado (a Server Action de upload).
+
+**Validado com Supabase real (upload de PDF, DOCX e TXT reais, nota manual, edição de tags, remoção):**
+- Extração de texto correta nos 3 formatos (confirmado lendo `content_text` gravado no banco).
+- Arquivo persistido corretamente no bucket `knowledge-base` (path `{organization_id}/{brand_id}/{uuid}-{filename}`, confirmado via listagem do Storage).
+- Erro amigável e específico para tipo de arquivo não suportado (testado com PNG).
+- Edição de tags e remoção (soft delete, `deleted_at` preenchido, linha preservada) confirmadas via leitura direta do banco.
+
+**Bug encontrado incidentalmente (fora do escopo da Missão 4) — não corrigido de propósito:** `ensureInitialProvisioning` (Sprint 1) tem uma race condition de "check-then-act" sem lock — duas requisições quase simultâneas para o mesmo usuário novo podem criar duas organizações/marcas distintas, ambas com o usuário como owner. Reproduzido ao vivo durante o teste (dois logins de teste próximos no tempo geraram 2 organizations). Dados de teste já limpos; correção registrada como tarefa isolada para não misturar uma correção de Sprint 1 dentro da tag da Missão 4.
+
+**Próximo passo:** aguardando decisão do dono do produto — limpar dados de teste (já feito), commit exclusivo, tag `v0.4.0`, atualização do `CHANGELOG.md` raiz, e autorização para a próxima missão (Trend Engine).
+
+---
+
 ## v1.7 (revisão 14) — 2026-08-03 — Preparação doc-first da Missão 4 (Ensine sua Empresa para a IA)
 
 **Status:** documentação pronta para revisão — **aguardando confirmação do dono do produto antes do código**, seguindo o mesmo processo doc-first já usado nas Missões 2 e 3.
