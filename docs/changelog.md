@@ -4,6 +4,49 @@
 
 ---
 
+## v1.4 (revisão 11) — 2026-08-03 — Missão 3 implementada: Specialist Registry + primeiro Intelligence Hub funcional
+
+**Status:** aprovado e implementado — escopo ampliado pelo dono do produto após aprovar o design do Specialist Registry: em vez de só a infraestrutura, a Missão 3 entrega um Intelligence Hub funcional de ponta a ponta (3 especialistas + Coordinator + tela "Criar Campanha").
+
+**Motivação:** validar o Intelligence Hub como cérebro estratégico da plataforma antes de investir em geração de conteúdo — "Não quero geração de conteúdo ainda... Quero apenas validar o funcionamento do Intelligence Hub".
+
+**O que foi implementado:**
+
+- **Migration `0004_intelligence_hub.sql`:** tabelas `specialists` (Specialist Registry), `intelligence_hub_sessions`, `specialist_opinions`, `campaigns`; `provider_configs.specialist_type` (enum) substituída por `specialist_id` (FK). Seed inicial: especialistas `marketing_strategy`, `branding`, `copywriting` (todos `applies_to = ['campaign_strategy']`) + 1 `coordinator`.
+- **`packages/types`:** enums `SpecialistRole`, `SpecialistStatus`, `IntelligenceHubRelatedEntityType`, `IntelligenceHubSessionStatus`, `CampaignStatus`; tipos Row/Insert/Update das 4 tabelas. Removido o antigo enum hardcoded `SpecialistType`.
+- **`packages/core`:** `SpecialistRepository` (`findApplicable`/`findCoordinator`), `IntelligenceHubSessionRepository`, `SpecialistOpinionRepository`, `CampaignRepository`; `ProviderConfigRepository`/`resolveLlmProvider` passam a resolver por `specialist_id` opcional (fallback para configuração genérica do tier); módulo `intelligence-hub/` com `runSpecialistPanel` (painel em paralelo via `Promise.allSettled` — falha de um nunca bloqueia os demais nem o Coordinator) e `runCoordinator` (consolidação, sempre com `rationale` — Princípio do Consultor Permanente); `runCampaignStrategySession` orquestra tudo (Fluxo 10 completo para o gatilho `campaign_strategy`).
+- **UI:** item de navegação "Criar Campanha" (antes "em breve") passa a `implemented: true`; nova tela em `/criar-campanha` — objetivo de campanha em texto livre → opiniões individuais dos 3 especialistas → estratégia consolidada do Coordinator com o bloco "Por que fiz assim?" → aprovação explícita (nunca automática).
+- **`docs/database.md`/`docs/flows.md`:** atualizados de "planejado, sem migration" para "implementado" — ver notas de revisão 11 em cada documento.
+
+**Fora de escopo desta missão (mantido conforme combinado):** nenhuma geração de conteúdo; gatilho `trend_ranking` (Fluxo 2) ainda não ligado ao Intelligence Hub, pois o Trend Engine em si não existe; demais especialistas (além dos 3 iniciais) ficam para próximas missões, adicionados como dado no Specialist Registry, sem mudança de arquitetura.
+
+**Verificação:** `pnpm -r typecheck`, `pnpm -r lint` e `pnpm -r build` passam em todo o workspace (`@ayon/types`, `@ayon/ui`, `@ayon/core`, `web`).
+
+---
+
+## v1.3 (revisão 10) — 2026-08-03 — Specialist Registry e reordenação do roadmap
+
+**Status:** aprovado — dono do produto decidiu reordenar o roadmap: a próxima missão de implementação passa a ser a infraestrutura de especialistas plugáveis do Intelligence Hub, não "Ensine sua empresa para a IA".
+
+**Motivação:** antes de implementar qualquer parte do Intelligence Hub, o dono do produto quer que os especialistas (e o Coordinator) sejam **dados configuráveis, nunca papéis hardcoded** — cada especialista com identidade, objetivo, system prompt, capacidade de Provider Layer, aplicabilidade, prioridade e parâmetros configuráveis, resolvidos em runtime por um "Specialist Registry" análogo ao Provider Gateway. Também foi pedida uma documentação técnica nova, específica para descrever o **comportamento de IA** de cada Core Engine (não estrutura, não processo) — complementar ao PRD, nunca substituto.
+
+**O que mudou:**
+
+- **`docs/architecture.md`:** nova §4.1 — **Specialist Registry**: especialistas e Coordinator deixam de ser um enum fixo no código (`marketing`, `copywriting`, etc.) e passam a ser linhas na tabela `specialists`, com os 7 atributos pedidos (identidade → `name`; objetivo → `objective`; system prompt → `system_prompt`; provider → `provider_capability`; capabilities → `applies_to`; prioridade → `priority`; parâmetros configuráveis → `parameters`). Resolve, na prática, a decisão em aberto PRD §13.1. §3.4/§4/§5.1/§10 atualizadas para refletir a resolução por registry em vez de lista fixa.
+- **`docs/database.md`:** nova tabela `specialists` (§4.4, ainda **sem migration** — planejada para a implementação da Missão 3), sem RLS de usuário final (mesmo padrão de `provider_configs`). `provider_configs.specialist_type` e `specialist_opinions.specialist_type` (enums fixos) passam a `specialist_id` (FK → `specialists`) — mudança de schema também pendente de migration.
+- **`docs/flows.md`:** Fluxo 10 (passos 1, 3, 4) reescrito — resolução de especialistas via consulta ao Specialist Registry filtrada por `applies_to`, não mais uma lista fixa de 7 papéis.
+- **`PRD.md`:** §13, item 1, marcado como resolvido arquiteturalmente (o mecanismo agora é configurável; o conteúdo — quais especialistas existem de fato — continua sendo decisão de produto/seed a aprovar na Missão 3).
+- **`docs/engine-behavior.md`** (novo documento): comportamento de IA esperado de cada Core Engine (Brand Brain, Intelligence Hub, Trend Engine, Asset Engine, Learning Engine) — tom, princípios de raciocínio, o que nunca deve acontecer. Não substitui o PRD; é a referência de estilo para quem escreve `system_prompt`s, incluindo os do Specialist Registry.
+- **`README.md`:** estrutura e "por onde começar a ler" atualizados com o novo documento; estado do projeto atualizado.
+
+**Fora de escopo desta revisão:** nenhuma migration foi criada, nenhum código foi escrito — `specialists` e a mudança de `provider_configs`/`specialist_opinions` são schema planejado, a implementar na Missão 3.
+
+**Decisões pendentes de aprovação:** seed inicial do Specialist Registry (quais especialistas, quais `system_prompt`s exatos — architecture.md §10, item 7); comportamento de Trend/Asset/Learning Engine descrito em `engine-behavior.md` ainda não validado com IA real (ao contrário do Brand Brain).
+
+**Próximo passo:** implementação de código da Missão 3 — infraestrutura do Specialist Registry (migration, tipos, repository, resolução em `packages/core`), sem ainda construir o painel completo de 7 especialistas — isso fica para a missão seguinte do Intelligence Hub.
+
+---
+
 ## v1.2 (revisão 9) — 2026-08-02 — Revisão técnica final pré-Missão 2
 
 **Status:** aprovado — filosofia de produto consolidada; documentação liberada como fonte oficial da verdade; início da implementação de código autorizado.

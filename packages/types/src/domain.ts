@@ -36,17 +36,33 @@ export type KnowledgeBaseSourceType = (typeof KNOWLEDGE_BASE_SOURCE_TYPES)[numbe
 export const PROVIDER_CAPABILITIES = ["llm", "avatar", "voice", "media", "trend_source"] as const;
 export type ProviderCapability = (typeof PROVIDER_CAPABILITIES)[number];
 
-export const SPECIALIST_TYPES = [
-  "marketing",
-  "copywriting",
-  "branding",
-  "niche",
-  "seo",
-  "social_media",
-  "data",
-  "coordinator",
-] as const;
-export type SpecialistType = (typeof SPECIALIST_TYPES)[number];
-
 export const PROVIDER_CONFIG_STATUSES = ["active", "inactive", "error"] as const;
 export type ProviderConfigStatus = (typeof PROVIDER_CONFIG_STATUSES)[number];
+
+/**
+ * Especialistas do Intelligence Hub NÃO são um enum fixo (architecture.md
+ * §4.1, Specialist Registry) — são linhas na tabela `specialists`, resolvidas
+ * em runtime. `SpecialistRole` distingue só o papel estrutural (um
+ * especialista opina; o coordinator consolida), nunca a identidade em si.
+ */
+export const SPECIALIST_ROLES = ["specialist", "coordinator"] as const;
+export type SpecialistRole = (typeof SPECIALIST_ROLES)[number];
+
+export const SPECIALIST_STATUSES = ["active", "inactive"] as const;
+export type SpecialistStatus = (typeof SPECIALIST_STATUSES)[number];
+
+export const INTELLIGENCE_HUB_RELATED_ENTITY_TYPES = ["trend_research", "campaign", "content_piece"] as const;
+export type IntelligenceHubRelatedEntityType = (typeof INTELLIGENCE_HUB_RELATED_ENTITY_TYPES)[number];
+
+export const INTELLIGENCE_HUB_SESSION_STATUSES = ["running", "completed", "failed"] as const;
+export type IntelligenceHubSessionStatus = (typeof INTELLIGENCE_HUB_SESSION_STATUSES)[number];
+
+export const CAMPAIGN_STATUSES = [
+  "draft",
+  "generating",
+  "ready_for_review",
+  "approved",
+  "package_ready",
+  "failed",
+] as const;
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];

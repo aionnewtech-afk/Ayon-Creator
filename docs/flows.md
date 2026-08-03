@@ -1,7 +1,9 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
-> **Última atualização:** 2026-08-02
+> **Status:** v1.0 (revisão 11 — Fluxo 10 implementado, versão simplificada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-03
+> **Mudança desta revisão (11 — Missão 3 implementada):** Fluxo 10 implementado e em produção, mas só para o gatilho `campaign_strategy` (tela "Criar Campanha", CAMP-1/2/3 simplificado) — painel de especialistas + Coordinator rodam de ponta a ponta (`Promise.allSettled`, falha de um especialista nunca bloqueia os demais nem o Coordinator, passo 7 confirmado em produção, não mais decisão em aberto). O gatilho `trend_ranking` (Fluxo 2, passo 4) ainda não está ligado ao Intelligence Hub porque o Trend Engine em si não foi implementado; geração de conteúdo (Fluxo 3) também não consome o Intelligence Hub ainda — ambos permanecem como especificado, aguardando suas próprias missões.
+> **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis):** Fluxo 10 (passos 1 e 3) reescrito — o Intelligence Hub resolve quais especialistas participam consultando o Specialist Registry (`specialists`, filtrado por `applies_to`), não mais uma lista fixa de 7 papéis no código. Ver [architecture.md §4.1](architecture.md#41-specialist-registry-especialistas-plugáveis-★-novo-revisão-10).
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** Fluxo 10 (passo 2) explicita que o contexto montado pelo Intelligence Hub inclui histórico de campanhas e aprendizados aplicados, não só o Brand Brain do instante; Fluxo 3 ganha nota da regra inegociável de que nenhuma peça é gerada sem carregar o Brand Brain.
 > Fluxos correspondentes ao escopo do [PRD.md](../PRD.md), usando as entidades definidas em [database.md](database.md) e a arquitetura de [architecture.md](architecture.md).
 > **Convenção de leitura:** cada passo cita o nome exposto ao usuário (linguagem de negócio) seguido, entre parênteses, do Core Engine técnico correspondente — nunca o inverso na UI real (ver PRD §2).
@@ -134,13 +136,13 @@ Nunca acionado pelo cliente final — apenas por um responsável técnico/admini
 
 Sub-fluxo reutilizado pelos Fluxos 2 e 3 sempre que uma decisão é classificada como "importante" (estratégia de tendência/campanha, ou peça principal de uma campanha).
 
-1. O Core Engine solicitante (Trend Engine, ou o fluxo de criação de campanha) abre uma `intelligence_hub_sessions` (`status = running`), informando `related_entity_type`/`related_entity_id` e `trigger_reason`.
+1. O Core Engine solicitante (Trend Engine, ou o fluxo de criação de campanha) abre uma `intelligence_hub_sessions` (`status = running`), informando `related_entity_type`/`related_entity_id` e `trigger_reason` — `trigger_reason` é normalizado para um dos valores de `applies_to` usados pelo Specialist Registry (ex.: `campaign_strategy`, `trend_ranking`).
 2. O Intelligence Hub monta o contexto comum: Brand Brain (identidade + preferências aprendidas) + Knowledge Base (retrieval relevante) + **histórico recente de `campaigns` e `learning_insights` já aplicados da marca** (memória de longo prazo, Princípio do Consultor Permanente, PRD §1.1) + dados de entrada específicos (candidatos de tendência, ou tema da campanha). Nenhuma sessão é montada como se fosse a primeira interação com a marca.
-3. Cada um dos 7 especialistas (`marketing`, `copywriting`, `branding`, `niche`, `seo`, `social_media`, `data`) recebe esse contexto e gera sua opinião de forma independente, via LLM Provider (resolvido pelo tier ativo — podendo variar por especialista no tier Premium). Cada opinião é gravada em `specialist_opinions`, incluindo uma justificativa em linguagem de negócio ancorada no Brand Brain (Princípio do Consultor Permanente, PRD §1.1).
-4. Quando todas as opiniões estão disponíveis, o **Coordinator AI** (também uma chamada ao LLM Provider, com prompt de síntese) consolida as opiniões em uma única estratégia coerente, resolvendo divergências, e produz também uma justificativa consolidada em linguagem de negócio.
+3. O Intelligence Hub consulta o **Specialist Registry** (`specialists` — architecture.md §4.1) filtrando `status = active` e `applies_to` contendo o `trigger_reason` desta sessão, ordenado por `priority` — **não** uma lista fixa de 7 papéis no código. Cada especialista retornado recebe o contexto e gera sua opinião de forma independente, via LLM Provider (resolvido pelo tier ativo + `specialist_id` — podendo variar por especialista no tier Premium). Cada opinião é gravada em `specialist_opinions` (referenciando `specialist_id`), incluindo uma justificativa em linguagem de negócio ancorada no Brand Brain (Princípio do Consultor Permanente, PRD §1.1).
+4. Quando todas as opiniões estão disponíveis, o registro do Specialist Registry com `role = coordinator` (também uma chamada ao LLM Provider, com prompt de síntese — nunca hardcoded) consolida as opiniões em uma única estratégia coerente, resolvendo divergências, e produz também uma justificativa consolidada em linguagem de negócio.
 5. Resultado gravado em `intelligence_hub_sessions.consolidated_result`, `status = completed`.
 6. A entidade solicitante (`trend_research.summary`, `campaigns.strategy_summary` ou `content_pieces.script`) referencia a sessão via `intelligence_hub_session_id` e desnormaliza o resultado consolidado para leitura rápida.
-7. Em caso de falha de qualquer especialista, o Coordinator consolida com os que responderam com sucesso, registrando a ausência no `consolidated_result` (nunca bloqueia a campanha inteira por falha de um único especialista) — comportamento a confirmar como decisão em aberto.
+7. Em caso de falha de qualquer especialista, o Coordinator consolida com os que responderam com sucesso, registrando a ausência no `consolidated_result` (nunca bloqueia a campanha inteira por falha de um único especialista) — **implementado e confirmado** (revisão 11): `runSpecialistPanel` usa `Promise.allSettled`, cada falha é logada e simplesmente omitida do contexto enviado ao Coordinator.
 
 ---
 
@@ -162,5 +164,4 @@ Sub-fluxo reutilizado pelos Fluxos 2 e 3 sempre que uma decisão é classificada
 2. Notificações: e-mail, in-app, ou ambos?
 3. Agendamento de campanhas recorrentes automáticas é MVP ou backlog?
 4. Periodicidade/gatilho exato do Fluxo 8.
-5. Comportamento do Coordinator AI quando um ou mais especialistas falham (Fluxo 10, passo 7) — confirmar se a campanha segue com consolidação parcial ou aguarda retry.
-6. Mecanismo de captura de `engagement_metric` no Fluxo 5 (passo 4), dado que não há integração de publicação automática no MVP — provavelmente entrada manual do usuário ou upload de métrica.
+5. Mecanismo de captura de `engagement_metric` no Fluxo 5 (passo 4), dado que não há integração de publicação automática no MVP — provavelmente entrada manual do usuário ou upload de métrica.

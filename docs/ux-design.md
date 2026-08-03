@@ -187,7 +187,7 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 O componente mais importante do produto: transforma o Intelligence Hub (arquitetura) em confiança percebida (produto).
 
 **Comportamento:**
-1. Ao entrar em CAMP-2, os 7 papéis aparecem como cartões/ícones distintos (nomes de negócio, não técnicos: "Marketing", "Copy", "Marca", "Especialista do seu Setor", "SEO", "Redes Sociais", "Dados" — nunca "specialist_type" cru).
+1. Ao entrar em CAMP-2, os papéis retornados pelo Specialist Registry ([architecture.md §4.1](architecture.md#41-specialist-registry-especialistas-plugáveis-★-novo-revisão-10)) aparecem como cartões/ícones distintos, usando o `name` de negócio de cada especialista (ex.: "Marketing", "Copy", "Marca", "Especialista do seu Setor", "SEO", "Redes Sociais", "Dados") — nunca a `key` técnica cru.
 2. Cada cartão transita por três estados visuais: **aguardando → analisando → opinião pronta** (com um resumo de 1 linha da opinião, não o texto bruto).
 3. Quando todos concluem (ou o tempo/retry limite é atingido — ver Fluxo 10, passo 7), uma animação de "convergência" leva as 7 opiniões a um único cartão final: a estratégia consolidada (Coordinator AI), com uma frase de transição tipo "Consolidando em uma estratégia única...".
 4. Se um especialista falha, seu cartão mostra um estado neutro ("não conseguiu opinar desta vez") sem bloquear os demais nem assustar o usuário com "erro".

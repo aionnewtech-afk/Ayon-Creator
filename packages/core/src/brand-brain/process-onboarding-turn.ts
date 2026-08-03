@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ONBOARDING_QUESTION_KEYS, type OnboardingQuestionKey } from "@ayon/types";
 import type { LlmMessage, LlmProvider } from "../providers/llm-provider";
+import { LlmJsonParseError, parseLlmJson } from "../shared/llm-json";
 import { buildOnboardingSystemPrompt, type KnownFieldsSnapshot } from "./onboarding-prompt";
 
 export interface ConversationTurn {
@@ -99,13 +100,14 @@ export async function processOnboardingTurn(
 }
 
 function parseOnboardingTurnResponse(rawText: string): z.infer<typeof OnboardingTurnResponseSchema> {
-  const jsonText = extractJsonBlock(rawText);
-
   let json: unknown;
   try {
-    json = JSON.parse(jsonText);
+    json = parseLlmJson(rawText);
   } catch (cause) {
-    throw new OnboardingTurnParseError("Resposta da Ayon não era um JSON válido.", rawText);
+    if (cause instanceof LlmJsonParseError) {
+      throw new OnboardingTurnParseError(cause.message, cause.rawText);
+    }
+    throw cause;
   }
 
   const result = OnboardingTurnResponseSchema.safeParse(json);
@@ -117,17 +119,4 @@ function parseOnboardingTurnResponse(rawText: string): z.infer<typeof Onboarding
   }
 
   return result.data;
-}
-
-/** Extrai o bloco JSON da resposta, tolerando cerca ```json ou texto ao redor. */
-function extractJsonBlock(text: string): string {
-  const trimmed = text.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fencedMatch?.[1]) return fencedMatch[1].trim();
-
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1) return trimmed;
-
-  return trimmed.slice(firstBrace, lastBrace + 1);
 }

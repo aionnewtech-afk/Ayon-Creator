@@ -6,6 +6,9 @@
  */
 import type {
   BrandStatus,
+  CampaignStatus,
+  IntelligenceHubRelatedEntityType,
+  IntelligenceHubSessionStatus,
   KnowledgeBaseSourceType,
   OnboardingQuestionKey,
   OrganizationMemberRole,
@@ -13,7 +16,8 @@ import type {
   ProviderCapability,
   ProviderConfigStatus,
   ProviderTier,
-  SpecialistType,
+  SpecialistRole,
+  SpecialistStatus,
 } from "./domain";
 
 export interface Database {
@@ -222,7 +226,7 @@ export interface Database {
           id: string;
           capability: ProviderCapability;
           tier: ProviderTier;
-          specialist_type: SpecialistType | null;
+          specialist_id: string | null;
           provider_key: string;
           credentials_ref: string | null;
           priority: number;
@@ -234,7 +238,7 @@ export interface Database {
           id?: string;
           capability: ProviderCapability;
           tier: ProviderTier;
-          specialist_type?: SpecialistType | null;
+          specialist_id?: string | null;
           provider_key: string;
           credentials_ref?: string | null;
           priority?: number;
@@ -269,6 +273,111 @@ export interface Database {
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["knowledge_base_items"]["Insert"]>;
+        Relationships: [];
+      };
+      specialists: {
+        Row: {
+          id: string;
+          key: string;
+          role: SpecialistRole;
+          name: string;
+          objective: string;
+          system_prompt: string;
+          provider_capability: ProviderCapability;
+          applies_to: string[];
+          priority: number;
+          parameters: Record<string, unknown>;
+          status: SpecialistStatus;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          role?: SpecialistRole;
+          name: string;
+          objective: string;
+          system_prompt: string;
+          provider_capability?: ProviderCapability;
+          applies_to?: string[];
+          priority?: number;
+          parameters?: Record<string, unknown>;
+          status?: SpecialistStatus;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["specialists"]["Insert"]>;
+        Relationships: [];
+      };
+      intelligence_hub_sessions: {
+        Row: {
+          id: string;
+          brand_id: string;
+          related_entity_type: IntelligenceHubRelatedEntityType;
+          related_entity_id: string;
+          trigger_reason: string;
+          status: IntelligenceHubSessionStatus;
+          consolidated_result: Record<string, unknown> | null;
+          coordinator_provider_key: string | null;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          related_entity_type: IntelligenceHubRelatedEntityType;
+          related_entity_id: string;
+          trigger_reason: string;
+          status?: IntelligenceHubSessionStatus;
+          consolidated_result?: Record<string, unknown> | null;
+          coordinator_provider_key?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["intelligence_hub_sessions"]["Insert"]>;
+        Relationships: [];
+      };
+      specialist_opinions: {
+        Row: {
+          id: string;
+          session_id: string;
+          specialist_id: string;
+          opinion: Record<string, unknown>;
+          llm_provider_key: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          specialist_id: string;
+          opinion: Record<string, unknown>;
+          llm_provider_key?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["specialist_opinions"]["Insert"]>;
+        Relationships: [];
+      };
+      campaigns: {
+        Row: {
+          id: string;
+          brand_id: string;
+          trend_research_id: string | null;
+          intelligence_hub_session_id: string;
+          title: string;
+          strategy_summary: Record<string, unknown> | null;
+          status: CampaignStatus;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          trend_research_id?: string | null;
+          intelligence_hub_session_id: string;
+          title: string;
+          strategy_summary?: Record<string, unknown> | null;
+          status?: CampaignStatus;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["campaigns"]["Insert"]>;
         Relationships: [];
       };
     };

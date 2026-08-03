@@ -15,9 +15,10 @@ import type { LlmProvider } from "./llm-provider";
 export async function resolveLlmProvider(
   db: SupabaseClient<Database>,
   tier: ProviderTier,
+  specialistId?: string,
 ): Promise<LlmProvider> {
   const repository = new ProviderConfigRepository(db);
-  const config = await repository.findActive("llm", tier);
+  const config = await repository.findActive("llm", tier, specialistId);
 
   if (!config) {
     throw new Error(`Nenhum provider_config ativo para (capability=llm, tier=${tier}).`);

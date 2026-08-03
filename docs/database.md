@@ -1,7 +1,9 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
-> **Última atualização:** 2026-08-02
+> **Status:** v1.0 (revisão 11 — Specialist Registry implementado) — **aprovado, fonte oficial da verdade para a implementação**
+> **Última atualização:** 2026-08-03
+> **Mudança desta revisão (11 — Missão 3 implementada):** migration `0004_intelligence_hub.sql` aplicada em produção — `specialists`, `intelligence_hub_sessions`, `specialist_opinions` e `campaigns` (§4.4/§4.5) existem de fato; `provider_configs.specialist_type` (enum) foi removida e substituída por `provider_configs.specialist_id` (FK → `specialists`, nullable). `campaigns.trend_research_id` existe como `uuid` **sem FK real** — `trend_research` ainda não tem migration própria, então a referência é só de convenção até essa tabela ser criada. Seed inicial do registry: 3 especialistas (`marketing_strategy`, `branding`, `copywriting`, todos com `applies_to = ['campaign_strategy']`) + 1 `coordinator`.
+> **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis, Missão 3 redefinida):** nova tabela `specialists` (§4.4) — especialistas do Intelligence Hub (e o Coordinator) deixam de ser um enum fixo e passam a ser dados. `provider_configs.specialist_type` (enum) é substituído por `provider_configs.specialist_id` (FK → `specialists`); `specialist_opinions.specialist_type` (enum) idem. Ver [architecture.md §4.1](architecture.md#41-specialist-registry-especialistas-plugáveis-★-novo-revisão-10).
 > Banco: Supabase (Postgres). Este documento descreve o modelo de dados correspondente ao escopo do [PRD.md](../PRD.md) e da [architecture.md](architecture.md). Tipos de coluna são indicativos (refinar em fase de implementação aprovada).
 > **Mudança desta revisão (7 — Princípio do Consultor Permanente):** nova coluna `content_pieces.brand_rationale`; `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` passam a exigir uma chave `rationale` (ver [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)); enum `knowledge_base_items.source_type` renomeia `onboarding_interview` → `onboarding_conversation`.
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** nenhuma tabela/coluna nova além das já existentes — apenas notas explícitas em §4.4/§4.5 esclarecendo que o contexto de entrada do Intelligence Hub inclui histórico de `campaigns`/`learning_insights` (memória de longo prazo) e que `brand_rationale`/`rationale` são a base de dados do bloco "Por que fiz assim?" (ver [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)).
@@ -18,14 +20,15 @@ organizations 1───N organization_members ───N users (auth.users)
 auth.users    1───1 user_profiles
 organizations 1───N audit_logs
 (global)      feature_flags (sem FK — configuração global, não multi-tenant)
-organizations 1───N provider_configs (por capability + tier)
+organizations 1───N provider_configs (por capability + tier [+ specialist_id])
+(global)      specialists (Specialist Registry — sem organization_id, administração interna)
 brands        1───1 brand_brain_profiles
 brands        1───N brand_onboarding_answers
 brands        1───N knowledge_base_items
 brands        1───N brand_media_assets
 brands        1───N campaigns
 brands        1───N learning_signals ──N learning_insights
-brands        1───N intelligence_hub_sessions ──N specialist_opinions
+brands        1───N intelligence_hub_sessions ──N specialist_opinions ──1 specialists
 campaigns     1───N content_pieces
 campaigns     1───1 content_packages (quando concluída)
 content_pieces 1───N content_versions
@@ -182,7 +185,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 | status | enum(`pending`,`completed`,`failed`) | |
 | created_at | timestamptz | |
 
-### 4.4 `intelligence_hub_sessions` / `specialist_opinions`
+### 4.4 `intelligence_hub_sessions` / `specialist_opinions` / `specialists`
 
 **`intelligence_hub_sessions`** — uma execução do painel de especialistas + Coordinator para uma decisão específica.
 
@@ -207,10 +210,31 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 |---|---|---|
 | id | uuid PK | |
 | session_id | uuid FK → intelligence_hub_sessions | |
-| specialist_type | enum(`marketing`,`copywriting`,`branding`,`niche`,`seo`,`social_media`,`data`) | |
+| specialist_id | uuid FK → specialists | **substitui o antigo enum fixo** `specialist_type` (revisão 10) — qual especialista do registry gerou esta opinião |
 | opinion | jsonb | opinião estruturada do especialista — **deve incluir a chave `rationale`** (justificativa em linguagem de negócio, ancorada no Brand Brain — Princípio do Consultor Permanente, architecture.md §1.1) além da recomendação |
 | llm_provider_key | text | `provider_key` usado para gerar esta opinião |
 | created_at | timestamptz | |
+
+**`specialists`** ★ novo (revisão 10) — o **Specialist Registry** (architecture.md §4.1): cada especialista do Intelligence Hub, incluindo o Coordinator, é uma linha aqui — nunca um papel hardcoded no código. Sem policy de RLS para usuário final (mesmo padrão de `provider_configs` — administração interna da Ayon, service role).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| key | text (unique) | slug estável usado internamente (ex.: `marketing`, `copywriting`, `coordinator`) — nunca exposto ao cliente |
+| role | enum(`specialist`,`coordinator`) | um único registro com `role = coordinator` por painel; os demais são `specialist` |
+| name | text | identidade de negócio (ex.: "Especialista em Marketing") |
+| objective | text | o que este especialista avalia/produz |
+| system_prompt | text | prompt que conduz a chamada ao LLM Provider para este especialista — ver [docs/engine-behavior.md](engine-behavior.md) |
+| provider_capability | text | capacidade do Provider Layer consumida — hoje sempre `llm` (ver architecture.md §4.1); **nunca** um fornecedor específico |
+| applies_to | text[] | tipos de decisão em que este especialista participa (ex.: `campaign_strategy`, `trend_ranking`, `content_piece_review`) — resolve PRD §13.1 |
+| priority | int | peso/ordem na consolidação do Coordinator e na exibição do Painel de Especialistas |
+| parameters | jsonb | ajustes finos por especialista (ex.: `temperature`, `max_tokens`) — default `{}` |
+| status | enum(`active`,`inactive`) | especialista desativado não é convocado, mas seu histórico em `specialist_opinions` permanece |
+| created_by | uuid FK → auth.users (nullable) | |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+> **Implementado (revisão 11):** migration `0004_intelligence_hub.sql` — tabela criada, sem policy de RLS (service role only), seed inicial com 3 especialistas + 1 coordinator (ver nota de revisão 11 no topo do documento).
 
 ### 4.5 `campaigns`
 
@@ -218,7 +242,7 @@ Estado atual do Brand Brain de cada marca — identidade + preferências aprendi
 |---|---|---|
 | id | uuid PK | |
 | brand_id | uuid FK → brands | |
-| trend_research_id | uuid FK → trend_research (nullable) | |
+| trend_research_id | uuid (nullable, **sem FK real**) | referência de convenção a `trend_research`, que ainda não existe como migration — vira FK de verdade quando essa tabela for criada |
 | intelligence_hub_session_id | uuid FK → intelligence_hub_sessions | sessão que gerou a estratégia desta campanha — **NOT NULL de propósito**: nenhuma campanha existe sem ter passado pelo Brand Brain via Intelligence Hub (regra inegociável, Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)) |
 | title | text | |
 | strategy_summary | jsonb | = `intelligence_hub_sessions.consolidated_result` desta sessão, desnormalizado para leitura rápida |
@@ -317,7 +341,7 @@ Mapeamento interno **(capability, tier) → fornecedor concreto**. Nunca exposto
 | id | uuid PK | |
 | capability | enum(`llm`,`avatar`,`voice`,`media`,`trend_source`) | |
 | tier | enum(`economico`,`balanceado`,`premium`) | |
-| specialist_type | enum(`marketing`,`copywriting`,`branding`,`niche`,`seo`,`social_media`,`data`,`coordinator`) (nullable) | usado só quando `capability = llm` e a resolução precisa variar por papel dentro do Intelligence Hub (tier Premium — arquitetura §10.5) |
+| specialist_id | uuid FK → specialists (nullable) | **substitui o antigo enum fixo** (revisão 10) — usado só quando `capability = llm` e a resolução precisa variar por especialista dentro do Intelligence Hub (tier Premium — architecture.md §10, item 5) |
 | provider_key | text | ex: `openai-mini`, `openai-gpt5`, `claude-sonnet`, `claude-opus`, `heygen`, `elevenlabs` |
 | credentials_ref | text | referência a segredo — nunca credencial em texto puro |
 | priority | int | |
@@ -398,6 +422,7 @@ Conversão de custo em créditos por `capability` + `tier` (não por fornecedor,
 - Toda tabela com `organization_id` (direto ou via `brand_id`) restringe leitura/escrita a usuários membros da organização e, quando aplicável, membros da marca.
 - `provider_configs.credentials_ref` e `publishing_channels.credentials_ref` **nunca** são lidos por RLS de usuário final — só via service role usada pelo Provider Gateway/backend/n8n.
 - `provider_configs` inteira (não só credenciais) é acessível apenas por papel administrativo interno — nenhum usuário de organização/marca tem select nela, mesmo sem credenciais, pois o mapeamento tier→fornecedor não deve vazar.
+- `specialists` (Specialist Registry, revisão 10) segue o mesmo padrão de `provider_configs`: sem policy para `authenticated`/`anon`, leitura e escrita só via service role — nenhuma organização/marca administra ou vê o registry diretamente.
 - `brand_brain_profiles`, `brand_onboarding_answers`, `knowledge_base_items`, `intelligence_hub_sessions`, `specialist_opinions` seguem isolamento por `brand_id`.
 - `user_profiles`: select/update restritos ao próprio `user_id` (`auth.uid() = user_id`).
 - `audit_logs`: select restrito a `admin`/`owner` da `organization_id`; insert só via service role (Repository, nunca client).
@@ -438,6 +463,6 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 1. `credit_pricing`: desenhar tabela de conversão custo→crédito por `capability` + `tier`, alinhada à decisão de produto PRD §13.2/§8.1.
 2. Estrutura exata de `visual_guidelines`, `specialist_opinions.opinion`, `intelligence_hub_sessions.consolidated_result` e `learning_insights.summary` (jsonb) — fixar após prototipagem dos prompts de cada Core Engine. **Já decidido (revisão 7):** `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` incluem obrigatoriamente uma chave `rationale`; o restante da estrutura permanece em aberto.
 3. Confirmar uso de `pgvector` para `knowledge_base_items.embedding`.
-4. `provider_configs.specialist_type`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.
+4. `provider_configs.specialist_id`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.
 5. Se `content_packages` deve versionar (permitir gerar o pacote mais de uma vez após reaprovações) ou é sempre 1:1 com a campanha.
 6. `feature_flags`: manter global por enquanto, ou já modelar override por organização (`organization_feature_overrides`) desde a Sprint 1? Adiado até haver um caso de uso real.

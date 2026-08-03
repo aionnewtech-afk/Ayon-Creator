@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
-import type { ProviderCapability, ProviderTier, SpecialistType } from "@ayon/types";
+import type { ProviderCapability, ProviderTier } from "@ayon/types";
 
 type ProviderConfigRow = Database["public"]["Tables"]["provider_configs"]["Row"];
 
@@ -16,10 +16,32 @@ type ProviderConfigRow = Database["public"]["Tables"]["provider_configs"]["Row"]
 export class ProviderConfigRepository {
   constructor(private readonly db: SupabaseClient<Database>) {}
 
+  /**
+   * Resolve `(capability, tier)` para um `provider_key`. Quando `specialistId`
+   * é informado (architecture.md §4.1, Specialist Registry), tenta primeiro
+   * uma linha específica para esse especialista — e cai para a linha genérica
+   * (`specialist_id is null`) se não existir nenhuma. Isso significa que
+   * nenhuma linha de `provider_configs` por especialista precisa existir para
+   * o Intelligence Hub funcionar; elas são só um refinamento opcional futuro
+   * (tier Premium, PRD §13.2).
+   */
   async findActive(
     capability: ProviderCapability,
     tier: ProviderTier,
-    specialistType?: SpecialistType,
+    specialistId?: string,
+  ): Promise<ProviderConfigRow | null> {
+    if (specialistId) {
+      const specific = await this.findActiveBySpecialist(capability, tier, specialistId);
+      if (specific) return specific;
+    }
+
+    return this.findActiveBySpecialist(capability, tier, null);
+  }
+
+  private async findActiveBySpecialist(
+    capability: ProviderCapability,
+    tier: ProviderTier,
+    specialistId: string | null,
   ): Promise<ProviderConfigRow | null> {
     let query = this.db
       .from("provider_configs")
@@ -28,7 +50,7 @@ export class ProviderConfigRepository {
       .eq("tier", tier)
       .eq("status", "active");
 
-    query = specialistType ? query.eq("specialist_type", specialistType) : query.is("specialist_type", null);
+    query = specialistId ? query.eq("specialist_id", specialistId) : query.is("specialist_id", null);
 
     const { data, error } = await query.order("priority", { ascending: false }).limit(1).maybeSingle();
 

@@ -38,10 +38,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "criar-campanha",
     label: "Criar Campanha",
-    description: "Em breve você vai poder criar campanhas completas com a ajuda de uma equipe de especialistas de IA.",
+    description: "Proponha um objetivo de campanha e veja a equipe de especialistas da Ayon discutir a melhor estratégia.",
     icon: Sparkles,
     minRole: "editor",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "conheca-sua-empresa",

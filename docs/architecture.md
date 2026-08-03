@@ -1,6 +1,7 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** v1.0 (revisão 9 — Revisão técnica final pré-Missão 2) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 10 — Specialist Registry) — **aprovado, fonte oficial da verdade para a implementação**
+> **Mudança desta revisão (10 — infraestrutura de especialistas plugáveis, Missão 3 redefinida):** o Intelligence Hub deixa de tratar os especialistas (e o Coordinator) como papéis fixos no código — nova §4.1 define o **Specialist Registry**, uma tabela (`specialists`) que descreve cada especialista por dados (identidade, objetivo, system prompt, capacidade de Provider Layer, aplicabilidade, prioridade, parâmetros configuráveis), resolvida em tempo de execução exatamente como o Provider Gateway resolve fornecedores. `provider_configs.specialist_type` (enum fixo) é substituído por `provider_configs.specialist_id` (FK para `specialists`) — detalhado em [database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions--specialists). Isso resolve, na prática, a decisão em aberto PRD §13.1 (quais especialistas rodam em cada tipo de decisão passa a ser dado, não código). Ver também [docs/engine-behavior.md](engine-behavior.md) para o comportamento esperado de cada especialista.
 > **Última atualização:** 2026-08-02
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha 3 regras: contexto de entrada do Intelligence Hub/Asset Engine passa a incluir explicitamente histórico de campanhas e aprendizados aplicados (memória de longo prazo, não só o Brand Brain do instante); a justificativa em linguagem de negócio ganha nome de affordance padrão — **"Por que fiz assim?"**; e uma regra inegociável nova — nenhum caminho de geração de conteúdo pode pular o carregamento do Brand Brain. Ver [PRD.md §1.1](../PRD.md#11-princípio-do-consultor-permanente-★-novo-revisão-7).
 > Este documento descreve a arquitetura correspondente ao escopo definido em [PRD.md](../PRD.md). Qualquer nova funcionalidade aprovada no PRD deve refletir aqui antes de virar código.
@@ -152,8 +153,8 @@ Orquestra a descoberta de tendências relevantes ao nicho/marca ("O que está em
 
 O mecanismo central de "como a Ayon Creator pensa" (PRD §4.1). Garante que nenhuma decisão estratégica dependa de um único modelo de IA.
 
-- **Responsabilidade:** para uma decisão importante (ex: estratégia de campanha), acionar um painel de **Specialist Agents** — cada um um papel especializado (`marketing`, `copywriting`, `branding`, `niche`, `seo`, `social_media`, `data`) — que geram opiniões independentes a partir do mesmo contexto (Brand Brain + Knowledge Base + tendências do Trend Engine + histórico de campanhas/aprendizados da marca — ver "Memória de longo prazo" abaixo); em seguida, acionar o **Coordinator AI**, que consolida as opiniões em uma única estratégia coerente.
-- **Diversidade de modelo:** cada Specialist Agent pode ser resolvido para um `provider_key`/modelo diferente dentro do tier ativo (ver §5.1), maximizando a diversidade de "opiniões" e reduzindo dependência de um único LLM — mesmo quando o Coordinator também é, tecnicamente, uma chamada ao LLM Provider.
+- **Responsabilidade:** para uma decisão importante (ex: estratégia de campanha), consultar o **Specialist Registry** (§4.1) para resolver quais especialistas se aplicam a este tipo de decisão, acionar cada um para gerar uma opinião independente a partir do mesmo contexto (Brand Brain + Knowledge Base + tendências do Trend Engine + histórico de campanhas/aprendizados da marca — ver "Memória de longo prazo" abaixo); em seguida, acionar o especialista marcado como **Coordinator** no registry, que consolida as opiniões em uma única estratégia coerente. Nenhum papel de especialista é hardcoded — adicionar, remover ou ajustar um especialista é uma mudança de dados em `specialists`, nunca uma mudança de código no Intelligence Hub.
+- **Diversidade de modelo:** cada especialista pode ser resolvido para um `provider_key`/modelo diferente dentro do tier ativo (ver §5.1), maximizando a diversidade de "opiniões" e reduzindo dependência de um único LLM — mesmo quando o Coordinator também é, tecnicamente, uma chamada ao LLM Provider.
 - **Quando é acionado:** toda geração de estratégia de campanha (Fluxo 2) e toda peça de conteúdo classificada como "principal" de uma campanha (ex: o vídeo/roteiro central). Peças derivadas/secundárias (ex: variações de legenda) podem reaproveitar a decisão já consolidada, sem novo painel completo — ver decisão em aberto PRD §13.1.
 - **Justificativa obrigatória (Princípio do Consultor Permanente, §1.1):** cada opinião e o resultado consolidado do Coordinator incluem uma justificativa em linguagem de negócio ancorada no Brand Brain — nunca apenas a recomendação nua. Exibida na interface como **"Por que fiz assim?"**.
 - **Memória de longo prazo (Princípio do Consultor Permanente, §1.1):** o contexto de entrada não se limita ao estado atual do Brand Brain — inclui um resumo do histórico recente de `campaigns` da marca e dos `learning_insights` já aplicados, para que a estratégia nunca ignore decisões, testes ou aprendizados anteriores.
@@ -211,7 +212,29 @@ Loop de aprendizado contínuo por marca, exposto ao usuário como **"O que funci
 
 Cada Specialist Agent e o Coordinator são, tecnicamente, chamadas ao **LLM Provider** com um prompt/papel diferente — a "equipe de especialistas" é uma composição arquitetural sobre o mesmo Provider Layer, não fornecedores distintos por especialista (embora o tier Premium possa, opcionalmente, atribuir modelos diferentes a especialistas diferentes para maximizar diversidade — ver §5.1 e decisão em aberto PRD §13.2).
 
-Cada opinião e a estratégia final carregam uma justificativa em linguagem de negócio (não apenas o resultado) — Princípio do Consultor Permanente (§1.1), persistida em `specialist_opinions.opinion.rationale` / `intelligence_hub_sessions.consolidated_result.rationale` ([database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions)).
+Cada opinião e a estratégia final carregam uma justificativa em linguagem de negócio (não apenas o resultado) — Princípio do Consultor Permanente (§1.1), persistida em `specialist_opinions.opinion.rationale` / `intelligence_hub_sessions.consolidated_result.rationale` ([database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions--specialists)).
+
+### 4.1 Specialist Registry (especialistas plugáveis) ★ novo (revisão 10)
+
+O painel de especialistas do diagrama acima (Marketing, Copy, Branding, Nicho, SEO, Redes Sociais, Dados) e o próprio Coordinator **não são papéis fixos no código** — são registros na tabela `specialists`, resolvidos em tempo de execução pelo Intelligence Hub exatamente como o Provider Gateway resolve fornecedores (§5.1). Adicionar, desativar ou ajustar um especialista é uma mudança de dados, nunca uma mudança de código no Intelligence Hub.
+
+Cada linha de `specialists` descreve um especialista (ou o Coordinator, que é modelado como um especialista com `role = coordinator`) por 7 atributos:
+
+| Atributo | Coluna | Papel |
+|---|---|---|
+| Identidade | `name` | Nome de negócio exibido internamente na documentação/administração (ex.: "Especialista em Marketing") — nunca aparece ao usuário final além do já previsto em [ux-design.md §4.1](ux-design.md#41-painel-de-especialistas-intelligence-hub--componente-assinatura) |
+| Objetivo | `objective` | O que este especialista deve avaliar/produzir — ex.: "avaliar a estratégia sob a ótica de posicionamento e marca" |
+| System prompt | `system_prompt` | O prompt que efetivamente conduz a chamada ao LLM Provider para este especialista — ver [docs/engine-behavior.md](engine-behavior.md) para os princípios de comportamento que todo `system_prompt` de especialista deve seguir |
+| Provider (capacidade do Provider Layer) | `provider_capability` | Qual capacidade do Provider Layer este especialista consome — hoje sempre `llm`, mas o campo existe para especialistas futuros que precisem de outra capacidade (ex.: visão). **Nunca** um fornecedor específico — a resolução de fornecedor continua 100% no Provider Gateway (§5.1), combinando esta capacidade + o tier da organização + o `specialist_id` (ver §5.1) |
+| Capabilities (aplicabilidade) | `applies_to` | Em quais tipos de decisão este especialista participa (ex.: `campaign_strategy`, `trend_ranking`, `content_piece_review`) — resolve, na prática, a decisão em aberto PRD §13.1: o conjunto de especialistas por decisão passa a ser uma consulta filtrada por este campo, não uma lista hardcoded |
+| Prioridade | `priority` | Peso/ordem usado pelo Coordinator ao consolidar opiniões divergentes, e ordem de exibição no Painel de Especialistas |
+| Parâmetros configuráveis | `parameters` | jsonb livre para ajustes finos por especialista (ex.: `temperature`, `max_tokens`, ou parâmetros específicos do papel) — nunca lido fora da chamada ao LLM Provider para este especialista |
+
+**Acesso:** assim como `provider_configs`, `specialists` não tem policy de RLS para o usuário final — é administrado internamente (painel administrativo interno da Ayon, não do cliente). Nenhuma organização/marca tem sua própria configuração de especialistas; o painel é o mesmo produto/arquitetura para todos os clientes, o que varia por chamada é o contexto (Brand Brain da marca em questão), nunca o conjunto de especialistas em si.
+
+**Resolução em tempo de execução:** para uma decisão de tipo `X`, o Intelligence Hub consulta `specialists` onde `status = 'active'` e `applies_to` contém `X`, ordenado por `priority`, aciona cada um, e por fim aciona o registro com `role = coordinator`. Ver [flows.md — Fluxo 10](flows.md#fluxo-10--coordenação-de-especialistas-intelligence-hub) para o passo a passo atualizado.
+
+> Detalhamento de schema em [database.md §4.4](database.md#44-intelligence_hub_sessions--specialist_opinions--specialists).
 
 ## 5. Provider Layer (adapters plugáveis, resolvidos por Tier)
 
@@ -228,7 +251,7 @@ Cada tipo de provider tem um **contrato fixo**. Novos fornecedores só precisam 
 ### 5.1 Tier de Provedor (interface exposta ao cliente) → Provider Registry (interno)
 
 - O único controle visível ao cliente é o **tier**: Econômico, Balanceado ou Premium (PRD §8.1) — escolhido por organização (ou marca, no plano Business).
-- Internamente, cada combinação **(capability, tier)** resolve para um `provider_key` concreto em `provider_configs` — ex: `(llm, economico) → openai-mini`, `(llm, premium) → claude-opus`. Essa tabela é administrada internamente (painel administrativo interno, não exposto ao cliente).
+- Internamente, cada combinação **(capability, tier)** resolve para um `provider_key` concreto em `provider_configs` — ex: `(llm, economico) → openai-mini`, `(llm, premium) → claude-opus`. Essa tabela é administrada internamente (painel administrativo interno, não exposto ao cliente). Quando a resolução precisa variar por especialista (tier Premium, §10 item 5), a combinação é **(capability, tier, specialist_id)** — `specialist_id` referencia `specialists` (§4.1), nunca mais um enum fixo de papéis.
 - O **Provider Gateway** é o único ponto de código que lê `provider_configs` e invoca o adapter concreto. Core Engines nunca importam SDK de fornecedor nem leem tier diretamente — apenas pedem "preciso da capacidade X para esta organização" ao Gateway.
 - Trocar de fornecedor dentro de um tier, ou redesenhar quais fornecedores compõem cada tier, é uma mudança de dados em `provider_configs` — **zero mudança** em Core Engines, fluxos ou n8n.
 - Fallback: `provider_configs.fallback_provider_key` permite failover automático dentro do mesmo tier em caso de falha (ver decisão em aberto §7.4).
@@ -281,7 +304,8 @@ Criados desde a Sprint 1 (sem upload ainda — preparam o terreno para as funcio
 2. **Composição de vídeos híbridos:** node de n8n com render externo, ou dentro do próprio Asset Engine?
 3. **Índice de retrieval da Knowledge Base:** uso de `pgvector` no Supabase Postgres — confirmar.
 4. **Fallback automático de provider:** troca automática para `fallback_provider_key` no mesmo request, ou apenas registro de falha para intervenção manual?
-5. **Especialistas com modelos distintos (tier Premium):** vale a pena, em termos de custo/benefício, atribuir modelos diferentes a especialistas diferentes, ou todos usam o mesmo modelo do tier e a diversidade vem só dos prompts/papéis? (Relacionado à decisão de produto PRD §13.2.)
+5. **Especialistas com modelos distintos (tier Premium):** vale a pena, em termos de custo/benefício, atribuir modelos diferentes a especialistas diferentes, ou todos usam o mesmo modelo do tier e a diversidade vem só dos prompts/papéis? O **mecanismo** para isso já existe (`provider_configs` por `specialist_id`, §5.1) — o que falta é a decisão de custo/benefício em si. (Relacionado à decisão de produto PRD §13.2.)
 6. Provedor de banco de vídeos públicos licenciados e como ele se integra.
+7. **Seed inicial do Specialist Registry (§4.1):** implementado na Missão 3 — migration `0004_intelligence_hub.sql` já aplicada em produção com 3 especialistas (`marketing_strategy`, `branding`, `copywriting`, todos `applies_to = ['campaign_strategy']`) + 1 `coordinator`, cada um com `system_prompt` próprio. **Pendente:** revisão do dono do produto sobre o conteúdo exato de cada `system_prompt` — foram escritos para viabilizar o teste ponta a ponta, mas ainda não passaram pelo mesmo processo de validação qualitativa que a Missão 2 aplicou ao prompt da Ayon (ver [docs/changelog.md](changelog.md)).
 
 > Estas decisões devem ser resolvidas e refletidas aqui antes da implementação dos módulos correspondentes.
