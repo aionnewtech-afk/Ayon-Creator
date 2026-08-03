@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 14 — Ensine sua Empresa implementado e validado) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.3 (revisão 15 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (15 — preparação Missão 6, Billing):** CFG-2 (Plano e Cobrança) e CFG-4 (Créditos e Uso) detalhadas com os estados reais do Mercado Pago (processando pagamento aguardando webhook, `past_due`, checkout externo). Estado global "Créditos insuficientes" (§5) renomeado para "Créditos insuficientes ou assinatura inativa", cobrindo os dois motivos de bloqueio do portão de crédito (Fluxo 6).
 > **Mudança desta revisão (14 — Missão 4 implementada):** KB-1/2/3 implementadas e validadas em produção — upload de PDF/DOCX/TXT, nota manual, edição de tags e remoção, todos confirmados funcionando com Supabase real.
 > **Mudança desta revisão (13 — preparação da Missão 4):** §3.3 (KB-1/2/3) detalhado — formatos de arquivo aceitos (PDF/DOCX/TXT, até 10MB), estados de upload/extração, distinção entre item de arquivo (somente leitura) e nota manual, e itens de onboarding tratados como somente leitura nesta tela (edição continua só via Perfil da Marca).
 > **Mudança desta revisão (8 — consolidação final antes da Missão 2):** §1.1 ganha os itens 8/11 expandidos e um novo item 12 (nenhum atalho de "geração rápida" pula o Brand Brain); §4.11 (Bloco de Justificativa de Marca) formaliza a affordance nomeada **"Por que fiz assim?"**; §4.1 e §4.2 passam a mencionar explicitamente referência a campanhas/aprendizados anteriores (memória de longo prazo).
@@ -179,9 +180,9 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
 | CFG-1 | Perfil da Conta/Organização | Dados da organização, usuário logado | — | Menu | — |
-| CFG-2 | Plano e Cobrança | Ver/alterar plano (Starter/Pro/Business), forma de pagamento | processando pagamento, erro de cobrança | Menu | — |
+| CFG-2 | Plano e Cobrança | Ver/alterar plano (Starter/Pro/Business), status da assinatura | processando pagamento (aguardando webhook do Mercado Pago — Fluxo 12), assinatura ativa, `past_due` (pagamento falhou, CTA para atualizar no Mercado Pago), `canceled` | Menu | Checkout externo do Mercado Pago (Preapproval) |
 | CFG-3 | Nível de Qualidade (tier) | Escolher Econômico/Balanceado/Premium — **nunca menciona fornecedor** | — | Menu, CFG-2 | — |
-| CFG-4 | Créditos e Uso | Saldo, histórico de consumo, comprar créditos avulsos | créditos baixos (aviso), sem saldo (bloqueio) | Menu, aviso de bloqueio em CAMP-4 | — |
+| CFG-4 | Créditos e Uso | Saldo (`SUM(credit_ledger.amount)`), histórico de lançamentos (`grant_plan`/`purchase`/`consumption`), comprar créditos avulsos (`credit_packages`) | créditos baixos (aviso), sem saldo (bloqueio), processando compra (aguardando webhook) | Menu, aviso de bloqueio em CAMP-4 (Fluxo 6, passo 2) | Checkout externo do Mercado Pago (Checkout Pro) |
 | CFG-5 | Marcas (Business) | Listar/criar marcas da organização | — | Menu | Seletor de marca |
 | CFG-6 | Time e Permissões (Business) | Convidar usuários, definir papel por marca | convite pendente | Menu | — |
 
@@ -320,7 +321,7 @@ Usado em:
 | **Sucesso** | Conclusão normal | Confirmação clara, sem exagero, com próximo passo óbvio |
 | **Erro total** | Falha que impede continuar | Explica o que aconteceu em linguagem simples + ação de retry |
 | **Erro parcial** | Ex: 1 especialista falhou, 1 formato falhou | Não bloqueia o restante; sinaliza o item afetado isoladamente |
-| **Créditos insuficientes** | Antes de uma geração com custo (Fluxo 6) | Bloqueio explícito com CTA direto para comprar créditos, sem perder o contexto do que estava fazendo |
+| **Créditos insuficientes ou assinatura inativa** | Antes de uma geração com custo (Fluxo 6, portão de crédito) | Bloqueio explícito antes de qualquer chamada de IA, com CTA direto para CFG-4 (comprar créditos) ou CFG-2 (reativar assinatura), sem perder o contexto do que estava fazendo (ex.: objetivo de campanha já digitado) |
 | **Permissão insuficiente** | Usuário `viewer` tentando ação de editor/admin | Ação desabilitada com tooltip explicativo, nunca erro após o clique |
 | **Aguardando aprovação humana** | Peças de conteúdo (CAMP-5) e sugestões do Brand Evolution (EVOL-1) | Sempre destacado visualmente como pendente de decisão do usuário — nunca some sozinho |
 

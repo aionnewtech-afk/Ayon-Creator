@@ -4,6 +4,38 @@
 
 ---
 
+## v2.3 (revisão 20) — 2026-08-03 — Preparação doc-first da Missão 6 (Billing)
+
+**Status:** documentação pronta — **aguardando confirmação final do dono do produto antes do código**, seguindo o mesmo processo doc-first já usado nas Missões 2-5.
+
+**Auditoria prévia — o que já existia:** `subscriptions`/`credit_ledger`/`credit_pricing` já documentadas desde a revisão 2 (só `credit_pricing` como placeholder, "a desenhar"); Fluxo 6 já existia em esqueleto; CFG-1 a CFG-6 já especificadas desde a revisão 4, incluindo CFG-2 (Plano e Cobrança) e CFG-4 (Créditos e Uso). Nunca existiu nenhuma menção a um gateway de pagamento concreto em nenhum documento.
+
+**Duas inconsistências encontradas e resolvidas antes de escrever qualquer doc final:**
+
+1. **Colisão de nomes:** o pedido inicial da Missão 6 nomeava os planos como Starter/**Premium**/Business, mas todos os documentos existentes (PRD §8, `database.md` §8, `ux-design.md` CFG-2, o enum `subscriptions.plan`) já usam **"Pro"** para o plano do meio — e "Premium" já é o nome do tier de qualidade mais alto (Econômico/Balanceado/**Premium**), um conceito diferente. **Decisão do dono do produto: manter "Pro"** — zero retrabalho de documentação, zero ambiguidade entre plano de assinatura e tier de qualidade de IA.
+2. **Nenhuma decisão de arquitetura para pagamento:** a regra de modularidade/vendor-agnostic do produto (Provider Layer) nunca havia sido testada contra um gateway de pagamento, que é estruturalmente diferente de LLM/Avatar/Voice (checkout, webhooks e ciclo de assinatura são específicos do fornecedor, não escondíveis atrás de um contrato genérico do mesmo jeito). **Decisão do dono do produto: módulo de Billing dedicado, fora do Provider Layer e fora dos Core Engines** — ver [architecture.md §12](architecture.md#12-billing-módulo-dedicado-★-novo-missão-6).
+
+**Números de negócio propostos e aprovados (com um ajuste do dono do produto sobre a proposta inicial):**
+
+- **Créditos/mês por plano:** Starter 100, Pro 500, Business 1.500 (dono do produto aumentou os valores propostos inicialmente — 30/150/400 — para dar mais fôlego de uso).
+- **Preço em créditos por operação:** `trend_ranking` 1/2/4 (Econômico/Balanceado/Premium), `campaign_strategy` 5/10/20 — **mantidos exatamente como propostos**. Princípio explícito do dono do produto: "o maior consumo de créditos deve ficar concentrado no Asset Engine (carrosséis, vídeos, avatar, imagens etc.), não no raciocínio da IA" — incentivar uso intenso do Intelligence Hub, cobrar principalmente pelo que tem custo computacional real (geração de mídia, ainda não implementada).
+- **Marcas por plano:** 1 em Starter/Pro, até 5 em Business, sem cobrança incremental por marca extra por enquanto.
+- Sem contador de cota separado: o limite de cada plano é só o tamanho do `grant_plan` de créditos — um único mecanismo (`credit_ledger`) cobre tanto o "limite" do Starter quanto o "ilimitado sujeito a fair use" do Pro/Business.
+
+**O que mudou nos documentos:**
+
+- **`docs/architecture.md`:** nova §12 — módulo de Billing (Mercado Pago: Preapproval para assinaturas, Checkout Pro para créditos avulsos; portão de crédito obrigatório antes de qualquer sessão do Intelligence Hub, enforçado na Server Action, nunca dentro do Core Engine; idempotência de webhook via `credit_ledger.external_payment_id` único, sem tabela nova de eventos). Novos itens 10-11 em §10 (cobrança por marca extra, tratamento de downgrade/cancelamento — este último com proposta pendente de confirmação: créditos já concedidos no ciclo corrente não são revogados retroativamente).
+- **`docs/database.md`:** §7 finalizada — `subscriptions`/`credit_ledger` com colunas ajustadas (`related_intelligence_hub_session_id` no lugar de `related_content_piece_id`, que não existe; `external_payment_id` único); `credit_pricing` com chave `trigger_reason` + `tier` (não `capability` + `tier` — `campaign_strategy` e `trend_ranking` usam a mesma capability `llm` mas custam diferente) e seed concreto; nova tabela `credit_packages` (catálogo de créditos avulsos, dado não hardcoded). §8 (RLS) ganha notas para as 4 tabelas novas — todas de escrita restrita a service role, nunca o client gravando saldo diretamente.
+- **`PRD.md`:** §8 finalizada com a tabela de planos completa; resolve o item 5 de §13 (decisão em aberto desde a revisão 2). Mercado Pago adicionado à stack (§10).
+- **`docs/flows.md`:** Fluxo 6 finalizado (checagem antes/cobrança só após sucesso, nunca após falha); novo Fluxo 12 (assinatura e compra de créditos via Mercado Pago), deixando explícito que o webhook — não o redirect do navegador de volta à aplicação — é a fonte de verdade do pagamento.
+- **`docs/ux-design.md`:** CFG-2/CFG-4 detalhadas com os estados reais do Mercado Pago; estado global "Créditos insuficientes" ampliado para cobrir também assinatura inativa.
+
+**Decisão pendente de confirmação (não bloqueia o início do código, mas precisa de resposta antes de implementar cancelamento):** tratamento de créditos já concedidos ao trocar de plano ou cancelar no meio do ciclo (architecture.md §10, item 11).
+
+**Próximo passo:** aguardando aprovação explícita do dono do produto para iniciar a implementação de código da Missão 6.
+
+---
+
 ## v2.2 (revisão 19) — 2026-08-03 — Missão 5 implementada e validada (O que está em Alta / Trend Engine)
 
 **Status:** implementado e validado com Supabase + Anthropic reais — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2, 3 e 4).

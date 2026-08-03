@@ -1,6 +1,7 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** v1.0 (revisão 17 — Missão 5 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 18 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
+> **Mudança desta revisão (18 — preparação Missão 6, Billing):** nova §12 — módulo de Billing dedicado (não Provider Layer, não Core Engine), integração com Mercado Pago (Preapproval para assinaturas, Checkout Pro para créditos avulsos), portão de crédito obrigatório antes de qualquer sessão do Intelligence Hub, idempotência de webhook via `credit_ledger.external_payment_id` único. Preço em créditos concentrado no Asset Engine futuro, não no Intelligence Hub (decisão de produto explícita). Planos com números concretos (§12.5), resolvendo PRD §13 item 5. Novos itens 10-11 em §10. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (17 — Missão 5 implementada e validada):** Trend Engine (§3.3) implementado e validado com Supabase + Anthropic reais — adapter `AnthropicWebSearchTrendSourceProvider` (busca web nativa, `web_search_20250305`), `TrendResearchRepository`, painel de especialistas (Marketing + Branding, ampliados via `applies_to`) + Coordinator generalizado, telas TREND-1/TREND-2, handoff para "Criar Campanha" com tema pré-preenchido. Ver [docs/changelog.md](changelog.md) para o relato completo da validação, incluindo dois bugs encontrados e corrigidos (formato de saída do Coordinator não declarado nas mensagens de usuário; sessão do Intelligence Hub não marcada como `failed` quando a descoberta falhava depois de criada).
 > **Mudança desta revisão (16 — achado durante a implementação da Missão 5):** §4.1 (Specialist Registry) ganha nota sobre o Coordinator — encontrado durante a implementação que seu `system_prompt` (Missão 3) fixava um formato de saída JSON específico de `campaign_strategy`, incompatível com o único Coordinator global também precisar atender `trend_ranking`. **Parado e reportado ao dono do produto antes de qualquer mudança** (regra explícita da Missão 5); aprovada a generalização: comportamento do Coordinator idêntico, formato de saída passa a ser definido pela tarefa que o invoca, nunca mais fixo no `system_prompt`. Um único Coordinator no registry, sem mudança de schema (migration `0007_coordinator_decision_agnostic.sql`). Ver [docs/prompts/coordinator.md](prompts/coordinator.md) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (15 — preparação e aprovação da Missão 5, Trend Engine):** §3.3 (Trend Engine) resolvida: Trend Source Provider do MVP é a busca web nativa da API da Anthropic, sempre atrás do Provider Gateway (contrato `trend_source`, Trend Engine nunca conhece o fornecedor concreto — troca futura por Google Trends/SerpAPI/Exploding Topics/Glimpse/Similarweb é só um novo adapter); nova regra inegociável de que nenhuma tendência entra em estratégia sem passar pelo Intelligence Hub; Fluxo 2 confirmado como Server Action direta, sem n8n. §8 (Papel do n8n) reescrita para refletir que n8n segue não implementado, reservado para quando surgir necessidade real de orquestração assíncrona (Asset Engine é o candidato mais provável). §10, itens 8 e 9, marcados como resolvidos. Aprovado pelo dono do produto. Ver [docs/changelog.md](changelog.md) para o detalhamento completo.
@@ -325,6 +326,8 @@ Criados desde a Sprint 1 (sem upload ainda — preparam o terreno para as funcio
 7. ~~**Seed inicial do Specialist Registry (§4.1):** implementado na Missão 3 [...] revisão do dono do produto sobre o conteúdo exato de cada `system_prompt` pendente.~~ **Resolvido (revisão 13):** os 4 `system_prompt`s (`marketing_strategy`, `branding`, `copywriting`, `coordinator`) passaram por validação qualitativa real (Supabase + Anthropic reais, múltiplos objetivos de campanha incluindo um caso desenhado para forçar divergência) e foram aprovados pelo dono do produto. Um problema de truncamento no prompt de Branding foi corrigido (migration `0005`). Documentação individual de cada especialista em [`docs/prompts/`](prompts/).
 8. ~~**Trend Source Provider do MVP.**~~ **Resolvido (revisão 15):** busca web nativa da API da Anthropic, como adapter de `trend_source` atrás do Provider Gateway — ver §3.3.
 9. ~~**n8n no Fluxo 2.**~~ **Resolvido (revisão 15):** Fluxo 2 é Server Action direta, sem n8n — ver §3.3 e §8.
+10. **(★ novo, Missão 6) Cobrança incremental por marca extra no Business:** hoje até 5 marcas inclusas, sem custo adicional por marca a mais. Se/quando surgir demanda real por mais de 5 marcas numa organização, decidir se isso vira upgrade de plano, add-on pago por marca, ou limite rígido. Não bloqueia o MVP.
+11. **(★ novo, Missão 6) Downgrade/cancelamento de assinatura:** o que acontece com créditos já concedidos (`grant_plan`) quando o cliente troca para um plano menor no meio do ciclo, ou cancela? Proposta razoável (pendente de confirmação): créditos já concedidos não são revogados retroativamente (o cliente já "pagou" por eles no ciclo corrente), a mudança de plano só afeta o próximo ciclo.
 
 > Estas decisões devem ser resolvidas e refletidas aqui antes da implementação dos módulos correspondentes.
 
@@ -342,3 +345,54 @@ Registrado na revisão 13 como decisão de arquitetura para uma evolução futur
 - Tool Registry (futuro): resolveria **o que um especialista pode fazer** além de raciocinar sobre texto (quais ferramentas invocar).
 
 **Explicitamente fora de escopo agora:** nenhuma tabela, nenhum código, nenhuma integração com tool use da API da Anthropic. Esta seção existe só para registrar a arquitetura-alvo antes que a necessidade apareça organicamente numa missão futura (provavelmente Trend Engine ou Asset Engine, que são os candidatos mais óbvios a precisarem de ferramentas externas de verdade — busca de tendências, geração de mídia).
+
+## 12. Billing (Módulo dedicado) ★ novo (Missão 6)
+
+**Por que não é uma capability do Provider Layer:** todo capability do Provider Layer (§5) existe para esconder um fornecedor de IA/mídia atrás de um contrato genérico e trocável, porque o cliente nunca deveria saber ou se importar com qual fornecedor está por trás. Um gateway de pagamento é fundamentalmente diferente: checkout, webhooks, ciclo de vida de assinatura e mensagens de erro são específicos do fornecedor (Mercado Pago), e fingir um contrato genérico agora, para um cenário de troca de gateway de pagamento que é raro e caro de fazer bem, adicionaria abstração sem benefício real hoje. Decisão explícita do dono do produto (Missão 6): módulo de Billing dedicado, isolado o suficiente para ser substituído no futuro sem reescrever o resto do produto, mas não modelado como Provider Layer.
+
+**Por que também não é um Core Engine:** Core Engines (§3) concentram lógica de **produto** orientada por IA (Brand Brain, Trend Engine, Intelligence Hub, Asset Engine, Learning Engine, Knowledge Base). Billing é infraestrutura de comércio — controla acesso e cobra pelo uso dos Core Engines, mas não é, em si, um mecanismo de raciocínio de IA.
+
+### 12.1 Responsabilidade
+
+- Gerenciar o ciclo de vida da assinatura (`subscriptions`) — criar, sincronizar status com o Mercado Pago, cancelar.
+- Manter o saldo de créditos da organização (`credit_ledger`) — lançamentos de concessão mensal (`grant_plan`), compra avulsa (`purchase`), consumo (`consumption`) e ajuste manual (`adjustment`).
+- **Portão de crédito obrigatório:** antes de qualquer sessão do Intelligence Hub (hoje: `campaign_strategy` e `trend_ranking` — os únicos geradores de custo real que existem; `Asset Engine`, quando implementado, se torna o principal ponto de consumo, ver §12.4), checar se a organização tem assinatura ativa **e** saldo suficiente para o custo em créditos daquela operação (`credit_pricing`). Sem os dois, a operação é bloqueada antes de qualquer chamada à Provider Layer — nunca depois, para não desperdiçar uma chamada de LLM que o cliente não vai poder pagar.
+- Processar pagamentos avulsos de créditos (Checkout Pro) e assinaturas recorrentes (Preapproval) via Mercado Pago.
+
+### 12.2 Integração com o Mercado Pago
+
+Dois produtos do Mercado Pago, para dois fluxos diferentes:
+
+- **Assinatura de plano (Starter/Pro/Business) → [Preapproval](https://www.mercadopago.com.br) (assinatura recorrente).** `subscriptions.billing_provider_ref` guarda o `preapproval_id`. Mudanças de status (autorizada, pausada, cancelada, pagamento falhou) chegam via webhook e atualizam `subscriptions.status`.
+- **Compra avulsa de créditos → Checkout Pro (pagamento único).** Cliente escolhe um pacote (`credit_packages`), é redirecionado ao checkout do Mercado Pago, e a confirmação chega via webhook — nunca por redirect de volta ao navegador (o cliente pode fechar a aba antes de voltar; o webhook é a única fonte de verdade).
+
+**Webhooks:** endpoint dedicado (`apps/web/app/api/webhooks/mercado-pago/route.ts`), autenticado validando a assinatura enviada pelo Mercado Pago no header (`x-signature`) contra o webhook secret — mesmo princípio de segredo compartilhado já usado para webhooks de n8n (§9.1), nunca confiando no payload sem validar a origem.
+
+**Idempotência:** notificações de webhook podem ser reentregues pelo Mercado Pago. Em vez de uma tabela nova de eventos, `credit_ledger.external_payment_id` (nullable, **unique**) guarda o id do pagamento do Mercado Pago em lançamentos `purchase` — uma segunda entrega do mesmo webhook tenta inserir a mesma `external_payment_id` e falha por constraint, sem duplicar crédito. Atualizações de status de assinatura são idempotentes por natureza (um `UPDATE` do mesmo status não causa efeito colateral).
+
+**Segredos:** `MERCADO_PAGO_ACCESS_TOKEN` (server-side, nunca exposto ao client) e `MERCADO_PAGO_WEBHOOK_SECRET` como variáveis de ambiente, mesmo padrão de `ANTHROPIC_API_KEY` — nunca lidos fora do módulo de Billing.
+
+### 12.3 Onde o portão de crédito é verificado
+
+Mesma camada onde hoje já vive a checagem de papel (`hasMinimumRole`) — a Server Action, antes de chamar o Core Engine. `createCampaignStrategyAction` e `runTrendDiscoveryAction` passam a checar `ensureSufficientCredits(organizationId, triggerReason, tier)` antes de acionar `runCampaignStrategySession`/`runTrendDiscovery`, e registrar `recordConsumption` depois de uma sessão concluída com sucesso (nunca antes — uma sessão que falha não deve cobrar o cliente). Nenhum Core Engine conhece `credit_ledger` diretamente — a checagem e o débito ficam na borda (Server Action), não dentro do Intelligence Hub, mantendo a mesma separação de responsabilidades já usada em todo o resto do produto (Tela → Server Action → Repository).
+
+### 12.4 Preço em créditos por operação (`credit_pricing`)
+
+Custo deliberadamente baixo no Intelligence Hub (raciocínio) e concentrado no Asset Engine (geração de mídia — carrossel, vídeo, avatar, imagem), quando implementado — decisão de produto explícita (Missão 6): incentivar uso intenso do "cérebro" da plataforma, cobrar principalmente pelo que tem custo computacional real.
+
+| `trigger_reason` | Econômico | Balanceado | Premium |
+|---|---|---|---|
+| `trend_ranking` | 1 | 2 | 4 |
+| `campaign_strategy` | 5 | 10 | 20 |
+
+Preço por `trigger_reason` + `tier`, não só por `capability` — `campaign_strategy` e `trend_ranking` usam a mesma capability (`llm`) mas custam diferente, porque o custo real (nº de especialistas acionados, tamanho do contexto) é diferente. Ver [database.md §7.3](database.md#73-credit_pricing).
+
+### 12.5 Planos
+
+| Plano | Marcas inclusas | Tier incluso | Créditos/mês (`grant_plan`) |
+|---|---|---|---|
+| Starter | 1 | Econômico | 100 |
+| Pro | 1 | Balanceado | 500 |
+| Business | até 5 | Premium | 1.500 |
+
+Sem contador de cota separado — a "cota mensal" de cada plano **é** o tamanho do `grant_plan` de créditos lançado no início de cada ciclo (Fluxo 6, passo 4). Um único mecanismo (`credit_ledger`) cobre tanto o limite do Starter quanto o "ilimitado sujeito a fair use" do Pro/Business (PRD §8) — a diferença entre os planos é só o tamanho do grant e o tier incluso, nunca um sistema de contagem paralelo. Resolve PRD §13, item 5. Sem cobrança incremental por marca extra no Business por enquanto — decisão futura se surgir necessidade real (§10, item 10 abaixo).

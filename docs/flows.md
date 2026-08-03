@@ -1,7 +1,8 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 16 — Fluxo 2 implementado e validado) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 17 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (17 — preparação Missão 6, Billing):** Fluxo 6 finalizado com o portão de crédito de verdade (checagem antes, cobrança só após sucesso, nunca depois de falha) e valores concretos de plano/preço. Novo Fluxo 12 — assinatura de plano e compra de créditos avulsos via Mercado Pago (Preapproval + Checkout Pro), incluindo o tratamento explícito de que o webhook, não o redirect do navegador, é a fonte de verdade.
 > **Mudança desta revisão (16 — Missão 5 implementada e validada):** Fluxo 2 confirmado em produção — Server Action direta (sem n8n), Trend Source Provider resolvido via Provider Gateway, candidatos sempre passando pelo Intelligence Hub antes de chegar à tela. Validado com Supabase + Anthropic reais.
 > **Mudança desta revisão (15 — aprovação da Missão 5, Trend Engine):** Fluxo 2 revisado e aprovado — Server Action direta, sem n8n (passo 2), Trend Source Provider resolvido via Provider Gateway sem o Trend Engine conhecer o fornecedor concreto (passo 3), e nova regra inegociável de que nenhuma tendência é exibida ao usuário sem passar pelo Intelligence Hub (passo 4). Ver [architecture.md §3.3/§8](architecture.md#33-trend-engine) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (14 — Missão 4 implementada):** Fluxo 11 implementado e validado em produção — upload de PDF/DOCX/TXT (extração síncrona confirmada) e nota manual, ambos passando por `knowledge_base_items`. Retrieval por recência + tags confirmado como decisão final (não mais pendente).
@@ -97,15 +98,32 @@ Disparado por campanha em `generating`. Para cada formato previsto na estratégi
 
 Mantido apenas como referência de arquitetura futura (ver [database.md §6](database.md#6-publicação-fora-do-mvp) e [architecture.md §7](architecture.md#7-publicação-fora-do-mvp)): conexão de canais (`publishing_channels`), publicação agendada via n8n (`publications`). **Não faz parte do MVP e não deve ser implementado nesta fase.**
 
-## Fluxo 6 — Consumo de Créditos e Billing
+## Fluxo 6 — Consumo de Créditos e Billing ★ implementado na Missão 6
 
 > **Isenção esclarecida na revisão técnica pré-Missão 2:** a conversa "Conheça sua empresa" (Fluxo 1, Brand Brain via LLM Provider) **não** consome créditos nem é bloqueada por saldo insuficiente — ela não gera um ativo monetizável (peça de conteúdo/campanha), é a etapa que faz o cliente conhecer o produto antes de qualquer geração paga. Consumo de crédito começa no Fluxo 2 (Intelligence Hub) em diante.
 
-1. Antes de qualquer chamada à Provider Layer com custo variável **de geração de conteúdo ou estratégia** (Intelligence Hub, Asset Engine), calcula-se o custo em créditos (`credit_pricing`, por `capability` + `tier` — nunca por fornecedor, que é invisível ao cliente) e checa-se saldo em `credit_ledger`.
-2. Se saldo insuficiente: usuário é bloqueado com opção de comprar créditos avulsos.
-3. Se suficiente: job disparado; ao concluir, lançamento `consumption` gravado vinculado à `content_versions` (ou à sessão do Intelligence Hub, para o custo do painel de especialistas).
-4. Renovação de cota mensal gera lançamento `grant_plan` no início de cada ciclo.
-5. Painel de uso exibe saldo e histórico por marca/campanha, discriminado por tier (nunca por fornecedor).
+1. Antes de qualquer sessão do Intelligence Hub (hoje: `campaign_strategy`, Fluxo 10; `trend_ranking`, Fluxo 2 — os únicos geradores de custo real até o Asset Engine existir), a Server Action chama o portão de crédito: checa se `subscriptions.status = active` **e** se o saldo (`SUM(credit_ledger.amount)` da organização) é suficiente para o custo daquela operação (`credit_pricing`, por `trigger_reason` + `tier` — nunca por fornecedor, que é invisível ao cliente). Ver [architecture.md §12.3](architecture.md#123-onde-o-portão-de-crédito-é-verificado).
+2. Se assinatura inativa ou saldo insuficiente: operação é bloqueada **antes** de qualquer chamada à Provider Layer (nunca depois — não desperdiça uma chamada de LLM que o cliente não pode pagar), com mensagem direta e CTA para CFG-2 (reativar assinatura) ou CFG-4 (comprar créditos), sem perder o contexto do que o usuário estava fazendo (objetivo de campanha digitado, por exemplo).
+3. Se suficiente: sessão roda normalmente; **só ao concluir com sucesso**, lançamento `consumption` (`amount` negativo) é gravado em `credit_ledger`, vinculado à `intelligence_hub_sessions` via `related_intelligence_hub_session_id`. Uma sessão que falha (Fluxo 10, passo 7 — falha total do painel) **não gera cobrança**.
+4. Renovação de cota mensal gera lançamento `grant_plan` no início de cada ciclo (`current_period_start`/`current_period_end` de `subscriptions`), no valor fixo do plano (Starter 100 / Pro 500 / Business 1.500 — PRD §8).
+5. Painel de uso (CFG-4) exibe saldo atual e histórico de `credit_ledger` por organização, discriminado por tipo de lançamento e tier (nunca por fornecedor).
+
+## Fluxo 12 — Assinatura e Compra de Créditos (Mercado Pago) ★ novo, Missão 6
+
+**Assinar/trocar de plano (CFG-2):**
+1. Usuário escolhe um plano (Starter/Pro/Business) em CFG-2.
+2. Sistema cria uma assinatura recorrente no Mercado Pago (Preapproval) e redireciona o usuário ao checkout do Mercado Pago.
+3. Usuário completa o pagamento no Mercado Pago (fora da aplicação).
+4. Mercado Pago envia webhook de confirmação (`preapproval` autorizada) → sistema cria/atualiza `subscriptions` (`plan`, `status = active`, `billing_provider_ref = preapproval_id`, período atual) e lança o `grant_plan` do primeiro ciclo em `credit_ledger`.
+5. Usuário é redirecionado de volta à aplicação (CFG-2) — a tela reflete o novo plano **assim que o webhook processar**, não no momento do redirect (o redirect do navegador não é a fonte de verdade, só uma conveniência de UX; ver [architecture.md §12.2](architecture.md#122-integração-com-o-mercado-pago)). Enquanto o webhook não chega, CFG-2 mostra estado "processando pagamento".
+6. Falha ou cancelamento do pagamento: webhook correspondente marca `subscriptions.status` como `past_due`/`canceled`; usuário vê mensagem clara em CFG-2, sem acesso bloqueado retroativo a créditos já concedidos em ciclos anteriores.
+
+**Comprar créditos avulsos (CFG-4):**
+1. Usuário escolhe um pacote de `credit_packages` em CFG-4.
+2. Sistema cria um pagamento único no Mercado Pago (Checkout Pro) e redireciona o usuário ao checkout.
+3. Usuário completa o pagamento.
+4. Mercado Pago envia webhook de confirmação → sistema lança `purchase` em `credit_ledger` (`amount` = créditos do pacote, `external_payment_id` = id do pagamento, garantindo que uma reentrega do mesmo webhook não duplique o crédito).
+5. Usuário é redirecionado de volta a CFG-4 — saldo atualizado assim que o webhook processar.
 
 ## Fluxo 7 — Gestão de Marcas e Times (Plano Business)
 

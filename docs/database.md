@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 15 — Missão 5 implementada e validada) — **aprovado, fonte oficial da verdade para a implementação**
+> **Status:** v1.0 (revisão 16 — preparação doc-first da Missão 6, Billing) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (16 — preparação Missão 6, Billing):** §7 (Billing) finalizada — `subscriptions`/`credit_ledger` com colunas ajustadas (`related_intelligence_hub_session_id` no lugar de `related_content_piece_id`, que não existe; `external_payment_id` único para idempotência de webhook); `credit_pricing` com chave `trigger_reason` + `tier` e seed concreto; nova tabela `credit_packages` (catálogo de créditos avulsos). §8 ganha notas de RLS para as 4 tabelas de billing. §10, item 1, resolvido.
 > **Mudança desta revisão (15 — Missão 5 implementada):** `trend_research` (§4.3) criada por `0006_trend_engine.sql` — schema idêntico ao já especificado desde a revisão 2, sem mudança de colunas; `provider_key`/`summary` documentados como nullable (preenchidos só na conclusão). `campaigns.trend_research_id` ganha FK real. Novo capability `trend_source` em `provider_configs`. `specialists.applies_to` de `marketing_strategy`/`branding` amplia para incluir `trend_ranking` (migration `0006`); `system_prompt` do Coordinator generalizado para ser independente de tipo de decisão (migration `0007_coordinator_decision_agnostic.sql` — achado durante a implementação, ver [docs/changelog.md](changelog.md)).
 > **Mudança desta revisão (14 — Missão 4 implementada):** `knowledge_base_items` validada em produção com upload real de PDF/DOCX/TXT e nota manual — nenhuma migration nova foi necessária, confirmando a previsão da revisão 13. `content_text`/`storage_path`/`tags` todos populados corretamente pelos três tipos de arquivo testados.
 > **Mudança desta revisão (13 — preparação da Missão 4):** nota de `knowledge_base_items.embedding` (§4.2) atualizada — recomendação é adiar `pgvector`, MVP da Knowledge Base usa retrieval por recência + tags. Nenhuma mudança de schema necessária para a Missão 4: a tabela já existe desde a Missão 2.
@@ -37,7 +38,9 @@ campaigns     1───1 content_packages (quando concluída)
 content_pieces 1───N content_versions
 content_pieces 1───N pipeline_runs
 organizations 1───1 subscriptions
-organizations 1───N credit_ledger
+organizations 1───N credit_ledger ──1 intelligence_hub_sessions (consumption, nullable)
+(global)      credit_pricing (por trigger_reason + tier — sem organization_id)
+(global)      credit_packages (catálogo de pacotes avulsos — sem organization_id)
 brands        1───N publishing_channels (fora do MVP)
 content_pieces N───N publishing_channels via publications (fora do MVP)
 ```
@@ -395,35 +398,72 @@ Mantidas no modelo para evolução futura — **nenhum fluxo do MVP as utiliza**
 | status | enum(`scheduled`,`published`,`failed`) | |
 | external_post_id | text (nullable) | |
 
-## 7. Billing
+## 7. Billing ★ implementada na Missão 6 (integração: Mercado Pago — [architecture.md §12](architecture.md#12-billing-módulo-dedicado-★-novo-missão-6))
 
 ### 7.1 `subscriptions`
+
+Uma linha por organização — billing é sempre no nível da organização, nunca por marca (Fluxo 7, passo 3: marcas de uma mesma organização compartilham o billing).
 
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | organization_id | uuid FK → organizations (unique) | |
 | plan | enum(`starter`,`pro`,`business`) | |
-| status | enum(`active`,`past_due`,`canceled`) | |
+| status | enum(`active`,`past_due`,`canceled`) | sincronizado via webhook do Mercado Pago (Preapproval) |
 | current_period_start | timestamptz | |
 | current_period_end | timestamptz | |
-| billing_provider_ref | text | |
+| billing_provider_ref | text (nullable) | `preapproval_id` do Mercado Pago — nullable até a primeira assinatura ser criada |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
 
 ### 7.2 `credit_ledger`
+
+Livro-razão append-only — saldo é sempre `SUM(amount)` por `organization_id`, nunca uma coluna de saldo cacheada (evita divergência entre saldo e histórico).
 
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | organization_id | uuid FK → organizations | |
 | type | enum(`grant_plan`,`purchase`,`consumption`,`adjustment`) | |
-| amount | integer | |
-| related_content_piece_id | uuid FK → content_pieces (nullable) | |
+| amount | integer | positivo em `grant_plan`/`purchase`, negativo em `consumption`; `adjustment` pode ser qualquer sinal |
+| related_intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | substitui o antigo `related_content_piece_id` — `content_pieces` não existe ainda (Asset Engine não implementado); todo `consumption` até aqui vem de uma sessão do Intelligence Hub. Passa a incluir `content_pieces`/`content_versions` quando o Asset Engine for implementado (nova coluna nesse momento, não reaproveitar esta) |
+| external_payment_id | text (nullable, **unique**) | id do pagamento do Mercado Pago em lançamentos `purchase` — garante idempotência de webhook (arch. §12.2): uma segunda entrega do mesmo evento falha por constraint em vez de duplicar crédito |
 | description | text | |
+| created_by | uuid FK → auth.users (nullable) | nulo em lançamentos automáticos (`grant_plan`, `consumption`, webhook de `purchase`); preenchido só em `adjustment` manual feito por um admin |
 | created_at | timestamptz | |
 
-### 7.3 `credit_pricing` (a desenhar em detalhe — ver decisões em aberto)
+### 7.3 `credit_pricing`
 
-Conversão de custo em créditos por `capability` + `tier` (não por fornecedor, já que o fornecedor é escondido do cliente).
+Preço em créditos por tipo de operação — chave é `trigger_reason` (mesmo valor usado em `intelligence_hub_sessions.trigger_reason`) + `tier`, não `capability` + `tier`: `campaign_strategy` e `trend_ranking` usam a mesma capability (`llm`) mas custam diferente, porque o custo real (nº de especialistas acionados, tamanho do contexto) é diferente. Sem policy de RLS para usuário final — mesmo padrão de `provider_configs`/`specialists`, lido só via service role pela checagem de crédito.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| trigger_reason | text | ex.: `campaign_strategy`, `trend_ranking` — novos tipos de operação (Asset Engine) entram como novas linhas, nunca mudança de código |
+| tier | enum(`economico`,`balanceado`,`premium`) | |
+| credits | integer | |
+| status | enum(`active`,`inactive`) | |
+| updated_at | timestamptz | |
+
+**Seed inicial (Missão 6, decisão de produto — arch. §12.4):**
+
+| trigger_reason | economico | balanceado | premium |
+|---|---|---|---|
+| `trend_ranking` | 1 | 2 | 4 |
+| `campaign_strategy` | 5 | 10 | 20 |
+
+### 7.4 `credit_packages` ★ novo (Missão 6)
+
+Catálogo de pacotes de créditos avulsos disponíveis para compra via Checkout Pro — dado, não hardcoded no código, mesmo raciocínio de `provider_configs`/`specialists`: mudar o catálogo é uma mudança de linha, nunca de código. Sem `organization_id` (catálogo global, mesmo para todos os clientes). Sem policy de RLS para usuário final na escrita — leitura pública (`authenticated`) para popular CFG-4.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| name | text | ex.: "Pacote Pequeno" |
+| credits | integer | |
+| price_cents | integer | preço em centavos (BRL) |
+| status | enum(`active`,`inactive`) | pacotes descontinuados ficam `inactive`, nunca são apagados (histórico de compras referenciando o pacote continua válido) |
+| created_at | timestamptz | |
 
 ## 8. Multi-tenancy e RLS
 
@@ -435,6 +475,8 @@ Conversão de custo em créditos por `capability` + `tier` (não por fornecedor,
 - `user_profiles`: select/update restritos ao próprio `user_id` (`auth.uid() = user_id`).
 - `audit_logs`: select restrito a `admin`/`owner` da `organization_id`; insert só via service role (Repository, nunca client).
 - `feature_flags`: select liberado a qualquer usuário autenticado (tabela global, sem dado sensível); insert/update/delete só via service role.
+- `subscriptions`/`credit_ledger` (Missão 6): select restrito a membros da organização (CFG-2/CFG-4 precisam ler); insert/update **só via service role** — nunca o client grava diretamente (grants/consumo vêm do portão de crédito no Server Action, compras/mudanças de assinatura vêm de webhook do Mercado Pago, ambos rodando com service role). Nenhum usuário, nem admin, altera saldo diretamente pela aplicação.
+- `credit_pricing`/`credit_packages` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço deve ser visível, ex. CFG-4 mostrando quanto custa cada geração), insert/update/delete só via service role.
 
 ## 9. Plataforma — Auditoria e Feature Flags ★ novo (revisão 5)
 
@@ -468,7 +510,7 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 
 ## 10. Decisões em Aberto (banco de dados)
 
-1. `credit_pricing`: desenhar tabela de conversão custo→crédito por `capability` + `tier`, alinhada à decisão de produto PRD §13.2/§8.1.
+1. ~~`credit_pricing`: desenhar tabela de conversão custo→crédito por `capability` + `tier`.~~ **Resolvido (Missão 6):** chave é `trigger_reason` + `tier` (não `capability` + `tier` — ver §7.3), com valores seedados (`trend_ranking` 1/2/4, `campaign_strategy` 5/10/20 por tier).
 2. Estrutura exata de `visual_guidelines`, `specialist_opinions.opinion`, `intelligence_hub_sessions.consolidated_result` e `learning_insights.summary` (jsonb) — fixar após prototipagem dos prompts de cada Core Engine. **Já decidido (revisão 7):** `specialist_opinions.opinion` e `intelligence_hub_sessions.consolidated_result` incluem obrigatoriamente uma chave `rationale`; o restante da estrutura permanece em aberto.
 3. Confirmar uso de `pgvector` para `knowledge_base_items.embedding`.
 4. `provider_configs.specialist_id`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.

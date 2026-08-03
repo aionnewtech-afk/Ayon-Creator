@@ -1,7 +1,8 @@
 # PRD — Ayon Creator
 
-> **Status do documento:** v1.0 (revisão 13 — Missão 5 implementada e validada) — **filosofia de produto aprovada e consolidada; documento liberado como fonte oficial da verdade para o início da implementação de código**. Decisões residuais não relacionadas à filosofia seguem listadas em §13 e podem ser resolvidas durante o desenvolvimento, conforme necessidade.
+> **Status do documento:** v1.0 (revisão 14 — preparação doc-first da Missão 6, Billing) — **filosofia de produto aprovada e consolidada; documento liberado como fonte oficial da verdade para o início da implementação de código**. Decisões residuais não relacionadas à filosofia seguem listadas em §13 e podem ser resolvidas durante o desenvolvimento, conforme necessidade.
 > **Última atualização:** 2026-08-03
+> **Mudança da revisão 14 (preparação Missão 6, Billing):** §8 finalizada com números concretos por plano (marcas, tier incluso, créditos/mês) — resolve §13 item 5. Mercado Pago adicionado à stack (§10) como módulo de Billing dedicado, não Provider Layer. Sem mudança de filosofia/escopo de produto. Ver [docs/changelog.md](docs/changelog.md).
 > **Mudança da revisão 13:** Missão 5 — Trend Engine — implementada e validada com Supabase + Anthropic reais. Ver [CHANGELOG.md](CHANGELOG.md) `[0.5.0]`.
 > **Mudança da revisão 12:** Missão 5 — Trend Engine ("O que está em alta") — aprovada para início de código. Sem mudança de escopo/filosofia de produto. Duas decisões técnicas resolvidas em [architecture.md §3.3/§10](docs/architecture.md#33-trend-engine): Trend Source Provider do MVP = busca web nativa da Anthropic, sempre atrás do Provider Gateway (nunca acoplado ao Trend Engine); Fluxo 2 sem n8n, mesmo padrão das Missões 2–4. Nova regra inegociável: nenhuma tendência entra em estratégia sem passar pelo Intelligence Hub. Ver [docs/changelog.md](docs/changelog.md).
 > **Mudança da revisão 11:** Missão 4 — "Ensine sua Empresa para a IA" (Knowledge Base) — implementada e validada com Supabase real (upload de PDF/DOCX/TXT, nota manual, edição de tags, remoção). Fecha formalmente o ciclo doc-first já refletido em `architecture.md`/`database.md`/`flows.md`/`ux-design.md` (revisão 14) e em `docs/changelog.md` (v1.8), que este documento não acompanhava até agora. Sem mudança de escopo de produto. Ver [CHANGELOG.md](CHANGELOG.md) `[0.4.0]`.
@@ -171,15 +172,17 @@ Exemplos de nicho: agências de viagem, imobiliárias, clínicas, personal train
 
 ## 8. Modelo de Negócio
 
-SaaS por assinatura, com 3 planos + créditos avulsos.
+SaaS por assinatura, com 3 planos + créditos avulsos. Processamento de pagamento via **Mercado Pago** (assinatura recorrente para os planos, pagamento avulso para créditos extras — [architecture.md §12](docs/architecture.md#12-billing-módulo-dedicado-★-novo-missão-6)).
 
-| Plano | Público | Inclui |
-|---|---|---|
-| **Starter** | Pequenos negócios testando o produto | Geração de conteúdo limitada (cota mensal), 1 marca |
-| **Pro** | Negócios com produção recorrente | Conteúdo ilimitado*, todos os formatos, tier de provedor "Balanceado" incluso |
-| **Business** | Múltiplos clientes/marcas | Múltiplas marcas, times/permissões, tier de provedor "Premium" incluso |
+| Plano | Público | Marcas inclusas | Tier incluso | Créditos/mês |
+|---|---|---|---|---|
+| **Starter** | Pequenos negócios testando o produto | 1 | Econômico | 100 |
+| **Pro** | Negócios com produção recorrente | 1 | Balanceado | 500 |
+| **Business** | Múltiplos clientes/marcas | até 5 | Premium | 1.500 |
 
-`*` "Ilimitado" sujeito a fair use e a consumo de créditos.
+`*` "Ilimitado" (revisões anteriores) reformulado nesta revisão: não existe um contador de cota separado — o limite de uso de cada plano **é** a quantidade de créditos concedida por mês (`grant_plan`, [database.md §7.2](docs/database.md#72-credit_ledger)). Sem cobrança incremental por marca extra no Business por enquanto — decisão futura se surgir demanda real ([architecture.md §10, item 10](docs/architecture.md#10-decisões-em-aberto-arquitetura)). Resolve o item 5 de §13.
+
+Custo em créditos deliberadamente baixo no raciocínio estratégico (Intelligence Hub) e concentrado na geração de mídia (Asset Engine, quando implementado) — decisão de produto explícita: incentivar uso intenso do "cérebro" da plataforma, cobrar principalmente pelo que tem custo computacional real. Ver [database.md §7.3](docs/database.md#73-credit_pricing) para os valores.
 
 ### 8.1 Tier de Provedor (não é escolha de fornecedor)
 
@@ -235,6 +238,8 @@ A stack define a fundação técnica (frontend, dados, orquestração) e os forn
 | **Avatar Provider** (fornecedor inicial) | HeyGen |
 | **Voice Provider** (fornecedor inicial) | ElevenLabs |
 | **Media Provider** (fornecedor inicial) | a definir — ver §13.6 |
+| **Trend Source Provider** | Anthropic (busca web nativa) — ver [architecture.md §3.3](docs/architecture.md#33-trend-engine) |
+| **Billing** (Missão 6 — módulo dedicado, não Provider Layer) | Mercado Pago (assinatura recorrente + pagamento avulso) — ver [architecture.md §12](docs/architecture.md#12-billing-módulo-dedicado-★-novo-missão-6) |
 
 Detalhamento de como essas peças se conectam em [docs/architecture.md](docs/architecture.md).
 
@@ -274,7 +279,7 @@ Detalhamento de como essas peças se conectam em [docs/architecture.md](docs/arc
 2. **Mapeamento tier → fornecedor:** que fornecedores concretos compõem cada tier (Econômico/Balanceado/Premium) por capacidade (LLM/Avatar/Voice/Media)? Isso é uma decisão de custo/qualidade a ser fechada antes da implementação da Provider Layer.
 3. **Frequência do Brand Evolution:** a cada quantas aprovações/rejeições uma nova sugestão é gerada? Existe um mínimo de dados antes da primeira sugestão aparecer?
 4. Quais formatos do pacote de conteúdo (§4.3) são gerados sempre, e quais são opcionais/configuráveis por campanha?
-5. Limites numéricos exatos por plano (cota de campanhas, nº de marcas no Starter/Pro).
+5. ~~Limites numéricos exatos por plano (cota de campanhas, nº de marcas no Starter/Pro).~~ **Resolvido (Missão 6):** ver §8 — sem contador de cota separado, o limite é o `grant_plan` de créditos mensal (Starter 100 / Pro 500 / Business 1.500), 1 marca em Starter/Pro, até 5 em Business.
 6. Banco de vídeos públicos licenciados: qual provedor/fonte será integrado como Media Provider inicial?
 7. ~~A conversa inicial de onboarding ("Conheça sua empresa") é síncrona (chat em tempo real) ou pode ser feita em etapas assíncronas (ex: e-mail com perguntas)?~~ **Resolvido (revisão técnica pré-Missão 2):** síncrona — interface de chat em tempo real, com persistência por resposta permitindo pausar/retomar a qualquer momento (nunca por e-mail em etapas). Já especificado em detalhe em [ux-design.md §4.2](docs/ux-design.md#42-conversa-com-o-consultor-onboarding-conversacional) e [architecture.md §6](docs/architecture.md#6-conversa-de-onboarding-arquitetura).
 8. ~~**Persona da Ayon:** ela se apresenta sempre na primeira pessoa sem nome próprio, ou ganha um nome/identidade mais pessoal?~~ **Resolvido (revisão técnica pré-Missão 2):** "Ayon" é o nome da consultora — já usado consistentemente em primeira pessoa em todo exemplo de copy deste documento e de `ux-design.md`. Não é "sem nome": a interface pode e deve se referir a ela como Ayon (ex: cabeçalho da conversa, mensagens).
