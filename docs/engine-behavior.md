@@ -1,6 +1,6 @@
 # Comportamento de IA por Engine — Ayon Creator
 
-> **Status:** v1.0 (revisão 10 — novo documento) — aguardando aprovação
+> **Status:** v1.0 (revisão 11 — item 1 de §8 resolvido) — aprovado
 > **Última atualização:** 2026-08-03
 > **O que este documento é:** o padrão de comportamento esperado de cada Core Engine quando ele efetivamente "fala" (gera texto, opina, sugere, justifica) — tom, princípios de raciocínio, o que é um bom resultado, o que nunca deve acontecer. É a referência para quem escreve um `system_prompt` (seja o da conversa de onboarding, seja um especialista no Specialist Registry, seja o Coordinator).
 > **O que este documento não é:** não substitui o [PRD.md](../PRD.md) (visão de produto, escopo, modelo de negócio), não substitui o [architecture.md](architecture.md) (como os sistemas se conectam), não substitui o [flows.md](flows.md) (sequência de passos) nem o [ux-design.md](ux-design.md) (telas e microinterações). Este documento cobre exclusivamente **comportamento** — o que o texto/decisão gerada por cada Engine deve soar como.
@@ -70,8 +70,8 @@ Todo Engine que gera texto estruturado segue o mesmo padrão de contrato já est
 
 ## 8. Decisões em Aberto
 
-1. O conteúdo exato dos `system_prompt` de cada especialista do Intelligence Hub (o texto em si, não o mecanismo) é definido na implementação da Missão 3 e precisa de aprovação antes de virar seed em produção — ver [architecture.md §10, item 7](architecture.md#10-decisões-em-aberto-arquitetura).
-2. Comportamento de Trend Engine, Asset Engine e Learning Engine descritos aqui ainda não foram validados com IA real (ao contrário do Brand Brain, testado ponta a ponta na Missão 2) — tratar como hipótese de comportamento a confirmar quando cada Engine for implementado, não como padrão já provado.
+1. ~~O conteúdo exato dos `system_prompt` de cada especialista do Intelligence Hub...~~ **Resolvido (revisão 11, refletindo architecture.md §10 item 7 e docs/changelog.md v1.6):** os 4 `system_prompt`s do Specialist Registry passaram por validação qualitativa real (Supabase + Anthropic reais) e foram aprovados pelo dono do produto — documentados individualmente em [docs/prompts/](prompts/).
+2. Comportamento de Trend Engine, Asset Engine e Learning Engine descritos aqui ainda não foram validados com IA real (ao contrário do Brand Brain e do Intelligence Hub, já testados ponta a ponta) — tratar como hipótese de comportamento a confirmar quando cada Engine for implementado, não como padrão já provado.
 
 ## 9. Histórico
 

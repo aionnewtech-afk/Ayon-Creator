@@ -4,9 +4,26 @@
 
 ---
 
+## v1.9 (revisão 16) — 2026-08-03 — Auditoria técnica pré-Missão 5 e fechamento formal da Missão 4
+
+**Status:** aprovado — auditoria completa do repositório (docs, migrations, código) solicitada pelo dono do produto antes de autorizar a Missão 5 (Trend Engine). Encontradas inconsistências entre documentação e código; corrigidas, sem nenhuma mudança de escopo de produto ou arquitetura.
+
+**Inconsistências encontradas e corrigidas:**
+1. `CHANGELOG.md` (raiz) não tinha entrada `[0.4.0]` apesar da Missão 4 estar completa e validada em código — adicionada, espelhando `docs/changelog.md` v1.8.
+2. `README.md` ainda descrevia a Missão 4 como roadmap futuro — atualizado para refletir a Missão 4 como implementada; roadmap a partir daqui passa a ser Trend Engine → Billing → Asset Engine → Learning Engine.
+3. **`PRD.md` nunca havia sido atualizado para a Missão 4** (permanecia na revisão 10, sem nenhuma menção à Missão 4) — violação da própria ordem de atualização exigida pelo README. Corrigido com a revisão 11.
+4. `docs/architecture.md` tinha "Última atualização: 2026-08-02", um dia anterior à própria validação da Missão 4 que o documento já descrevia — corrigido para 2026-08-03.
+5. `docs/engine-behavior.md` listava como "em aberto" (§8, item 1) a aprovação dos `system_prompt`s do Specialist Registry, que `architecture.md` e este changelog (v1.6) já registravam como resolvida desde a revisão 13 — corrigido; documento promovido de "aguardando aprovação" para "aprovado".
+
+**Inconsistências menores identificadas, registradas para resolução futura (fora do escopo desta correção):** seed de `provider_configs` ainda resolve o mesmo modelo para os 3 tiers (ligado à decisão em aberto PRD §13.2); ordem de prioridade dos especialistas (`priority DESC`) não declarada explicitamente em nenhum documento; `docs/flows.md` Fluxo 6 (créditos) não sinaliza que ainda não tem implementação, ao contrário de outras seções do mesmo documento; telas de Configurações (`CFG-1` a `CFG-6`) aprovadas em `ux-design.md` mas não construídas, sem nota disso no documento.
+
+**Próximo passo:** com a documentação realinhada ao código, aguardando aprovação explícita do dono do produto para iniciar o processo doc-first da Missão 5 (Trend Engine) — auditoria → relatório → atualização de PRD/architecture/database/flows/ux-design → changelog → aprovação → código.
+
+---
+
 ## v1.8 (revisão 15) — 2026-08-03 — Missão 4 implementada e validada (Ensine sua Empresa para a IA)
 
-**Status:** implementado e validado com Supabase real — aguardando decisão do dono do produto sobre commit/tag/changelog de release (mesmo processo de fechamento das Missões 2 e 3).
+**Status:** implementado e validado com Supabase real — fechado formalmente com a tag `v0.4.0` (ver revisão 16 acima).
 
 **O que foi implementado:**
 

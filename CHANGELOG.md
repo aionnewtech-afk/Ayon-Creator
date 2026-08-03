@@ -2,6 +2,28 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.4.0] — 2026-08-03
+
+### Adicionado
+
+- **Missão 4 — Ensine sua Empresa para a IA (Knowledge Base)**: ingestão de conhecimento da marca via upload de arquivo (PDF/DOCX/TXT) ou nota manual, com edição de tags e remoção (soft delete).
+  - **`packages/core`**: `extract-document-text.ts` (extração síncrona de texto — `pdf-parse` para PDF, `mammoth` para DOCX, leitura direta para TXT), `knowledge-source-labels.ts` (rótulos em linguagem de negócio); `KnowledgeBaseItemRepository` ganhou `findById`/`update`/`softDelete`.
+  - **Server Actions** (`apps/web/app/(platform)/ensine-sua-empresa/actions.ts`): upload de arquivo, criação de nota manual, edição de tags, remoção — todos restritos a papel `editor+`.
+  - **UI**: telas KB-1 (Biblioteca de Conhecimento), KB-2 (Adicionar Conhecimento), KB-3 (Detalhe/edição/remoção). Item de navegação "Ensine sua Empresa para a IA" passa a `implemented: true`.
+  - **Decisão de arquitetura de módulos**: `extract-document-text.ts` foi excluído do barrel de exports de `@ayon/core` porque `pdf-parse` depende de `fs` e quebrava o bundle de Client Components que importam qualquer coisa do pacote — passou a ser importado por caminho direto, só de onde é realmente usado.
+  - Nenhuma migration nova: reaproveita `knowledge_base_items`, já criada na migration `0002_conheca_sua_empresa.sql` (Missão 2). `embedding`/pgvector permanece adiado (decisão registrada em `docs/database.md`/`docs/architecture.md`) — retrieval no MVP é por recência + tags/source_type.
+
+### Validado durante a validação real (Supabase real — upload de PDF, DOCX e TXT reais, nota manual, edição de tags, remoção)
+
+- Extração de texto correta nos 3 formatos, confirmada lendo `content_text` gravado no banco.
+- Arquivo persistido corretamente no bucket `knowledge-base`, confirmado via listagem do Storage.
+- Erro amigável e específico para tipo de arquivo não suportado (testado com PNG).
+- Edição de tags e remoção (soft delete, `deleted_at` preenchido, linha preservada) confirmadas via leitura direta do banco.
+
+### Observado, não corrigido (fora de escopo da Missão 4)
+
+- **Race condition no Provisionamento Inicial** (`ensureInitialProvisioning`, Sprint 1): checagem "check-then-act" sem lock — duas requisições quase simultâneas do mesmo usuário novo podem criar duas organizations/marcas distintas, ambas com o usuário como owner. Reproduzido ao vivo durante o teste (dois logins de teste próximos no tempo geraram 2 organizations); dados de teste já limpos. Registrado como tarefa isolada para uma missão de manutenção dedicada, para não misturar uma correção de Sprint 1 dentro da tag da Missão 4.
+
 ## [0.3.0] — 2026-08-03
 
 ### Adicionado
