@@ -10,8 +10,20 @@ import { cleanupSmokeBrand, seedSmokeBrand, type SeededSmokeBrand } from "./supp
  * substitui a validação manual com LLM real feita a cada missão.
  *
  * Fluxo: login → objetivo de campanha → aprovar estratégia → 5 peças de
- * texto geradas → upload de mídia própria nas 4 peças visuais → aprovar
- * todas as 9 → pacote montado automaticamente → link de download aparece.
+ * texto geradas → upload de mídia própria nas 3 peças visuais restantes
+ * (Thumbnail/Carrossel/Stories, `own_media`) → aprovar as 8 → confirma que
+ * a peça de vídeo (`licensed_stock_video`, Missão 9) mostra corretamente o
+ * botão "Gerar vídeo automaticamente", sem clicar nele.
+ *
+ * ★ Missão 9 — o pacote final (`content_packages`) exige TODAS as peças
+ * aprovadas, inclusive a de vídeo (Fluxo 4: aprovação humana obrigatória
+ * para toda peça, sem exceção). A peça de vídeo depende de 3 fornecedores
+ * externos reais (ElevenLabs/Pexels/Shotstack) + n8n — nenhum tem
+ * equivalente fake como o `LlmProvider`, então este smoke test determinístico
+ * não tenta gerar o vídeo nem monta o pacote completo; isso é validado
+ * manualmente com os fornecedores reais a cada missão (mesmo princípio já
+ * documentado acima para o texto). Registrado aqui, não escondido — decisão
+ * consciente, não lacuna esquecida.
  * A conversa de onboarding fica fora do escopo (ver support/seed.ts).
  */
 test.describe("smoke: login → campanha → aprovação → pacote", () => {
@@ -56,18 +68,26 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
       await expect(section.getByText("Pronta para revisão").first()).toBeVisible({ timeout: 15_000 });
     }
 
+    // ★ Missão 9 — Vídeo agora é `licensed_stock_video` (geração automática),
+    // não mais `own_media`. Confirma a UI nova (botão "Gerar vídeo
+    // automaticamente") antes de seguir para os 3 uploads restantes.
+    const videoCard = page.locator("section, div").filter({ hasText: "Vídeo" }).first();
+    await expect(videoCard.getByRole("button", { name: "Gerar vídeo automaticamente" })).toBeVisible({
+      timeout: 15_000,
+    });
+
     const fixtureImage = path.join(__dirname, "fixtures", "test-image.png");
     const fileInputs = page.locator('input[type="file"]');
     const uploadCount = await fileInputs.count();
-    expect(uploadCount).toBe(4); // Vídeo, Thumbnail, Carrossel, Stories (own_media)
+    expect(uploadCount).toBe(3); // Thumbnail, Carrossel, Stories (own_media) — Vídeo não usa mais upload manual
     for (let i = 0; i < uploadCount; i++) {
       await fileInputs.nth(i).setInputFiles(fixtureImage);
     }
-    await expect(page.getByText("Arquivo enviado — pronto para revisão.")).toHaveCount(4);
+    await expect(page.getByText("Arquivo enviado — pronto para revisão.")).toHaveCount(3);
 
     const approveButtons = page.getByRole("button", { name: "Aprovar", exact: true });
     const approveCount = await approveButtons.count();
-    expect(approveCount).toBe(9); // 5 peças de texto + 4 own_media
+    expect(approveCount).toBe(8); // 5 peças de texto + 3 own_media (Vídeo fica de fora — ver docstring acima)
 
     // Locators são consultas vivas — reavaliar "primeiro habilitado" em duas
     // etapas (checar .isEnabled() e só depois clicar num índice separado)
@@ -85,7 +105,11 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
       await expect(enabledApprove).toHaveCount(beforeCount - 1, { timeout: 15_000 });
     }
 
-    await expect(page.getByRole("heading", { name: "Pacote pronto" })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole("link", { name: "Baixar pacote (.zip)" })).toBeVisible();
+    // Pacote completo (Fluxo 3.3) exige TODAS as peças aprovadas, inclusive
+    // a de vídeo — que este smoke test deliberadamente não gera (ver
+    // docstring). "Pacote pronto" não é alcançável aqui; a peça de vídeo
+    // segue disponível para gerar, provando que aprovar as outras 8 não a
+    // afeta nem trava a tela.
+    await expect(videoCard.getByRole("button", { name: "Gerar vídeo automaticamente" })).toBeVisible();
   });
 });
