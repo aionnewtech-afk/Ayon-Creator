@@ -77,16 +77,37 @@ export interface RecordConsumptionParams {
   description: string;
 }
 
-/** Débito real — chamado só depois que a operação (sessão do Intelligence Hub ou geração de peça) concluiu com sucesso (Fluxo 6, passo 3). */
+/**
+ * Débito real — chamado só depois que a operação (sessão do Intelligence Hub
+ * ou geração de peça) concluiu com sucesso (Fluxo 6, passo 3).
+ *
+ * ★ Hardening (Missão H1, docs/hardening-plan.md item 1.2/5.4): a checagem
+ * de `ensureSufficientCredits` é otimista (só evita chamar a IA à toa) — a
+ * garantia real e atômica contra saldo negativo é o trigger
+ * `enforce_credit_ledger_balance_trigger` (migration `0015`), que trava a
+ * linha da organização e recalcula o saldo dentro do próprio INSERT. Numa
+ * corrida genuína entre duas requisições da mesma organização, o trigger
+ * rejeita a segunda gravação — capturado aqui e traduzido para o mesmo
+ * `InsufficientCreditsError` que todo Server Action já sabe tratar.
+ */
 export async function recordConsumption(params: RecordConsumptionParams): Promise<void> {
   const creditLedgerRepository = new CreditLedgerRepository(params.serviceRoleDb);
 
-  await creditLedgerRepository.create({
-    organization_id: params.organizationId,
-    type: "consumption",
-    amount: -params.costCredits,
-    related_intelligence_hub_session_id: params.intelligenceHubSessionId,
-    related_content_piece_id: params.contentPieceId,
-    description: params.description,
-  });
+  try {
+    await creditLedgerRepository.create({
+      organization_id: params.organizationId,
+      type: "consumption",
+      amount: -params.costCredits,
+      related_intelligence_hub_session_id: params.intelligenceHubSessionId,
+      related_content_piece_id: params.contentPieceId,
+      description: params.description,
+    });
+  } catch (error) {
+    const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+    if (message.includes("insufficient_credit_balance")) {
+      const available = await creditLedgerRepository.getBalance(params.organizationId);
+      throw new InsufficientCreditsError(params.costCredits, available);
+    }
+    throw error;
+  }
 }

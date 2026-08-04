@@ -639,7 +639,16 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      ensure_initial_provisioning: {
+        Args: {
+          p_user_id: string;
+          p_organization_name: string;
+          p_base_slug: string;
+        };
+        Returns: { already_provisioned: boolean; organization_id: string }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
