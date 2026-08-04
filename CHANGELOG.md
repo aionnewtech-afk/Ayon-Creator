@@ -2,6 +2,14 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.8.2] — 2026-08-04
+
+### Corrigido
+
+- **Fechamento da Missão H1**: 2 achados de uma auditoria rápida pós-H1 (verificação direta contra o Postgres remoto), fechados antes de autorizar o H2.
+  - **Guarda da RPC `ensure_initial_provisioning` incompleta**: `revoke all ... from public` não removia o `EXECUTE` que o Supabase concede por padrão a `anon`; e `p_user_id != auth.uid()` retornava `NULL` (não bloqueava) quando os dois lados eram `NULL`. Corrigido com `revoke execute ... from anon` explícito + `is distinct from`. Migration `0016_hardening_provisioning_grant_fix.sql`. Validado ao vivo: chamada autenticada → sucesso; chamada anônima (com e sem `p_user_id`) → `permission denied` (`42501`); impersonação → `não autorizado` (`42501`).
+  - **Ambiente de desenvolvimento**: organização de teste `h1test.upload`, não removida numa sessão anterior, limpa por completo. Causa raiz do `deleteUser()` "sempre falhando" (item 1.6 de `docs/hardening-plan.md`, aberto desde a Missão 6) encontrada: linha órfã em `user_profiles` nunca removida pelos scripts de cleanup, bloqueando a exclusão em cascata — corrigido, os 2 usuários de teste órfãos do H1 foram genuinamente excluídos.
+
 ## [0.8.1] — 2026-08-04
 
 ### Corrigido

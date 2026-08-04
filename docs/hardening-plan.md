@@ -1,6 +1,6 @@
 # Plano de Hardening — Ayon Creator (rumo à v1.0)
 
-> **Status:** **Missão H1 (P0 — segurança crítica) implementada e validada — `v0.8.1`.** H2–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
+> **Status:** **Missão H1 (P0 — segurança crítica) implementada, validada e encerrada — `v0.8.2`.** Auditoria pós-H1 fechou os 2 achados residuais (guarda de RPC incompleta + cleanup de ambiente). H2–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
 > **Metodologia:** cada achado abaixo é verificável — vem de leitura direta de código/schema, `pnpm audit`, ou de um "Observado, não corrigido" já registrado em release anterior (citado com a versão onde foi encontrado). Nenhum item é especulação.
 > **Prioridade:** **P0** = bloqueia o lançamento da v1.0 · **P1** = fortemente recomendado antes da v1.0 · **P2** = aceitável adiar para pós-v1.0.
 > **Próximo passo:** após sua aprovação, cada item (ou grupo de itens relacionados) vira uma missão pequena e isolada, seguindo o mesmo processo doc-first + validação real já usado em todas as missões anteriores.
@@ -26,7 +26,7 @@ Nenhum desses itens exige rearquitetura. São, na maioria, correções pequenas 
 | 1.3 | **Bug de citações trocadas** na tela "O que eu entendi até agora" (ONB-3, Missão 2) — nunca corrigido, decisão explícita de não misturar com a tag de outra missão. | **P1** | `CHANGELOG.md [0.3.0]`, "Observado, não corrigido": *"Decisão explícita do dono do produto: (...) não foi corrigido agora — fica registrado como tarefa isolada"*. |
 | 1.4 | **Falha transiente de JSON inválido do LLM** — nenhum Engine tem retry. Já sugerido como tarefa desde a Missão 3 ("retry com backoff no Provider Gateway") e nunca implementado; reapareceu na validação da Missão 8. | **P1** | `CHANGELOG.md [0.3.0]` e `docs/changelog.md` (v2.10, Missão 8). |
 | 1.5 | Warning **"Maximum update depth exceeded"** (React, dev mode) em `/painel` — dívida pré-existente da Sprint 1, nunca investigada. | **P2** | `CHANGELOG.md [0.2.0]`, "Observado, não corrigido". |
-| 1.6 | `admin.auth.admin.deleteUser()` falha consistentemente (`AuthRetryableFetchError`, `{}`) neste projeto Supabase, deixando usuários de teste órfãos acumulados a cada missão. Causa raiz nunca investigada — pode ser configuração do projeto, não necessariamente um bug do produto. | **P2** | Reproduzido em toda missão desde a Missão 6; nunca investigado além de "aceitável, documentado". |
+| 1.6 | ~~`admin.auth.admin.deleteUser()` falha consistentemente~~ — **causa raiz encontrada e resolvida no fechamento pós-H1** (`v0.8.2`): a falha não era da API em si, e sim de uma linha órfã em `user_profiles` (nunca removida pelos scripts de cleanup de missões anteriores, que limpavam `organizations`/`brands`/`organization_members` mas esqueciam `user_profiles`) bloqueando a exclusão em cascata do usuário. Removendo a linha de `user_profiles` primeiro, `deleteUser()` funciona normalmente — confirmado limpando os 2 usuários de teste órfãos do H1. | ~~P2~~ resolvido | Reproduzido e corrigido na auditoria pós-H1 (`docs/changelog.md`, fechamento H1). Scripts de cleanup futuros devem incluir `user_profiles` na lista de tabelas limpas antes de tentar `deleteUser()`. |
 
 ---
 
@@ -173,7 +173,6 @@ Nenhum desses itens exige rearquitetura. São, na maioria, correções pequenas 
 - Biblioteca de Mídia, Central de Notificações, atalhos de teclado, arquivar peça/campanha (**3.4–3.7**)
 - Paginação real, retenção/arquivamento de dados (**6.2 / 6.3**)
 - CFG-3/5/6 (dependem de multi-brand real) (**3.2 / 6.5**)
-- Investigar causa raiz do `deleteUser` falhando (**1.6**)
 - Corrigir warning "Maximum update depth exceeded" (**1.5**)
 
 ---
@@ -256,5 +255,27 @@ Após sua aprovação deste plano, cada bloco de itens relacionados vira uma mis
 **Nenhum bug novo encontrado durante a validação** (só os dois erros de implementação autocorrigidos antes de qualquer teste de usuário: posicionamento de `serverActions` no config e o atalho `UnsafeUnwrappedCookies` do codemod — ver `docs/changelog.md`).
 
 **`pnpm audit --prod` re-executado após o upgrade:** 25 → **5 vulnerabilidades** (2 `moderate`, 3 `high`). As 23 vulnerabilidades do `next@14.2.35` (incluindo todas as de DoS/SSRF em Server Actions/RSC citadas em 5.2) foram eliminadas. As 5 remanescentes são de dependências transitivas fora do escopo aprovado do H1: `postcss` (via `next`, XSS/path traversal em source map — upgrade de dependência isolado, sem breaking change esperado) e `sharp`/`libvips` (4 CVEs herdadas). Registradas como item novo de follow-up, não bloqueiam o H1.
+
+---
+
+## Fechamento pós-H1 (`v0.8.2`)
+
+Uma auditoria rápida pós-H1 (verificação direta contra o Postgres remoto, não apenas leitura de migration) encontrou 2 achados residuais, ambos fechados nesta revisão antes de autorizar o início do H2:
+
+**1. Guarda da RPC `ensure_initial_provisioning` incompleta.** `revoke all ... from public` (migration `0014`) não removia o `EXECUTE` que o Supabase concede por padrão a `anon` no schema `public` — `anon` continuava tecnicamente autorizado a chamar a função. Além disso, `if p_user_id != auth.uid()` retorna `NULL` (não `TRUE`) quando ambos os lados são `NULL`, então uma chamada anônima com `p_user_id = null` não era barrada por essa checagem especificamente (a chamada ainda falhava adiante, por `organization_members.user_id` ser `NOT NULL`, mas o guard em si não se comportava como o comentário da função promete). **Não era explorável de ponta a ponta**, mas divergia do comportamento documentado.
+
+Corrigido pela migration `0016_hardening_provisioning_grant_fix.sql`: `if p_user_id is distinct from auth.uid()` (comparação segura contra `NULL` dos dois lados) + `revoke execute ... from anon` explícito + `grant execute ... to authenticated, service_role`.
+
+**Validado ao vivo contra o Supabase remoto (3 cenários, usuários de teste reais, descartados após o teste):**
+- Chamada autenticada real (usuário provisiona a si mesmo): sucesso, 1 organização criada.
+- Chamada anônima (client com `anon` key, sem sessão) — com `p_user_id` válido e com `p_user_id = null`: **ambas rejeitadas na camada de grant** (`permission denied for function ensure_initial_provisioning`, `42501`) — `anon` não consegue mais nem invocar a função, então o caso de borda do `NULL` deixou de ser relevante.
+- Tentativa de impersonação (usuário A autenticado chama com `p_user_id` de um usuário B): rejeitada pelo guard (`não autorizado`, `42501`).
+- Confirmado por leitura direta da tabela `organizations`: zero organizações criadas pelas tentativas anônima e de impersonação; exatamente 1 criada pela chamada legítima.
+
+**2. Ambiente de desenvolvimento com dados de teste órfãos.** A organização `h1test.upload` (criada durante a validação de upload do H1) não tinha sido removida, apesar de reportada como limpa numa sessão anterior — brand, membership e o registro em `organizations` ainda existiam. Removida por completo nesta revisão (nenhum dado relacionado em campanhas/peças/`learning_signals`/`credit_ledger`/Storage — a organização não chegou a gerar esse tipo de dado).
+
+**Causa raiz do `deleteUser()` "sempre falhando" (item 1.6) finalmente encontrada:** não é uma falha da API do Supabase Auth, e sim uma linha órfã em `user_profiles` que os scripts de cleanup de missões anteriores nunca removiam (limpavam `organizations`/`brands`/`organization_members`, mas não `user_profiles`), bloqueando a exclusão em cascata do usuário. Removendo `user_profiles` primeiro, `deleteUser()` funcionou normalmente nos dois usuários de teste do H1 (`h1test.full@ayoncreator.dev`, `h1test.upload@ayoncreator.dev`) — **zero usuários órfãos remanescentes**, corrigindo a suposição registrada desde a Missão 6 de que essa falha era "P2, aceitável adiar". Scripts de cleanup futuros devem incluir `user_profiles` na lista de tabelas limpas antes de tentar `deleteUser()`.
+
+**Validação de ambiente limpo (checagem final):** zero organizações/usuários com `h1test`/`h1-fix` no nome ou e-mail; `typecheck`/`lint`/`build` re-executados do zero, todos limpos; `supabase migration list --linked` confirma `0016` aplicada (`local == remote`).
 
 **Itens do checklist §10 marcados como concluídos por esta missão:** todos os 5 itens de "Segurança" exceto "`pnpm audit --prod` sem `high`/`critical` pendente" — reduzido de 25 para 5 vulnerabilidades (zero relacionadas ao Next.js), mas ainda não zerado; ver nota acima.

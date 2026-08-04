@@ -4,6 +4,30 @@
 
 ---
 
+## v2.12 (revisão 29) — 2026-08-04 — Fechamento da Missão H1: correção da RPC de provisionamento + limpeza de ambiente
+
+**Status:** implementado e validado. Fecha os 2 achados residuais de uma auditoria rápida pós-H1 (verificação direta contra o Postgres remoto), autorizando o início do H2.
+
+**1. `ensure_initial_provisioning` — guarda de acesso corrigida (migration `0016_hardening_provisioning_grant_fix.sql`):**
+
+- `if p_user_id != auth.uid()` → `if p_user_id is distinct from auth.uid()` — a comparação antiga retornava `NULL` (não `TRUE`) quando os dois lados eram `NULL`, deixando uma chamada anônima com `p_user_id = null` sem ser barrada por essa linha especificamente.
+- `revoke execute ... from anon` explícito, além do `revoke all ... from public` já existente — o `revoke from public` não removia o grant que o Supabase concede por padrão a `anon` no schema `public`; `anon` continuava tecnicamente autorizado a chamar a função.
+- `grant execute ... to authenticated, service_role` — mantém só os dois papéis que legitimamente precisam chamar a RPC.
+
+**Validado ao vivo contra o Supabase remoto** (usuários de teste reais, descartados após o teste): chamada autenticada real → sucesso; chamada anônima (com `p_user_id` válido e com `p_user_id = null`) → `permission denied for function ensure_initial_provisioning` (`42501`) nos dois casos, barrada já na camada de grant; tentativa de impersonação (usuário A chama com `p_user_id` de usuário B) → `não autorizado` (`42501`). Ground truth em `organizations`: zero organizações criadas pelas tentativas anônima/impersonação, exatamente 1 pela chamada legítima.
+
+**2. Limpeza completa do ambiente de desenvolvimento:**
+
+- Organização `h1test.upload` (não removida numa sessão anterior, apesar de reportada como limpa) removida por completo — brand, membership, `organizations`.
+- **Causa raiz do `deleteUser()` "sempre falhando" encontrada** (`docs/hardening-plan.md` item 1.6, aberto desde a Missão 6): não é falha da API do Supabase Auth — é uma linha órfã em `user_profiles` que os scripts de cleanup de missões anteriores nunca removiam, bloqueando a exclusão em cascata do usuário. Removendo `user_profiles` primeiro, `deleteUser()` funcionou normalmente. Os 2 usuários de teste órfãos do H1 (`h1test.full@ayoncreator.dev`, `h1test.upload@ayoncreator.dev`) foram genuinamente excluídos — zero usuários órfãos remanescentes.
+- Validação final: zero organizações/usuários com `h1test`/`h1-fix` no nome ou e-mail; `typecheck`/`lint`/`build` limpos; `supabase migration list --linked` confirma `0016` aplicada.
+
+**Documentação atualizada nesta revisão:** `docs/hardening-plan.md` (seção "Fechamento pós-H1", item 1.6 corrigido de "P2, causa raiz nunca investigada" para "resolvido"), `CHANGELOG.md` (`[0.8.2]`).
+
+**Próximo passo:** H1 encerrada. H2 (Fundação de qualidade — CI mínimo + testes de smoke/RLS/concorrência) autorizada para início.
+
+---
+
 ## v2.11 (revisão 28) — 2026-08-04 — Sprint de Hardening: auditoria completa + Missão H1 (segurança crítica) implementada e validada
 
 **Status:** implementado e validado ponta a ponta. `docs/hardening-plan.md` criado com auditoria completa do MVP em 10 categorias (bugs, dívidas técnicas, UX, performance, segurança, escalabilidade, testes, CI/CD, observabilidade, checklist de v1.0) e priorização P0/P1/P2. Missão H1 (os 5 itens P0 de segurança/race condition) implementada e validada; H2–H5 seguem como plano aprovado, aguardando início.
