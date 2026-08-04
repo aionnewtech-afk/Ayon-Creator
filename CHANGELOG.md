@@ -2,6 +2,20 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.7.0] — 2026-08-03
+
+### Adicionado
+
+- **Missão 7 — Asset Engine**: geração automática do pacote de conteúdo de uma campanha aprovada — 5 formatos textuais gerados por IA (legenda, roteiro, teleprompter, e-mail, post de blog), 4 formatos visuais (vídeo, stories, carrossel, thumbnail) via upload manual do cliente (`own_media`, sem depender de Biblioteca de Mídia ainda inexistente). Escopo MVP aprovado pelo dono do produto: sem Avatar/Voice/Media Provider, execução síncrona sem n8n, sem Supabase Realtime.
+  - **Banco**: migration `0011_asset_engine.sql` — `content_pieces`/`content_versions`/`content_packages`, helpers de RLS `campaign_organization_id`/`content_piece_organization_id`, `credit_ledger.related_content_piece_id`, `credit_pricing` para `asset_generation` (3/6/12 por tier) e reajuste de `trend_ranking` (2/4/8).
+  - **`packages/core`**: módulo `asset-engine/` — `generateTextPiece` (LLM Provider por formato), `initializeCampaignContentPieces` (9 peças por campanha, roteiro como peça principal), `buildContentPackage` (JSZip, excluído do barrel de `@ayon/core` por depender de APIs Node, mesmo padrão de `pdf-parse`/`mercadopago`).
+  - **Server Actions**: aprovação da estratégia dispara a geração das 5 peças textuais; 5 novas actions em `criar-campanha/asset-actions.ts` (editar, regenerar, upload, aprovar — que monta o pacote automaticamente quando a última peça é aprovada —, rejeitar).
+  - **UI**: `ContentPackageReview` (CAMP-4/5/6) — revisão por peça, tela final de download do pacote (`.zip` via signed URL).
+
+### Corrigido durante a validação real (Supabase + Anthropic reais)
+
+- **Nomes de arquivo com UUID vazado no pacote final**: `buildContentPackage` nomeava cada arquivo `own_media` dentro do `.zip` com o último segmento do caminho de storage (`{contentPieceId}-{nomeOriginal}`, prefixo usado só para evitar colisão no bucket) em vez do nome original enviado pelo cliente. Corrigido para remover o prefixo antes de adicionar ao zip — confirmado com os 4 arquivos reais da validação (thumbnail/carousel/video/stories).
+
 ## [0.6.0] — 2026-08-03
 
 ### Adicionado

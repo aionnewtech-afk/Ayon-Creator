@@ -1,7 +1,8 @@
 # PRD — Ayon Creator
 
-> **Status do documento:** v1.0 (revisão 16 — auditoria + preparação doc-first da Missão 7, Asset Engine) — **filosofia de produto aprovada e consolidada; documento liberado como fonte oficial da verdade para o início da implementação de código**. Decisões residuais não relacionadas à filosofia seguem listadas em §13 e podem ser resolvidas durante o desenvolvimento, conforme necessidade.
+> **Status do documento:** v1.0 (revisão 17 — Missão 7, Asset Engine, implementada e validada) — **filosofia de produto aprovada e consolidada; documento liberado como fonte oficial da verdade para o início da implementação de código**. Decisões residuais não relacionadas à filosofia seguem listadas em §13 e podem ser resolvidas durante o desenvolvimento, conforme necessidade.
 > **Última atualização:** 2026-08-03
+> **Mudança da revisão 17:** Missão 7 (Asset Engine) implementada e validada com Supabase + Anthropic reais. Ver [CHANGELOG.md](CHANGELOG.md) `[0.7.0]`.
 > **Mudança da revisão 16:** correção de auditoria (§13 item 1, contagem de documentos do doc-first) + §13 item 4 resolvido para o escopo do MVP da Missão 7 (Asset Engine): 5 formatos textuais gerados por IA, 4 formatos visuais preenchidos por upload manual do cliente, sem Avatar/Voice/Media Provider ainda. Ver [docs/changelog.md](docs/changelog.md).
 > **Mudança da revisão 15:** Missão 6 (Billing) implementada e validada com Supabase + Mercado Pago reais (sandbox). Ver [CHANGELOG.md](CHANGELOG.md) `[0.6.0]`.
 > **Mudança da revisão 14 (preparação Missão 6, Billing):** §8 finalizada com números concretos por plano (marcas, tier incluso, créditos/mês) — resolve §13 item 5. Mercado Pago adicionado à stack (§10) como módulo de Billing dedicado, não Provider Layer. Sem mudança de filosofia/escopo de produto. Ver [docs/changelog.md](docs/changelog.md).

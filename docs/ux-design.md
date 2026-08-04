@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 18 — preparação doc-first da Missão 7, Asset Engine) — **aguardando confirmação final do dono do produto antes do código**
+> **Status:** v1.3 (revisão 19 — Missão 7, Asset Engine, implementada e validada)
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (19 — Missão 7 implementada e validada):** CAMP-4/5/6 implementadas como uma única tela (`ContentPackageReview`, dentro de `/criar-campanha`) e validadas em produção — Cartão de Revisão de Peça (§4.6) diferenciando texto (aprovar/editar/regenerar) de visual (aprovar/enviar arquivo) confirmado; estado final "Pacote pronto" com link de download (signed URL) confirmado assim que a última peça é aprovada, sem Realtime.
 > **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §3.5 (CAMP-4/5/6) ajustada ao escopo do MVP — texto gerado por IA + upload manual para formatos visuais, sem estado "gerando vídeo com avatar". §4.4 corrigida: rastreador de progresso não é mais descrito como "alimentado por Realtime" (decisão do dono do produto: sem Realtime no MVP). §4.5/§4.6 ajustadas para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).
 > **Mudança desta revisão (17 — correção de auditoria):** §3.9 (CFG) ganha nota explícita marcando CFG-1/3/5/6 como não implementadas (só CFG-2/4 têm código); §3.6 (HIST) ganha a mesma nota para HIST-1/2. Nenhuma das duas é uma decisão nova — só torna explícito o que já era verdade, corrigindo uma lacuna de sinalização identificada em auditoria anterior (v1.9) e nunca fechada para estes itens.
 > **Mudança desta revisão (16 — Missão 6 implementada e validada):** CFG-2 e CFG-4 implementadas como uma única tela (`/configuracoes`) — CFG-1/3/5/6 seguem fora de escopo. Estados de bloqueio (créditos insuficientes/assinatura inativa) confirmados em produção com CTA funcionando em Criar Campanha e O que está em Alta.

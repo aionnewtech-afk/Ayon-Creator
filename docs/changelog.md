@@ -4,6 +4,37 @@
 
 ---
 
+## v2.7 (revisão 24) — 2026-08-03 — Missão 7 (Asset Engine) implementada e validada
+
+**Status:** implementado e validado ponta a ponta com Supabase + Anthropic reais. Documentação atualizada em todos os 5 documentos doc-first + README.md + PRD.md.
+
+**Implementação:**
+
+- Migration `0011_asset_engine.sql`: `content_pieces`/`content_versions`/`content_packages`, helpers de RLS `campaign_organization_id`/`content_piece_organization_id`, `credit_ledger.related_content_piece_id`, `credit_pricing` para `asset_generation` (3/6/12) e reajuste de `trend_ranking` (1/2/4 → 2/4/8, aplicado via `UPDATE`, migration `0008_billing.sql` nunca editada retroativamente).
+- `packages/core/src/asset-engine/`: `generateTextPiece` (LLM Provider, prompt por formato, Zod `{content, rationale}`), `initializeCampaignContentPieces` (9 peças por campanha, `script` como peça principal reaproveitando a sessão do Intelligence Hub da estratégia), `buildContentPackage` (JSZip — excluído do barrel de `@ayon/core` pelo mesmo motivo de `pdf-parse`/`mercadopago`: depende de APIs Node).
+- `approveCampaignStrategyAction` dispara a geração dos 5 formatos textuais logo após a aprovação da estratégia; falha de uma peça nunca bloqueia as demais (mesmo espírito do painel de especialistas do Fluxo 10).
+- 5 novas Server Actions em `criar-campanha/asset-actions.ts`: editar (sem custo), regenerar (novo custo em créditos), upload de mídia própria (sem custo), aprovar (dispara montagem automática do pacote quando a última peça é aprovada) e rejeitar.
+- UI `ContentPackageReview` (CAMP-4/5/6): card por peça, diferenciando texto (aprovar/editar/regenerar/rejeitar) de visual (aprovar/enviar arquivo/rejeitar); tela final "Pacote pronto" com link de download assim que todas as 9 peças são aprovadas.
+
+**Validação real (Supabase + Anthropic, org de teste "Trilha Verde Turismo"):**
+
+1. Painel de especialistas (Marketing/Branding/Copy) + Coordinator consolidaram a estratégia normalmente — sem regressão do Fluxo 10.
+2. Aprovação da estratégia gerou as 9 `content_pieces` e as 5 peças textuais via LLM real, todas coerentes com o Brand Brain e a estratégia consolidada.
+3. Créditos debitados corretamente: 10 (`campaign_strategy`, tier balanceado) + 5 × 6 (`asset_generation`, tier balanceado) = 40 créditos, conferido linha a linha em `credit_ledger`.
+4. Edição manual de peça textual confirmada (sem custo em créditos).
+5. Regeneração de peça textual confirmada — nova chamada ao LLM Provider, novo débito de 6 créditos registrado em `credit_ledger` com descrição "— regenerada".
+6. Upload manual dos 4 formatos `own_media` confirmado — arquivo salvo no bucket `content-output`, `content_versions` criada, peça avança para `ready_for_review`.
+7. Aprovação das 9 peças confirmada; a aprovação da última peça disparou a montagem automática do pacote (sem passo manual, sem Realtime) e retornou uma signed URL válida.
+8. Download do pacote confirmado — `.zip` válido (assinatura de arquivo local correta), 9 entradas: 5 `.txt` (um por formato textual) + 4 arquivos de mídia própria.
+
+**Bug real encontrado e corrigido durante a validação:**
+
+- **Nomes de arquivo corrompidos no pacote final:** `buildContentPackage` (`packages/core/src/asset-engine/build-content-package.ts`) construía o nome de cada arquivo `own_media` dentro do `.zip` pegando o último segmento do caminho de storage (`output_storage_path.split("/").pop()`). Como o caminho de storage é `{organizationId}/{campaignId}/{contentPieceId}-{nomeOriginal}` (prefixo necessário para evitar colisão entre uploads), o cliente final receberia o pacote com arquivos como `8e9ded03-8ea7-4466-895b-d920c346a192-video-test.png` em vez de `video-test.png` — vazando um UUID interno para o entregável do cliente. Corrigido para remover o prefixo `{contentPieceId}-` antes de adicionar ao zip, restaurando o nome original enviado. Confirmado com os 4 arquivos reais da validação (thumbnail/carousel/video/stories, todos com nome limpo após a correção).
+
+**Documentação atualizada nesta revisão:** `architecture.md` (revisão 21), `database.md` (revisão 19), `flows.md` (revisão 20), `ux-design.md` (revisão 19), `PRD.md` (revisão 17), `README.md` ("Estado do projeto"), `CHANGELOG.md` (`[0.7.0]`).
+
+---
+
 ## v2.6 (revisão 23) — 2026-08-03 — Preparação doc-first da Missão 7 (Asset Engine)
 
 **Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores.
