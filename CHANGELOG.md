@@ -2,6 +2,20 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.8.0] — 2026-08-04
+
+### Adicionado
+
+- **Missão 8 — Learning Engine (Brand Evolution / "O que Funcionou")**: análise sob demanda dos sinais de aprovação/rejeição/edição de peça de conteúdo, gerando sugestões de ajuste que só mudam o comportamento futuro mediante aceite humano explícito. Gratuita em todos os planos; mínimo de 5 sinais não usados antes de qualquer análise.
+  - **Banco**: migration `0012_learning_engine.sql` — `learning_signals`/`learning_insights`, `specialists.applies_to` estendido para `learning_analysis` (Marketing + Branding). `intelligence_hub_sessions.related_entity_type` ganha `'brand'` (extensão aditiva do CHECK) — `learning_analysis` é mais um tipo de decisão do Intelligence Hub, com a mesma trilha de auditoria (`specialist_opinions`) de `campaign_strategy`/`trend_ranking`.
+  - **`packages/core`**: módulo `learning-engine/` — `runLearningAnalysis` (agrega sinais, aciona o Intelligence Hub, cria até 5 insights). `buildBrandContextBlock` ganha um parâmetro opcional para aprendizados aceitos, conectado aos 4 pontos que já montam contexto de marca (`campaign_strategy`, `trend_ranking`, `asset_generation`, `learning_analysis`) — é o mecanismo real de "aplicação" de um insight aceito.
+  - **Server Actions**: `emitLearningSignal` conectado a aprovar/rejeitar/editar peça (Missão 7); `runLearningAnalysisAction`/`acceptInsightAction`/`dismissInsightAction` em `o-que-funcionou/actions.ts`, gated a `admin+`.
+  - **UI**: `InsightList` (EVOL-1) — sugestões pendentes com Aceitar/Descartar inline, histórico na mesma tela. Item de navegação "O que Funcionou" passa a `implemented: true`.
+
+### Observado durante a validação real (não é bug de código)
+
+- A primeira tentativa de análise falhou com um JSON inválido do LLM; a segunda tentativa, com o mesmo código, teve sucesso. Mesma categoria de risco de qualquer chamada de LLM com saída estruturada estrita já existente no repositório — nenhum Engine hoje tem retry automático, e não houve reprodução numa segunda tentativa.
+
 ## [0.7.0] — 2026-08-03
 
 ### Adicionado

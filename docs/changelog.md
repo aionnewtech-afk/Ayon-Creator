@@ -4,6 +4,34 @@
 
 ---
 
+## v2.10 (revisão 27) — 2026-08-04 — Missão 8 (Learning Engine) implementada e validada
+
+**Status:** implementado e validado ponta a ponta com Supabase + Anthropic reais. Documentação atualizada em todos os documentos doc-first + README.md + PRD.md.
+
+**Implementação:**
+
+- Migration `0012_learning_engine.sql`: `learning_signals`/`learning_insights` (sem mudança de coluna frente ao já documentado desde a Missão 4), `specialists.applies_to` de `marketing_strategy`/`branding` estendido para `learning_analysis` (mesmo padrão de `trend_ranking`).
+- **Achado real durante a implementação, não decisão de produto:** `intelligence_hub_sessions.related_entity_type` era `not null` com CHECK restrito a `('trend_research', 'campaign', 'content_piece')` — `learning_analysis` não tem uma entidade única desse tipo, é análise em nível de marca. Apresentado ao dono do produto antes de qualquer código; aprovada a extensão aditiva do CHECK para incluir `'brand'` (`related_entity_id = brand_id`), preservando `learning_analysis` como mais um tipo de decisão do Intelligence Hub — mesma sessão, mesmos `specialist_opinions`, mesmo Coordinator, sem exceção arquitetural.
+- **Segundo achado real:** `brand_brain_profiles.learned_preferences` (reservada desde a Missão 2) nunca era lida por nenhum Engine — "aceitar" um insight não teria efeito real algum. Apresentado ao dono do produto; aprovada a conexão aos 4 pontos que já montam contexto de marca: `buildBrandContextBlock` (`intelligence-hub/intelligence-hub-prompts.ts`) ganhou um parâmetro opcional `learnedPreferencesText`, agora passado por `campaign_strategy` (Missão 3), `trend_ranking` (Missão 5), `asset_generation` (Missão 7) e o novo `learning_analysis` (Missão 8) — mudança aditiva, sem alterar comportamento para nenhuma marca sem aprendizados aceitos.
+- `packages/core/src/learning-engine/`: `runLearningAnalysis` (agrega `learning_signals` não usados desde a última análise, aciona o Intelligence Hub, cria até 5 `learning_insights`), painel Marketing + Branding (Copywriting fora), Coordinator reaproveitado sem mudança.
+- `emitLearningSignal` (`criar-campanha/asset-actions.ts`) — aprovar/rejeitar/editar peça (Missão 7) agora emitem `learning_signals` de verdade; falha na emissão nunca bloqueia a ação principal do usuário.
+- `acceptInsightAction`/`dismissInsightAction`/`runLearningAnalysisAction` (`o-que-funcionou/actions.ts`) — todos gated a `admin+`, mesmo nível de acesso da tela. Aceitar grava em `brand_brain_profiles.learned_preferences` (acumula, nunca sobrescreve aprendizados anteriores).
+- UI `InsightList` (EVOL-1): cards de sugestão pendente com Aceitar/Descartar inline, seção de Histórico, estados "sinal insuficiente" e "analisando". Item de navegação "O que Funcionou" passa a `implemented: true`.
+
+**Validação real (Supabase + Anthropic, marca de teste "Café Raiz"):**
+
+1. Campanha real criada e aprovada (painel de especialistas + Coordinator, Fluxo 10) — sem regressão.
+2. 5 `learning_signals` emitidos corretamente a partir de ações reais de revisão de peça: 3 `approved`, 1 `edited` (com `previousScript`/`newScript` no payload), 1 `rejected` (com `reason: null`).
+3. Análise sob demanda confirmada: com exatamente 5 sinais não usados, `runLearningAnalysisAction` acionou o Intelligence Hub — `intelligence_hub_sessions` criada com `related_entity_type = 'brand'`, `related_entity_id = brand_id`, `trigger_reason = 'learning_analysis'`; 2 `specialist_opinions` gravadas (Marketing + Branding); Coordinator gerou 2 `learning_insights` (`pending_review`), específicos e honestos sobre amostra pequena — nenhuma sugestão genérica.
+4. Aceitar um insight confirmado: `learning_insights.status = applied`, `reviewed_by` gravado, `brand_brain_profiles.learned_preferences` atualizado com `{insights: [{id, insightType, appliedTo, text, appliedAt}]}`. Descartar o outro confirmado: `status = dismissed`, **não** entra em `learned_preferences`.
+5. **Confirmado que "aceitar" muda comportamento futuro de verdade** (o ponto central da Missão 8): uma nova sessão de `campaign_strategy` para a mesma marca, criada depois do aceite, trouxe os três especialistas e o Coordinator citando explicitamente o aprendizado aplicado ("O Brand Evolution mostra aprovação de 100% em formatos escritos...", "os Brand Evolution Learnings indicam...") — a informação genuinamente influenciou o raciocínio, não apenas apareceu no prompt.
+
+**Observado, não corrigido (não é bug de código):** a primeira tentativa de análise falhou com `LlmJsonParseError` ("Resposta do LLM não era um JSON válido"); a segunda tentativa, com o mesmo código e os mesmos dados, teve sucesso. Mesma categoria de risco que qualquer chamada de LLM com saída estruturada estrita já existente no repositório (nenhum Engine hoje tem retry automático) — não reproduzido numa segunda tentativa, não há evidência de causa determinística no código.
+
+**Documentação atualizada nesta revisão:** `architecture.md` (revisão 24), `database.md` (revisão 21), `flows.md` (revisão 23), `ux-design.md` (revisão 21), `engine-behavior.md` (revisão 15), `PRD.md` (revisão 19), `README.md`, `CHANGELOG.md` (`[0.8.0]`).
+
+---
+
 ## v2.9 (revisão 26) — 2026-08-03 — Preparação doc-first da Missão 8 (Learning Engine)
 
 **Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores.

@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 20 — preparação doc-first da Missão 8, Learning Engine) — **aguardando confirmação final do dono do produto antes do código**
-> **Última atualização:** 2026-08-03
+> **Status:** v1.3 (revisão 21 — Missão 8, Learning Engine, implementada e validada)
+> **Última atualização:** 2026-08-04
+> **Mudança desta revisão (21 — Missão 8 implementada e validada):** EVOL-1 implementada e validada em produção (`InsightList`, dentro de `/o-que-funcionou`) — estados "sinal insuficiente" e "analisando" confirmados, cards de sugestão pendente com Aceitar/Descartar inline, seção de Histórico na mesma tela. Item de navegação "O que Funcionou" passa a `implemented: true`.
 > **Mudança desta revisão (20 — preparação Missão 8, Learning Engine):** §3.8 (EVOL) consolidada — EVOL-2 (detalhe) removida do MVP e EVOL-3 (histórico) vira uma seção/aba dentro da EVOL-1, mesmo raciocínio de simplificação já usado em CAMP-4/5/6 (Missão 7). Novos estados-chave: "sinal insuficiente" (menos de 5 `learning_signals` novos) e "analisando" (ação "Buscar novidades"). Referências a EVOL-2/EVOL-3 em §4.3, §6 e Jornada 4 corrigidas para refletir a tela única. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (19 — Missão 7 implementada e validada):** CAMP-4/5/6 implementadas como uma única tela (`ContentPackageReview`, dentro de `/criar-campanha`) e validadas em produção — Cartão de Revisão de Peça (§4.6) diferenciando texto (aprovar/editar/regenerar) de visual (aprovar/enviar arquivo) confirmado; estado final "Pacote pronto" com link de download (signed URL) confirmado assim que a última peça é aprovada, sem Realtime.
 > **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §3.5 (CAMP-4/5/6) ajustada ao escopo do MVP — texto gerado por IA + upload manual para formatos visuais, sem estado "gerando vídeo com avatar". §4.4 corrigida: rastreador de progresso não é mais descrito como "alimentado por Realtime" (decisão do dono do produto: sem Realtime no MVP). §4.5/§4.6 ajustadas para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).

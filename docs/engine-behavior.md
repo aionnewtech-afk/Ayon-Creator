@@ -1,7 +1,8 @@
 # Comportamento de IA por Engine — Ayon Creator
 
-> **Status:** v1.0 (revisão 14 — preparação doc-first da Missão 8) — **aguardando confirmação final do dono do produto antes do código**
-> **Última atualização:** 2026-08-03
+> **Status:** v1.0 (revisão 15 — Missão 8, Learning Engine, implementada e validada)
+> **Última atualização:** 2026-08-04
+> **Mudança desta revisão (15 — Missão 8 implementada e validada):** §6 validado com Anthropic real — insights gerados na validação foram específicos (citando formatos e contagens reais, ex. "3/3 aprovados em escrito vs. 0/2 em audiovisual") e honestos sobre amostra pequena, sem forçar conclusão. §8 item 2 atualizado: Learning Engine deixa de ser hipótese — todos os Engines documentados neste arquivo (Trend, Asset, Learning) estão agora implementados e validados com Anthropic real.
 > **Mudança desta revisão (14 — preparação Missão 8, Learning Engine):** §6 resolve a "frequência modesta" com o número mínimo aprovado (5 `learning_signals` não usados) e ganha uma nota de honestidade sobre sinal insuficiente, espelhando a mesma regra já aplicada ao Trend Engine (§4). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (13 — correção de auditoria):** §8 item 2 corrigido — ainda listava o Asset Engine como "hipótese não implementada", mas foi implementado e validado com Anthropic real na Missão 7. Achado em auditoria de rotina antes da Missão 8, não durante a implementação da Missão 7 em si — mesmo padrão do achado equivalente sobre o Trend Engine na auditoria pré-Missão 7 (revisão 12 abaixo).
 > **Mudança desta revisão (12 — correção de auditoria):** §4 (Trend Engine) e §8 item 2 corrigidos — ainda diziam "sem código"/"não validado", mas o Trend Engine foi implementado e validado com Anthropic real desde a Missão 5. Achado numa auditoria de rotina antes da Missão 7, não durante a implementação da Missão 5 em si — o documento simplesmente não foi revisado quando o Trend Engine foi concluído.
@@ -60,7 +61,7 @@ Ainda sem código — comportamento a seguir quando a Missão de "Criar Campanha
 
 ## 6. Learning Engine (Brand Evolution)
 
-Ainda sem código — comportamento a seguir quando a Missão de "O que Funcionou" for implementada. O exemplo real já usado no PRD (§4.4) é o padrão-ouro: *"Percebemos que vídeos de até 35 segundos performam melhor. Deseja atualizar sua estratégia?"*
+Implementado e validado com Anthropic real na Missão 8. O exemplo real já usado no PRD (§4.4) é o padrão-ouro: *"Percebemos que vídeos de até 35 segundos performam melhor. Deseja atualizar sua estratégia?"*
 
 - **Específico, nunca genérico.** "Poste mais conteúdo" ou "engaje mais o público" nunca são sugestões válidas — toda sugestão nomeia um padrão concreto observado nos dados da própria marca.
 - **Tom de colega reportando uma descoberta**, não de sistema anunciando uma mudança — a pergunta ao final ("Deseja atualizar sua estratégia?") é sempre genuína, nunca retórica.
@@ -75,7 +76,7 @@ Todo Engine que gera texto estruturado segue o mesmo padrão de contrato já est
 ## 8. Decisões em Aberto
 
 1. ~~O conteúdo exato dos `system_prompt` de cada especialista do Intelligence Hub...~~ **Resolvido (revisão 11, refletindo architecture.md §10 item 7 e docs/changelog.md v1.6):** os 4 `system_prompt`s do Specialist Registry passaram por validação qualitativa real (Supabase + Anthropic reais) e foram aprovados pelo dono do produto — documentados individualmente em [docs/prompts/](prompts/).
-2. ~~Comportamento de Trend Engine, Asset Engine e Learning Engine... ainda não foram validados com IA real.~~ **Parcialmente resolvido (Missões 5 e 7):** Trend Engine (Missão 5) e Asset Engine (Missão 7) validados com Anthropic real, mesmo padrão de rigor do Brand Brain e do Intelligence Hub (ver §4/§5 acima). **Ainda em aberto:** comportamento de Learning Engine (§6) segue como hipótese não implementada — tratar como tal até o Engine ser de fato construído e testado.
+2. ~~Comportamento de Trend Engine, Asset Engine e Learning Engine... ainda não foram validados com IA real.~~ **Resolvido (Missões 5, 7 e 8):** Trend Engine (Missão 5), Asset Engine (Missão 7) e Learning Engine (Missão 8) validados com Anthropic real, mesmo padrão de rigor do Brand Brain e do Intelligence Hub (ver §4/§5/§6 acima). Todos os Engines documentados neste arquivo estão implementados e validados.
 
 ## 9. Histórico
 

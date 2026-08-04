@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 20 — preparação doc-first da Missão 8, Learning Engine) — **aguardando confirmação final do dono do produto antes do código**
-> **Última atualização:** 2026-08-03
+> **Status:** v1.0 (revisão 21 — Missão 8, Learning Engine, implementada e validada)
+> **Última atualização:** 2026-08-04
+> **Mudança desta revisão (21 — Missão 8 implementada e validada):** migration `0012_learning_engine.sql` aplicada e validada em produção — `learning_signals`/`learning_insights` (§4.7) sem mudança de coluna frente ao já documentado; `specialists.applies_to` de `marketing_strategy`/`branding` estendido para `learning_analysis` (mesmo padrão de `trend_ranking`, migration `0006`). Achado real durante a implementação: `intelligence_hub_sessions.related_entity_type` (§4.4) era `not null` com CHECK restrito a `('trend_research', 'campaign', 'content_piece')` — `learning_analysis` não tem uma entidade única desse tipo. Resolvido de forma aditiva, sem quebrar nenhuma sessão existente: `'brand'` adicionado ao CHECK, `related_entity_id = brand_id` para essa decisão. Confirmado em produção que `applied_to` realmente é só um rótulo — `brand_brain_profiles.learned_preferences` é o único destino de escrita, e passou a ser lido por todo Core Engine que monta contexto de marca (`buildBrandContextBlock`).
 > **Mudança desta revisão (20 — preparação Missão 8, Learning Engine):** §4.7 (`learning_signals`/`learning_insights`) confirmada pronta para migrar sem mudança de coluna; nota adicionada esclarecendo que `applied_to` é só um rótulo descritivo — todo insight aceito grava em `brand_brain_profiles.learned_preferences`, único mecanismo de aplicação. Nenhum novo `trigger_reason` em `credit_pricing` (análise gratuita, aprovado). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (19 — Missão 7 implementada e validada):** migration `0011_asset_engine.sql` aplicada e validada em produção (Supabase real) — `content_pieces`/`content_versions`/`content_packages` (§4.6), `credit_ledger.related_content_piece_id` (§7.2), `credit_pricing` com `asset_generation` (3/6/12, valor final aprovado — ver revisão 23 de [docs/changelog.md](changelog.md)) e `trend_ranking` reajustado de 1/2/4 para 2/4/8. Helpers de RLS `campaign_organization_id`/`content_piece_organization_id` confirmados funcionando (insert/update restrito a `editor+`, select a membros).
 > **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar, sem mudança de coluna, escopo MVP = `text_only`/`own_media`. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 — não reaproveita `related_intelligence_hub_session_id`). §7.3 (`credit_pricing`) ganha proposta de preço para `asset_generation` (2/4/8 créditos), pendente de aprovação.
@@ -211,7 +212,7 @@ Implementada e validada na Missão 5 (migration `0006_trend_engine.sql`) — sch
 |---|---|---|
 | id | uuid PK | |
 | brand_id | uuid FK → brands | |
-| related_entity_type | enum(`trend_research`,`campaign`,`content_piece`) | |
+| related_entity_type | enum(`trend_research`,`campaign`,`content_piece`,`brand`) | `brand` ★ Missão 8 — `learning_analysis` não tem uma campanha/peça/pesquisa de tendência específica como assunto, é análise agregada em nível de marca; `related_entity_id` nesse caso é o próprio `brand_id` |
 | related_entity_id | uuid | polimórfico |
 | trigger_reason | text | ex: "estratégia de campanha", "roteiro da peça principal" |
 | status | enum(`running`,`completed`,`failed`) | |
