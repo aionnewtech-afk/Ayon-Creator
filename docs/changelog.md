@@ -4,6 +4,211 @@
 
 ---
 
+## v2.20 (revisão 37) — 2026-08-04 — Missão 9, Etapa 1: ENCERRADA — n8n provisionado, Fluxo 13 validado de ponta a ponta em ambiente real
+
+**Status: Missão 9, Etapa 1, completa e fechada.** Todos os critérios de aceite cumpridos com validação real (nenhum mock, nenhuma simulação):
+
+- [x] Vídeo MP4 gerado automaticamente (Shotstack real, cenas do Pexels, narração do ElevenLabs)
+- [x] `pipeline_runs` atualizado corretamente (`queued` → `running` → `completed`)
+- [x] `content_versions` criada com `output_storage_path`/`generation_metadata` corretos
+- [x] Créditos debitados **uma única vez** — idempotência confirmada (Fluxo 13, passo 6)
+- [x] Workflow do n8n funcionando de ponta a ponta, ativo, disparado via webhook real
+- [x] Documentação atualizada (`architecture.md` revisão 29, `n8n/README.md` novo)
+- [x] Changelog atualizado (esta entrada)
+- [x] Validação completa em ambiente real: ElevenLabs, Pexels, Shotstack, Supabase, pipeline completo e n8n — todos com chamada real, não simulada
+
+### 1. Auditoria do ambiente (antes de qualquer alteração)
+
+Confirmado via `docker ps`/`docker inspect`: já existia um container `n8n` rodando localmente (porta 5678, `unless-stopped`, criado há 3 semanas), mas pertencente a **outro projeto** do dono do produto (`atendimento-ai-plataform` — volume `atendimento-ai-plataform_n8n_data`, rede `atendimento-ai-plataform_default`, ao lado de uma stack Evolution API/WhatsApp). Reachable (`/healthz` → 200) mas com login próprio (`/rest/workflows` sem sessão → 401) — sem acesso, e sem motivo para ter. Nenhum `docker-compose.yml` existia no repositório do Ayon Creator. **Decisão do dono do produto, apresentada explicitamente antes de qualquer ação:** nova instância isolada, nunca reaproveitar a existente.
+
+### 2. Provisionamento — n8n dedicado (Docker)
+
+- `n8n/docker-compose.yml` (novo) — container `ayon-creator-n8n`, imagem `docker.n8n.io/n8nio/n8n:latest`, porta **5679** (5678 já ocupada pelo outro projeto), volume/rede próprios (`ayon_creator_n8n_data`), `N8N_SECURE_COOKIE=false` (instância só em http local).
+- `n8n/.env.local.example` (novo, committed) / `n8n/.env.local` (gitignored, `N8N_ENCRYPTION_KEY` gerado).
+- Setup do owner account: **não há bootstrap 100% headless** na versão atual do n8n (2.29.11) — feito uma vez via browser automation (Claude Browser), e uma API key gerada em Settings → n8n API para criar/gerenciar o workflow via script. Credenciais em `n8n/.env.local` (gitignored).
+- **Conectividade container ↔ host confirmada antes de montar o workflow:** dentro do container, nosso app Next.js (rodando no host, fora de Docker) só é alcançável via `http://host.docker.internal:3010`, nunca `localhost` (que dentro do container aponta para o próprio container). Testado com `docker exec ... wget http://host.docker.internal:3010/...` antes de qualquer nó do workflow ser criado.
+
+### 3. Workflow "Ayon Creator - Fluxo 13 (Pipeline de Vídeo)"
+
+Construído e ativado via API pública do n8n (`POST /api/v1/workflows` + `/activate`), não pela UI manualmente — reprodutível por script. **Schema dos nós validado empiricamente antes do workflow real:** um workflow de teste mínimo (Webhook + HTTP Request) foi criado, ativado e disparado primeiro, confirmando a estrutura JSON exata (tipos de nó, `typeVersion`, formato de `headerParameters`/`jsonBody`) e o comportamento real de `onError: "continueErrorOutput"` (item roteado para o segundo output com `$json.error.message` populado) — mesma disciplina de "verificar antes de assumir" já usada para as APIs do ElevenLabs/Pexels/Shotstack.
+
+Nós (documentados em detalhe em [n8n/README.md](../n8n/README.md)): **Webhook** (trigger) → **Busca dados da campanha** (Supabase REST) → **ElevenLabs** → **Pexels** → **Shotstack** → **Webhook de retorno (sucesso)**, com um nó paralelo **Webhook de retorno (falha)** recebendo o branch de erro de qualquer uma das 4 etapas anteriores. Cada nó de fornecedor é independente (`onError: continueErrorOutput`) — trocar um fornecedor futuro é editar um nó, não redesenhar o workflow.
+
+### 4. Bug real encontrado e corrigido durante a integração (pedido explícito: parar, explicar, corrigir antes de continuar)
+
+**Causa:** o nó "Busca dados da campanha" (consulta direta ao Supabase) usava o header `x-ayon-webhook-secret` (que só as rotas do Ayon Creator entendem) em vez do que o Supabase PostgREST exige (`apikey` + `Authorization: Bearer <service_role_key>`) — erro de copy-paste no script que montou o workflow (uma função helper aplicava o mesmo header a todos os nós HTTP, inclusive o que fala com um serviço externo diferente). Resultado: `401 - "No API key found in request"`.
+
+**Efeito colateral positivo:** essa falha real validou o branch de erro do workflow antes mesmo do caminho feliz — o erro foi capturado (`continueErrorOutput`), roteado para "Webhook de retorno (falha)", que chamou `/api/webhooks/n8n` com `status: "failed"`; `pipeline_runs`/`content_pieces` foram marcados como `failed` corretamente, **sem nenhuma cobrança de crédito**. O desenho de tratamento de erro funcionou exatamente como projetado.
+
+**Correção:** headers do nó "Busca dados da campanha" atualizados para `apikey`/`Authorization: Bearer <service_role_key>` via `PUT /api/v1/workflows/{id}`. Reexecutado — sucesso completo (ver §5).
+
+**Segundo bug real, encontrado no `pnpm build` (não no runtime do workflow):** `packages/core/src/shared/verify-n8n-webhook-secret.ts` usa `node:crypto` (`timingSafeEqual`) e foi exportado pelo barrel geral (`packages/core/src/index.ts`) — que é importado por um Client Component (`apps/web/components/layout/sidebar.tsx`, só por causa de `hasMinimumRole`). Build do Next.js quebrou: `UnhandledSchemeError: Reading from "node:crypto" is not handled by plugins`. **Mesma classe de bug que o próprio barrel já documentava e evitava** para `pdf-parse`, o SDK do Mercado Pago e `jszip` — desta vez eu mesmo cometi o erro que o comentário do arquivo já alertava. Corrigido seguindo exatamente o padrão já estabelecido: `verify-n8n-webhook-secret` removido do barrel geral, as 4 rotas que precisam dele importam direto de `@ayon/core/src/shared/verify-n8n-webhook-secret`. `pnpm build` limpo depois da correção.
+
+### 5. Validação real de ponta a ponta (`video-pipeline-trigger-real.test.ts`, novo)
+
+Fixture própria (organização/marca/campanha/sessão/peça, criada e removida a cada execução) chamando `triggerVideoGeneration` de verdade — que dispara o webhook do n8n real, o workflow processa narrate → scenes → render → completion, o teste faz polling em `pipeline_runs` até um estado terminal. **Rodado 3 vezes** (1ª: bug do header, capturado corretamente como `failed`; 2ª e 3ª, após as duas correções: `completed` em ambas, ~33-40s cada). Confirmado: `content_versions.output_storage_path` correto, `generation_metadata.video_render_provider_key = "shotstack"`, exatamente 1 lançamento em `credit_ledger` de -15 créditos (tier econômico) vinculado a `related_pipeline_run_id`.
+
+**Suíte completa reexecutada ao final** (`pnpm --filter core exec vitest run`, sem filtro): 5 arquivos, 13 testes, todos passando — os 3 providers isolados, a resolução via Provider Gateway, o pipeline direto (sem n8n) e o pipeline via n8n real.
+
+### 6. Checklist de disciplina de missão (pedido explícito)
+
+- [x] Auditoria antes de alterar (§1)
+- [x] Documentar antes quando necessário (decisão de nova instância apresentada ao dono do produto antes de provisionar)
+- [x] Validação real em cada etapa (schema do n8n testado isoladamente antes do workflow real; conectividade container↔host testada antes dos nós; workflow testado após cada correção)
+- [x] `pnpm typecheck` limpo (todos os 5 workspaces)
+- [x] `pnpm lint` limpo
+- [x] `pnpm build` limpo (depois da correção do bug do barrel)
+- [x] Limpeza de dados de teste confirmada por query direta (zero linhas remanescentes desta sessão — um órfão pré-existente de uma sessão anterior, `missao8.learningtest`, identificado mas **não tocado**, fora do escopo desta missão, sinalizado à parte)
+- [ ] Commits organizados + tag de release — próximo passo desta mesma sessão, após esta entrada de changelog
+
+**Documentos atualizados nesta revisão:** `docs/architecture.md` (revisão 29), `docs/changelog.md` (esta entrada), `n8n/README.md` (novo).
+
+**Missão 9, Etapa 1: encerrada.** Etapa 2 (avatar de IA, HeyGen, recurso Premium) permanece como trabalho futuro, sem código, aguardando priorização do dono do produto — nenhuma dependência bloqueante deixada pela Etapa 1.
+
+---
+
+## v2.19 (revisão 36) — 2026-08-04 — Missão 9, Etapa 1: pipeline completo implementado e validado (sem n8n provisionado ainda)
+
+**Status:** todo o lado da aplicação está pronto e validado com chamadas reais de ponta a ponta (ElevenLabs + Pexels + Shotstack + Supabase reais) — falta só a peça externa: uma instância de n8n provisionada e o workflow em si configurado nela. Confirmado com o dono do produto antes de começar: **n8n ainda não está provisionado**, então o pipeline foi construído com a extremidade de disparo (nós → n8n) e a extremidade de recebimento (n8n → nós, 4 rotas HTTP) prontas e testadas separadamente — a orquestração real dentro do n8n é o próximo passo, pendente de infraestrutura externa ao código.
+
+**Migration `0017_asset_engine_video_pipeline.sql` (aplicada e validada em produção):**
+- `provider_configs.capability` ganha `video_render`; `content_pieces.status` ganha `failed`.
+- **`pipeline_runs` criada pela primeira vez** — achado confirmado nesta implementação: a tabela estava documentada em `database.md` §4.8 desde revisões antigas como já existente, mas nenhuma migration a criou até agora (nenhuma missão anterior precisou de execução assíncrona de verdade). RLS por organização via novo helper `pipeline_run_organization_id`.
+- `credit_ledger` ganha `related_pipeline_run_id` (único — idempotência do débito assíncrono).
+- `credit_pricing` ganha `video_generation` (15/30/50 créditos por tier — **valores placeholder**, decisão final do dono do produto continua em aberto, PRD §13 item 11).
+- `provider_configs` seed: `voice`/`media`/`video_render` × 3 tiers, um fornecedor cada (ElevenLabs/Pexels/Shotstack), confirmado pelo teste de resolução via Provider Gateway (`provider-gateway-video-real.test.ts`, v2.18).
+
+**Implementação do pipeline (`packages/core/src/asset-engine/`):**
+- `video-pipeline-narrate.ts` — Voice Provider (ElevenLabs), grava o áudio no bucket `content-output`, devolve signed URL + `captionCues`.
+- `video-pipeline-scenes.ts` — Media Provider (Pexels), encadeia candidatos em sequência até cobrir a duração da narração (simplificação deliberada da Etapa 1 — seleção por trecho/caption-cue fica para refinamento futuro).
+- `video-pipeline-render.ts` — Video Render Provider (Shotstack), baixa o MP4 final e regrava no nosso Storage (nunca depende de URL temporária de terceiro).
+- `video-pipeline-complete.ts` — `completeVideoPipelineSuccess`/`completeVideoPipelineFailure`, chamadas pelo webhook de conclusão: cria `content_versions`, atualiza `content_pieces.status`/`pipeline_runs`, e só em caso de sucesso registra o consumo de crédito (`recordConsumption`, idempotente via `related_pipeline_run_id`).
+- `video-pipeline-trigger.ts` — `triggerVideoGeneration`: portão de crédito, `content_pieces.status = generating`, cria `pipeline_runs` (`queued`), dispara o n8n via webhook autenticado. Falha de forma limpa e recuperável (`content_pieces.status = failed`) quando `N8N_WEBHOOK_URL`/`N8N_WEBHOOK_SECRET` não estão configuradas — comportamento esperado e testado enquanto o n8n não existe.
+- `initializeCampaignContentPieces` atualizada: `production_mode` do formato `video` passa de `own_media` para `licensed_stock_video` — sem essa mudança, o pipeline novo nunca seria acionado por nenhuma campanha criada depois desta revisão.
+- `generateVideoContentPieceAction` (novo, `criar-campanha/asset-actions.ts`) — entrada da Server Action para CAMP-5, mesmo padrão de erro/bloqueio de `regenerateContentPieceAction`.
+
+**Rotas HTTP novas (`apps/web/app/api/`)** — todas autenticadas por segredo compartilhado (`x-ayon-webhook-secret`, comparação em tempo constante — `verifyN8nWebhookSecret`), nunca por sessão de usuário (chamadas servidor-a-servidor do n8n não carregam cookie):
+- `pipeline/video/narrate`, `pipeline/video/scenes`, `pipeline/video/render` — uma por etapa, para que o n8n possa reexecutar uma etapa isoladamente sem repetir as anteriores (retentativa granular, arch. §8).
+- `webhooks/n8n` — conclusão do pipeline (sucesso ou falha), mesmo princípio de sempre-200 do webhook do Mercado Pago (nunca causar reentrega indefinida por um erro já logado).
+
+**★ Bug real encontrado e corrigido — `apps/web/middleware.ts`:** o `matcher` do middleware de autenticação cobria `/api/**` inteiro, redirecionando (307) para `/login` qualquer chamada sem sessão de usuário — inclusive `/api/webhooks/mercado-pago`, que tem autenticação própria por assinatura e nunca deveria depender de sessão do Supabase Auth. Confirmado com `curl` direto contra o Mercado Pago **antes** da correção: 307 para `/login` em vez de chegar à validação de assinatura. Bug pré-existente desde a Missão 6, nunca pego porque nenhum teste automatizado exercita esse webhook via HTTP real (só validação manual, que aparentemente nunca reproduziu esse caminho). Corrigido com um bypass explícito para `/api/webhooks/*` e `/api/pipeline/*` no início do middleware — confirmado depois com o mesmo `curl`: o Mercado Pago passou a responder `400` (chegando à validação de assinatura de verdade) em vez de `307`.
+
+**Validação real (ponta a ponta, `video-pipeline-real.test.ts`):** fixture própria (organização/marca/campanha/sessão/peça de teste, criada e removida a cada execução) rodando a sequência completa narrate → scenes → render → complete contra ElevenLabs/Pexels/Shotstack/Supabase reais. Confirmado: `content_versions` criada com o MP4 final no Storage, `content_pieces.status = ready_for_review`, `pipeline_runs.status = completed`, exatos 15 créditos debitados (tier econômico), **idempotência confirmada** — uma segunda chamada de `completeVideoPipelineSuccess` com o mesmo `pipelineRunId` não debita de novo. Zero dados de teste remanescentes após a limpeza (confirmado por query direta pós-execução).
+
+**Ainda pendente (não bloqueante para o código, bloqueante para o pipeline funcionar de ponta a ponta):** provisionar uma instância de n8n e montar o workflow que: recebe o webhook de disparo, chama em sequência `pipeline/video/narrate` → `pipeline/video/scenes` → `pipeline/video/render`, e por fim chama `webhooks/n8n` com o resultado. Nenhuma decisão de arquitetura nova necessária para isso — as 4 rotas já expõem exatamente o contrato que o workflow precisa orquestrar.
+
+---
+
+## v2.18 (revisão 35) — 2026-08-04 — Missão 9, Etapa 1: 3 providers implementados e validados com chamadas reais
+
+**Status:** primeiro código real da Missão 9. Implementados e validados com ElevenLabs, Pexels e Shotstack reais (contas do dono do produto, sandbox do Shotstack) os 3 adapters da Etapa 1 — nenhum mock. **Nenhum bug encontrado na primeira validação** — os 3 passaram de primeira, sem precisar de correção no adapter.
+
+**Implementação:**
+
+- `packages/core/src/providers/voice-provider.ts` + `elevenlabs-voice-provider.ts` — `POST /v1/text-to-speech/{voice_id}/with-timestamps` (não o endpoint simples de TTS): a marcação de tempo por caractere que esse endpoint devolve é usada diretamente para montar `captionCues`, confirmando em produção real a decisão já registrada em [architecture.md §3.5.1](../docs/architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9) (revisão 26) — nenhuma capacidade de transcrição separada foi necessária.
+- `packages/core/src/providers/media-provider.ts` + `pexels-media-provider.ts` — `GET /videos/search` (endpoint correto confirmado por pesquisa antes de codar: **não** é `/v1/videos/search`, apesar de alguma documentação de terceiros sugerir isso) + `GET /videos/videos/{id}` para `fetchMedia`.
+- `packages/core/src/providers/video-render-provider.ts` + `shotstack-video-render-provider.ts` — submete a `POST {host}/render`, faz polling em `GET {host}/render/{id}` até `status = "done"` (confirmado por pesquisa antes de codar: **não** é `"completed"`, valor que uma primeira leitura de documentação de terceiros sugeriu incorretamente — teria causado um bug de polling infinito se não verificado). Timeline monta 1 track de legenda (`asset.type = "title"`, um clip por `captionCue`) + 1 track de vídeo (cenas) + 1 `soundtrack` (narração).
+- `SHOTSTACK_HOST` normalizado defensivamente no adapter (remove `/render` final e barras finais) — achado durante a configuração: o valor real configurado pelo dono do produto incluía `/render` no fim (`.../edit/stage/render`), divergente do formato documentado em `.env.local.example` (`.../edit/stage`); em vez de pedir para reconfigurar, o adapter passou a aceitar as duas formas.
+- Teste de validação `video-providers-real.test.ts` — cada um dos 3 testes só roda quando a env var correspondente existe (`it.skipIf`), nunca entra no `pnpm test`/CI normal sem as 3 chaves reais configuradas. Confirmado que, sem as chaves, os 3 pulam (não falham) e o restante da suíte (`slug.test.ts`) continua passando.
+- Env vars (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `SHOTSTACK_API_KEY`, `SHOTSTACK_HOST`) adicionadas a `.env.local.example` e configuradas pelo dono do produto nos dois `.env.local` (raiz e `apps/web`) — sincronizadas manualmente entre os dois arquivos (mesmo processo manual já documentado como dívida técnica em [hardening-plan.md, item 2.2](hardening-plan.md#2-dívidas-técnicas)).
+
+**Validação real (contas do dono do produto) — latência e custo, pedido explícito para embasar a precificação de `video_generation` (PRD §13, item 11, ainda em aberto):**
+
+| Provider | Operação testada | Tempo medido (chamada real) | Custo |
+|---|---|---|---|
+| **ElevenLabs** | `synthesizeVoice` — roteiro de 97 caracteres → 7.338s de áudio | 5.25s | Cobrado por **caractere de entrada**, não por tempo de resposta nem duração de saída: US$0,09–0,20 por 1.000 caracteres, conforme o plano (Free US$0,10 · Starter US$0,20 · Creator US$0,09 · Pro/Scale/Business ~US$0,17). Um roteiro de 97 caracteres custa **~US$0,01–0,02** na tabela pública. |
+| **Pexels** | `searchMedia` (3 candidatos) + `fetchMedia` (1 candidato específico) | 2.06s (search) + 0.24s (fetch) | **Gratuito** — sem custo monetário, sujeito a rate limit por API key (não medido nesta validação). |
+| **Shotstack** | `composeVideo` — 1 cena (5s) + narração + 1 cue de legenda, submit → `done` | 16.32s | **Sandbox (stage), usado nesta validação:** sem cobrança monetária direta, mas consome créditos de teste (10 grátis por conta, expiram em 30 dias) e o vídeo final sai com marca d'água — não representativo do custo real de produção. **Produção (`v1`):** US$0,20/min (plano Subscription) a US$0,30/min (Pay-as-you-go), arredondado para o segundo — um clipe de 5s equivale a **~US$0,017–0,025** na tabela pública. |
+
+**Nota de honestidade sobre os números de custo:** valores de tabela pública consultados nesta revisão (preços dos fornecedores podem mudar sem aviso), não faturamento real confirmado nas contas do dono do produto — suficientes para uma primeira estimativa de precificação de `video_generation`, mas não uma fonte de verdade de billing. Tempo de resposta é de uma única chamada por fornecedor, ambiente de desenvolvimento, sem repetição estatística — indicativo de ordem de grandeza (ElevenLabs ~5s, Pexels ~2s, Shotstack sandbox ~16s para um clipe curto), não uma média formal com desvio padrão.
+
+**Ainda não iniciado:** montagem do pipeline completo (Fluxo 13 — upload do áudio sintetizado ao Storage, n8n, `pipeline_runs`, webhook de conclusão, credit gate assíncrono). Próximo passo, conforme combinado com o dono do produto.
+
+---
+
+## v2.17 (revisão 34) — 2026-08-04 — Missão 9 dividida em 2 etapas (Etapa 1: sem avatar)
+
+**Status:** decisão de escopo do dono do produto, antes de qualquer código escrito. Enquanto as contas/API keys de ElevenLabs, HeyGen, Pexels e Shotstack são providenciadas, o dono do produto revisitou o tamanho da fatia vertical da Missão 9 e decidiu reduzi-la — mesma disciplina de "uma fatia por vez" já usada em todas as missões anteriores.
+
+**Decisão:** Missão 9 passa a ser implementada em 2 etapas:
+
+- **Etapa 1 (próxima implementação):** só `production_mode = licensed_stock_video`. Pipeline completo de ponta a ponta — roteiro → narração (ElevenLabs) → cenas (Pexels) → composição (Shotstack) → MP4 vertical 9:16 com legenda — sem depender de avatar em nenhum ponto.
+- **Etapa 2 (futura, recurso Premium):** `ai_avatar` (HeyGen) e `hybrid` (que depende de avatar). A Provider Layer permanece preparada para HeyGen desde já (contrato `avatar` documentado em [architecture.md §5](../docs/architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier)), mas **zero código de avatar nesta etapa** — nenhuma implementação de HeyGen bloqueia o fechamento da Etapa 1. Quando implementado, avatar de IA passa a ser um recurso exclusivo do tier Premium (decisão de produto nova, não só adiamento técnico).
+
+**Por que isso reduz risco de retrabalho:** a Etapa 1 já entrega o pipeline assíncrono completo (n8n, `pipeline_runs`, webhook de conclusão, credit gate assíncrono, legendas) com só 2 fornecedores externos novos (ElevenLabs, Pexels) em vez de 3 (+ HeyGen) — menos superfície para validar de uma vez, e a peça mais arquiteturalmente nova do produto (execução assíncrona) fica provada com menos variáveis simultâneas. A Etapa 2 herda a mesma infraestrutura (Fluxo 13, Provider Gateway, credit gate) sem redesenho — só um adapter novo + um branch a mais no passo 3 do pipeline.
+
+**Documentos atualizados nesta revisão:** PRD.md (revisão 22), docs/architecture.md (revisão 27), docs/database.md (revisão 24 — sem mudança de schema, só nota de escopo), docs/flows.md (revisão 25), docs/ux-design.md (revisão 23). docs/engine-behavior.md **não precisou de mudança** — os princípios de narração/seleção de cena já documentados na §5.1 não fazem nenhuma menção específica a avatar que precisasse ser removida ou adiada.
+
+**Nenhuma mudança de schema.** `content_pieces.production_mode` já suportava `ai_avatar`/`hybrid` desde a revisão 3 do banco — a Etapa 1 simplesmente não grava nenhuma linha com esses valores ainda; nenhuma migration é afetada por essa divisão.
+
+**Ainda sem código.** Próximo passo inalterado: obtenção de contas/API keys de ElevenLabs, Pexels e Shotstack (HeyGen adiado para quando a Etapa 2 for aprovada) antes do primeiro commit.
+
+---
+
+## v2.16 (revisão 33) — 2026-08-04 — Missão 9 aprovada, fornecedores concretos definidos
+
+**Status:** documentação da Missão 9 (v2.15/revisão 32) **aprovada pelo dono do produto**. Fornecedores concretos escolhidos para o MVP, fechando as últimas decisões que bloqueavam o início do código. Ainda sem nenhuma linha de código escrita — próximo passo é a resolução operacional (contas/API keys dos 4 fornecedores) antes do primeiro commit.
+
+**Decisões do dono do produto nesta rodada:**
+
+1. Nome interno mantido **Asset Engine** (confirmado novamente).
+2. Modos `stock_video`/`ai_avatar`/`hybrid` confirmados, somados a `text_only`/`own_media` já existentes desde a Missão 7 — mapeados no schema a `licensed_stock_video`/`ai_avatar`/`hybrid`/`text_only`/`own_media` (PRD §4.2).
+3. n8n confirmado como orquestrador oficial dos pipelines assíncronos (já havia sido decidido na rodada anterior — reafirmado).
+4. `video_render` confirmado como capacidade nova do Provider Gateway (idem — reafirmado).
+5. **Fornecedores concretos definidos, um por capability, desacoplados via Provider Gateway** (nenhum Core Engine os conhece diretamente):
+   - **Voice Provider = ElevenLabs** — já era o fornecedor documentado desde a revisão 3 da arquitetura, nunca implementado. Achado favorável durante esta rodada: a API já retorna marcação de tempo por caractere junto do áudio sintetizado, resolvendo de quebra a decisão em aberto sobre mecanismo de legenda (PRD §13, item 10) — usada diretamente para `captionCues`, sem precisar de uma capacidade de transcrição própria.
+   - **Avatar Provider = HeyGen** — idem, já documentado desde a revisão 3, nunca implementado.
+   - **Media Provider = Pexels** — resolve PRD §13, item 6 (decisão em aberto desde a revisão original do documento). Escolhido por ser API de banco de vídeo licenciado gratuita para uso comercial, coerente com a filosofia de custo do produto (§8).
+   - **Video Render Provider = Shotstack** — resolve PRD §13, item 10 (parte do fornecedor). Composição de vídeo via API com timeline em JSON, suporta formato vertical 9:16 e burn-in de legenda — contrato compatível com `composeVideo` já especificado.
+6. **Mapeamento tier → fornecedor resolvido para o MVP:** um único fornecedor por capability, o mesmo em todos os tiers (Econômico/Balanceado/Premium) — diferenciação por tier dentro de cada capability fica para quando houver demanda real, mesmo raciocínio já usado para os modelos de LLM dos especialistas do Intelligence Hub. Resolve PRD §13, item 2 (aberto desde a revisão original do PRD, nunca antes bloqueava nenhuma implementação em andamento).
+7. **Precificação em créditos (`video_generation`) permanece em aberto** por decisão explícita — não bloqueia migration nem implementação (linha com placeholder, ajustável por `UPDATE`, mesmo padrão de `asset_generation`/`trend_ranking`).
+8. **Confirmado, sem mudança de schema:** `pipeline_runs.status` já tinha o ciclo `queued → running → completed`/`failed` desde a definição original da tabela (revisões antigas do banco), e o Fluxo 13 (v2.15) já usava exatamente essa sequência — o pedido do dono do produto de um estado `queued` antes de `running` já estava satisfeito pelo desenho anterior.
+
+**Documentos atualizados nesta revisão:** PRD.md (revisão 21), docs/architecture.md (revisão 26), docs/database.md (revisão 23) — §5/§10 (architecture) e stack/§13 (PRD) resolvidos com os 4 fornecedores; nenhuma mudança de schema em database.md além de uma nota confirmando o ciclo de `pipeline_runs.status` já existente. docs/flows.md, docs/ux-design.md e docs/engine-behavior.md **não precisaram de mudança nesta rodada** — descreviam o pipeline/contratos em termos de capability, não de fornecedor, então já estavam corretos.
+
+**Único item real e não-bloqueante que permanece em aberto:** regra de segmentação do modo `hybrid` (quais trechos do roteiro usam avatar vs. banco de vídeo) — fallback simples (peça inteira em um dos dois modos) é suficiente para começar a implementação.
+
+**Ainda sem código.** Próximo passo: obtenção de contas/API keys dos 4 fornecedores (ElevenLabs, HeyGen, Pexels, Shotstack) — pré-requisito operacional, não de documentação — antes do primeiro commit da Missão 9.
+
+---
+
+## v2.15 (revisão 32) — 2026-08-04 — Auditoria e preparação doc-first da Missão 9 (Asset Engine ganha geração automática de vídeo)
+
+**Status:** documentação preparada — **aguardando aprovação explícita do dono do produto antes do início do código**, seguindo o mesmo processo doc-first de todas as missões anteriores. Fornecedores concretos de Avatar/Voice/Media/Video Render Provider e o mecanismo exato de legenda (quando o Voice Provider não suporta marcação de tempo nativa) seguem em aberto e **bloqueiam o início do código**, não a aprovação da documentação (PRD §13, itens 2/6/10).
+
+**Objetivo da missão:** transformar a produção de vídeo do Asset Engine de "upload manual pelo cliente" (Missão 7) em geração automática — vídeo vertical 9:16, narração por IA, montagem automática (avatar de IA e/ou banco de vídeo licenciado), legendas, exportação em MP4, integrado ao pacote final da campanha.
+
+**Auditoria técnica realizada antes de qualquer mudança de documento** (código e schema lidos diretamente, não por suposição):
+
+- Confirmado: `production_mode` hoje só cobre `text_only`/`own_media` de fato ([initialize-campaign-content-pieces.ts](../packages/core/src/asset-engine/initialize-campaign-content-pieces.ts) hardcoda esse mapeamento). `ai_avatar`/`licensed_stock_video`/`hybrid` já existem no enum do schema desde a revisão 3 do banco, nunca usados em código.
+- Confirmado: Provider Gateway (`provider-gateway.ts`) só resolve `llm` e `trend_source` — zero adapter de Avatar/Voice/Media em qualquer lugar do repositório (busca exaustiva, sem resultado).
+- Confirmado: nenhuma biblioteca de renderização/composição de vídeo em nenhum `package.json` do monorepo — a capacidade de "compor cenas + narração + legenda em um MP4" não existia nem como conceito documentado antes desta revisão.
+- **Contradição de documentação encontrada:** `docs/engine-behavior.md` §5 (Asset Engine) ainda dizia "Ainda sem código" — mas o Asset Engine foi implementado e validado desde a Missão 7; o próprio §8 do mesmo documento já registrava isso corretamente. Seção nunca atualizada quando a Missão 7 fechou — mesma classe de lacuna já encontrada 2x antes (Trend Engine, revisões 12/13 do mesmo documento). Corrigida nesta revisão.
+- **Decisões de produto em aberto identificadas e levadas ao dono do produto antes de qualquer redação de documento** (regra do processo, mesmo padrão já usado nas Missões 5 e demais): o que é "banco de cenas" (Media Provider externo vs. biblioteca interna), se avatar é obrigatório no MVP, como o vídeo final é de fato renderizado, e como tratar a primeira operação genuinamente assíncrona do produto.
+
+**Decisões do dono do produto (após apresentação das opções, antes de qualquer redação de documento):**
+
+1. **Avatar não é obrigatório.** O Asset Engine passa a suportar três modos de produção de vídeo, todos igualmente válidos: `stock_video` (mapeado ao `licensed_stock_video` já existente no schema), `ai_avatar` e `hybrid`.
+2. **Nova capacidade `video_render` na Provider Gateway** (não reaproveita nenhuma capacidade existente) — composição final de vídeo (cenas + narração + legenda → MP4), mantendo a Provider Layer desacoplada de fornecedor: o Asset Engine nunca sabe qual serviço externo está renderizando.
+3. **Precificação em créditos própria para vídeo**, `trigger_reason` `video_generation` separado de `asset_generation` (texto) — valores exatos por tier ficam como decisão em aberto até o doc-first (não bloqueia migration, mesmo padrão já usado para `asset_generation`/`trend_ranking`: linha com placeholder, ajustável por `UPDATE`).
+4. **n8n passa a fazer parte oficialmente da arquitetura** nesta missão — primeira ativação real (Missões 2 a 8 nunca precisaram dele), responsável pelos pipelines assíncronos de geração de vídeo. Resolve a decisão em aberto de longa data [architecture.md §10, item 2](../docs/architecture.md#10-decisões-em-aberto-arquitetura) ("composição de vídeos híbridos: n8n ou dentro do Asset Engine?").
+5. **Nome interno do Core Engine mantido como "Asset Engine"** — não é um rebranding para "Multimedia Engine" apesar do objetivo da missão ser descrito assim; só a responsabilidade do módulo se expande.
+
+**Documentos atualizados nesta revisão** (ordem do processo doc-first, [README.md](../README.md#regra-de-trabalho)):
+
+1. **PRD.md** (revisão 20) — §4.2 (modos de produção passam de especificação para escopo aprovado), §9.1 (itens explícitos de geração de vídeo no MVP), §10 (stack ganha Video Render Provider + nota de ativação do n8n), §13 (itens 2/4/6 atualizados com nota de bloqueio; novos itens 10 e 11 — fornecedor/legenda e precificação).
+2. **docs/architecture.md** (revisão 25) — nova §3.5.1 (pipeline completo de geração de vídeo: narração → cenas → composição), §5 (nova capacidade `video_render`), §8 reescrita (n8n ativado, papel real no pipeline de vídeo), §12.3/§12.4 (portão de crédito assíncrono, novo `trigger_reason`), §10 (item 2 resolvido, item 6 marcado como bloqueante, novo item 12).
+3. **docs/database.md** (revisão 22) — `provider_configs.capability` ganha `video_render`; `content_pieces.status` ganha `failed`; `content_versions.generation_metadata` ganha `video_render_provider_key`; `pipeline_runs` (§4.8, existente desde revisões antigas, nunca usada) marcada para ativação real; `credit_ledger` ganha `related_pipeline_run_id` (idempotência de cobrança assíncrona); `credit_pricing` ganha `video_generation`; RLS de `pipeline_runs` documentada; novo item em §10.
+4. **docs/flows.md** (revisão 24) — Fluxo 3 §3.2 reescrito para o formato `video`; novo **Fluxo 13 — Pipeline de Geração de Vídeo (n8n)**, passo a passo completo; Fluxo 6 atualizado (cobrança assíncrona via webhook); Convenções de Status ganha `failed`/`pipeline_runs`; 2 novos itens em Decisões em Aberto.
+5. **docs/ux-design.md** (revisão 22) — CAMP-4/5 ganham estados de geração de vídeo assíncrona e falha/"tentar novamente"; §4.5/§4.6 atualizados; 2 novos itens em Decisões em Aberto (Realtime vs. polling, feedback de tempo estimado).
+6. **docs/engine-behavior.md** (revisão 16) — §5 corrigida (contradição "ainda sem código") + nova §5.1, princípios de comportamento específicos de narração/seleção de cena para geração de vídeo.
+
+**Nenhuma migration aplicada, nenhum código escrito** — esta revisão é só documentação, aguardando aprovação antes de qualquer implementação, exatamente como pedido.
+
+**Próximo passo:** aprovação do dono do produto sobre esta preparação; depois, resolução dos fornecedores concretos (Media/Video Render/Avatar/Voice Provider) e do mecanismo de legenda antes do primeiro commit de código da Missão 9.
+
+---
+
 ## v2.14 (revisão 31) — 2026-08-04 — Missão H2 (Fundação de qualidade) implementada, validada e encerrada
 
 **Status:** implementado e validado — repositório publicado no GitHub, CI real rodando no GitHub Actions. Fecha os itens P0 de §7/§8 do plano de hardening (7.1, 7.2, 7.3, 7.4, 8.1, 8.2).

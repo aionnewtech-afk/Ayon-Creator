@@ -2,6 +2,24 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.10.0] — 2026-08-04
+
+### Adicionado
+
+- **Missão 9, Etapa 1 — Asset Engine ganha geração automática de vídeo** (`licensed_stock_video`): pipeline completo roteiro → narração → cenas → composição → MP4 vertical 9:16 com legenda, orquestrado por n8n (primeira ativação real da infraestrutura de pipelines assíncronos do produto).
+  - **Providers novos**: `ElevenLabsVoiceProvider` (narração + timestamps por caractere, usados para legenda sem capacidade de transcrição separada), `PexelsMediaProvider` (banco de vídeo licenciado), `ShotstackVideoRenderProvider` (composição final). Resolvidos via Provider Gateway (`resolveVoiceProvider`/`resolveMediaProvider`/`resolveVideoRenderProvider`), `provider_configs` seedado por migration `0017`.
+  - **Migration `0017_asset_engine_video_pipeline.sql`**: `provider_configs.capability` += `video_render`; `content_pieces.status` += `failed`; **`pipeline_runs` criada pela primeira vez** (documentada desde revisões antigas, nunca migrada até agora); `credit_ledger` += `related_pipeline_run_id` (idempotência); `credit_pricing` += `video_generation` (15/30/50, placeholder).
+  - **Pipeline** (`packages/core/src/asset-engine/video-pipeline-*.ts`): `narrateVideoContentPiece`, `selectVideoScenes`, `renderVideoContentPiece`, `completeVideoPipelineSuccess`/`Failure`, `triggerVideoGeneration`.
+  - **4 rotas HTTP novas** (`apps/web/app/api/pipeline/video/{narrate,scenes,render}`, `apps/web/app/api/webhooks/n8n`), autenticadas por segredo compartilhado.
+  - **n8n provisionado** como instância própria e isolada do Ayon Creator (Docker, `n8n/docker-compose.yml`, porta 5679) — nunca reaproveitando uma instância de outro projeto encontrada rodando localmente. Workflow "Ayon Creator - Fluxo 13 (Pipeline de Vídeo)" criado e ativado via API, documentado em `n8n/README.md`.
+  - `generateVideoContentPieceAction` (novo, `criar-campanha/asset-actions.ts`) — entrada da Server Action para CAMP-5.
+
+### Corrigido durante a implementação (achados reais)
+
+- **`apps/web/middleware.ts`**: o `matcher` de autenticação cobria `/api/**` inteiro, redirecionando (307→`/login`) qualquer chamada sem sessão de usuário — inclusive `/api/webhooks/mercado-pago`, que tem autenticação própria por assinatura. Bug pré-existente desde a Missão 6, nunca pego por falta de teste HTTP real contra o webhook. Corrigido com bypass explícito para `/api/webhooks/*` e `/api/pipeline/*`.
+- **Nó "Busca dados da campanha" do workflow n8n**: headers errados (`x-ayon-webhook-secret`, específico do Ayon Creator, em vez de `apikey`/`Authorization: Bearer` que o Supabase exige) — `401` na primeira validação real. Corrigido; o branch de falha do workflow capturou e reportou o erro corretamente (sem cobrança de crédito), validando o desenho de tratamento de erro mesmo durante o bug.
+- **`packages/core/src/index.ts`**: `verify-n8n-webhook-secret.ts` (usa `node:crypto`) foi exportado pelo barrel geral, quebrando o build do Next.js ao ser puxado por um Client Component. Mesma classe de bug já documentada no arquivo para `pdf-parse`/Mercado Pago/`jszip` — corrigido seguindo o mesmo padrão (removido do barrel, importado direto pelos 4 call sites).
+
 ## [0.9.0] — 2026-08-04
 
 ### Adicionado

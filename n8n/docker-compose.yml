@@ -1,0 +1,35 @@
+# n8n dedicado ao Ayon Creator (Missão 9, Fluxo 13) — instância isolada,
+# nunca compartilhada com outros projetos (ver docs/changelog.md, achado da
+# auditoria: já existe um n8n rodando para "atendimento-ai-plataform",
+# porta 5678, volume/rede próprios daquele projeto — este é um container,
+# volume e rede totalmente separados, porta 5679).
+#
+# Subir:   docker compose --env-file .env.local -f n8n/docker-compose.yml up -d
+# Parar:   docker compose --env-file .env.local -f n8n/docker-compose.yml down
+# UI:      http://localhost:5679
+#
+# Variáveis em n8n/.env.local (gitignored — ver n8n/.env.local.example).
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: ayon-creator-n8n
+    restart: unless-stopped
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5679/
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # Instância só em http local (sem TLS) — cookie seguro quebraria o login.
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      - ayon_creator_n8n_data:/home/node/.n8n
+
+volumes:
+  ayon_creator_n8n_data:
+    name: ayon_creator_n8n_data
