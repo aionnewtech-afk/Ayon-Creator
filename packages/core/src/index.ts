@@ -22,6 +22,8 @@ export * from "./repositories/plan.repository";
 export * from "./repositories/content-piece.repository";
 export * from "./repositories/content-version.repository";
 export * from "./repositories/content-package.repository";
+export * from "./repositories/learning-signal.repository";
+export * from "./repositories/learning-insight.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
@@ -50,6 +52,10 @@ export * from "./billing/credit-gate";
 export * from "./asset-engine/asset-generation-prompts";
 export * from "./asset-engine/generate-text-piece";
 export * from "./asset-engine/initialize-campaign-content-pieces";
+export * from "./learning-engine/learning-engine-prompts";
+export * from "./learning-engine/run-learning-analysis-panel";
+export * from "./learning-engine/run-learning-coordinator";
+export * from "./learning-engine/learning-engine";
 export * from "./knowledge-base/knowledge-source-labels";
 // `./knowledge-base/extract-document-text` fica FORA deste barrel de propósito:
 // depende de pdf-parse (acessa `fs`), e este arquivo é importado por Client

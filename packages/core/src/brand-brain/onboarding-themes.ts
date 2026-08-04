@@ -136,3 +136,38 @@ export function knownFieldsFromProfile(profile: BrandBrainProfileRow | null): Kn
     .map((questionKey) => ({ questionKey, value: profileFieldValue(profile, questionKey) }))
     .filter((field): field is KnownFieldsSnapshot => field.value !== null);
 }
+
+/**
+ * Um aprendizado aceito pelo cliente (Brand Evolution, Fluxo 8) — shape do
+ * jsonb `brand_brain_profiles.learned_preferences`. `{ insights: [...] }`
+ * acumula ao longo do tempo (cada aceite adiciona uma entrada, nunca
+ * sobrescreve as anteriores).
+ */
+export interface LearnedPreferenceEntry {
+  id: string;
+  insightType: string;
+  appliedTo: string;
+  text: string;
+  appliedAt: string;
+}
+
+/**
+ * Texto pronto para injeção no contexto de marca (`buildBrandContextBlock`)
+ * — único mecanismo real de "aplicação" de um `learning_insight` aceito
+ * (database.md §4.7, Missão 8): todo Core Engine que já monta contexto de
+ * marca passa a ver os aprendizados aceitos, sem precisar de um caminho de
+ * código separado por `applied_to`. `undefined` quando não há nenhum
+ * aprendizado aceito ainda (caso de toda marca antes da Missão 8).
+ */
+export function learnedPreferencesTextFromProfile(profile: BrandBrainProfileRow | null): string | undefined {
+  if (!profile) return undefined;
+
+  const raw = profile.learned_preferences as { insights?: unknown } | null;
+  const rawInsights = Array.isArray(raw?.insights) ? raw.insights : [];
+
+  const texts = rawInsights
+    .filter((entry): entry is LearnedPreferenceEntry => typeof entry === "object" && entry !== null && typeof (entry as Record<string, unknown>).text === "string")
+    .map((entry) => `- ${entry.text}`);
+
+  return texts.length === 0 ? undefined : texts.join("\n");
+}

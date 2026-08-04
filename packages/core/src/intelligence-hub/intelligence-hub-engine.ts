@@ -4,7 +4,7 @@ import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { SpecialistRepository } from "../repositories/specialist.repository";
 import { IntelligenceHubSessionRepository } from "../repositories/intelligence-hub-session.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
-import { knownFieldsFromProfile } from "../brand-brain/onboarding-themes";
+import { knownFieldsFromProfile, learnedPreferencesTextFromProfile } from "../brand-brain/onboarding-themes";
 import { runSpecialistPanel, type SpecialistOpinionResult } from "./run-specialist-panel";
 import { runCoordinator } from "./run-coordinator";
 
@@ -49,6 +49,7 @@ export async function runCampaignStrategySession(
 
   const profile = await brandBrainRepository.findByBrandId(params.brandId);
   const knownFields = knownFieldsFromProfile(profile);
+  const learnedPreferencesText = learnedPreferencesTextFromProfile(profile);
 
   // `campaigns.intelligence_hub_session_id` é NOT NULL, mas a sessão precisa
   // referenciar a campanha em `related_entity_id` (polimórfico, sem FK real) —
@@ -94,6 +95,7 @@ export async function runCampaignStrategySession(
       sessionId: session.id,
       brandName: params.brandName,
       knownFields,
+      learnedPreferencesText,
       objective: params.objective,
       specialists,
     });
@@ -104,6 +106,7 @@ export async function runCampaignStrategySession(
       coordinator,
       brandName: params.brandName,
       knownFields,
+      learnedPreferencesText,
       objective: params.objective,
       opinions,
     });

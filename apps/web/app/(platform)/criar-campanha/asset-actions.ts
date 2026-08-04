@@ -9,10 +9,12 @@ import {
   ContentVersionRepository,
   InactiveSubscriptionError,
   InsufficientCreditsError,
+  LearningSignalRepository,
   ensureSufficientCredits,
   generateTextPiece,
   hasMinimumRole,
   knownFieldsFromProfile,
+  learnedPreferencesTextFromProfile,
   logger,
   recordConsumption,
 } from "@ayon/core";
@@ -57,6 +59,33 @@ function toView(piece: Database["public"]["Tables"]["content_pieces"]["Row"]): C
   };
 }
 
+/**
+ * Emite um `learning_signal` (Fluxo 4 → Fluxo 8, Missão 8) — nunca bloqueia a
+ * ação principal do usuário (aprovar/rejeitar/editar) se a gravação falhar,
+ * mesmo espírito de "falha parcial nunca bloqueia o essencial" já usado em
+ * outras partes do Asset Engine.
+ */
+async function emitLearningSignal(
+  db: ReturnType<typeof createClient>,
+  input: { brandId: string; contentPieceId: string; signalType: "approved" | "rejected" | "edited"; payload: Record<string, unknown> },
+): Promise<void> {
+  const learningSignalRepository = new LearningSignalRepository(db);
+  try {
+    await learningSignalRepository.create({
+      brand_id: input.brandId,
+      content_piece_id: input.contentPieceId,
+      signal_type: input.signalType,
+      payload: input.payload,
+    });
+  } catch (error) {
+    logger.warn("learning_engine.signal_emit_failed", {
+      contentPieceId: input.contentPieceId,
+      signalType: input.signalType,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /** Salva edição manual de uma peça textual — CAMP-5, sem custo em créditos (não chama LLM). */
 export async function editContentPieceAction(contentPieceId: string, script: string): Promise<ContentPieceActionResult> {
   const session = await getCurrentSession();
@@ -67,7 +96,22 @@ export async function editContentPieceAction(contentPieceId: string, script: str
 
   const db = createClient();
   const contentPieceRepository = new ContentPieceRepository(db);
+  const campaignRepository = new CampaignRepository(db);
+
+  const existing = await contentPieceRepository.findById(contentPieceId);
+  if (!existing) return { ok: false, error: FRIENDLY_ERROR };
+
   const updated = await contentPieceRepository.update(contentPieceId, { script });
+
+  const campaign = await campaignRepository.findById(existing.campaign_id);
+  if (campaign) {
+    await emitLearningSignal(db, {
+      brandId: campaign.brand_id,
+      contentPieceId,
+      signalType: "edited",
+      payload: { format: existing.format, previousScript: existing.script, newScript: script },
+    });
+  }
 
   revalidatePath("/criar-campanha");
   return { ok: true, contentPiece: toView(updated) };
@@ -107,6 +151,7 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
 
     const profile = await brandBrainRepository.findByBrandId(session.brand.id);
     const knownFields = knownFieldsFromProfile(profile);
+    const learnedPreferencesText = learnedPreferencesTextFromProfile(profile);
     const strategySummary = campaign.strategy_summary as { consolidated_strategy?: string; rationale?: string } | null;
 
     await generateTextPiece({
@@ -117,6 +162,7 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
       format: piece.format,
       brandName: session.brand.name,
       knownFields,
+      learnedPreferencesText,
       consolidatedStrategy: strategySummary?.consolidated_strategy ?? "",
       strategyRationale: strategySummary?.rationale ?? "",
     });
@@ -233,6 +279,16 @@ export async function approveContentPieceAction(contentPieceId: string): Promise
     approved_at: new Date().toISOString(),
   });
 
+  const campaignForSignal = await campaignRepository.findById(piece.campaign_id);
+  if (campaignForSignal) {
+    await emitLearningSignal(db, {
+      brandId: campaignForSignal.brand_id,
+      contentPieceId,
+      signalType: "approved",
+      payload: { format: piece.format },
+    });
+  }
+
   const allPieces = await contentPieceRepository.findByCampaignId(piece.campaign_id);
   const allApproved = allPieces.every((p) => p.status === "approved");
 
@@ -275,7 +331,11 @@ export async function rejectContentPieceAction(contentPieceId: string, reason?: 
 
   const db = createClient();
   const contentPieceRepository = new ContentPieceRepository(db);
+  const campaignRepository = new CampaignRepository(db);
   const auditRepository = new AuditRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece) return { ok: false, error: FRIENDLY_ERROR };
 
   const updated = await contentPieceRepository.update(contentPieceId, { status: "rejected" });
 
@@ -287,6 +347,16 @@ export async function rejectContentPieceAction(contentPieceId: string, reason?: 
     entity_id: contentPieceId,
     metadata: reason ? { reason } : {},
   });
+
+  const campaign = await campaignRepository.findById(piece.campaign_id);
+  if (campaign) {
+    await emitLearningSignal(db, {
+      brandId: campaign.brand_id,
+      contentPieceId,
+      signalType: "rejected",
+      payload: { format: piece.format, reason: reason ?? null },
+    });
+  }
 
   revalidatePath("/criar-campanha");
   return { ok: true, contentPiece: toView(updated) };

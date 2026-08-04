@@ -48,7 +48,8 @@ export type SpecialistRole = (typeof SPECIALIST_ROLES)[number];
 export const SPECIALIST_STATUSES = ["active", "inactive"] as const;
 export type SpecialistStatus = (typeof SPECIALIST_STATUSES)[number];
 
-export const INTELLIGENCE_HUB_RELATED_ENTITY_TYPES = ["trend_research", "campaign", "content_piece"] as const;
+/** `brand` ★ novo (Missão 8) — `learning_analysis` não tem campanha/peça/pesquisa de tendência específica como assunto, é uma análise agregada em nível de marca (extensão aditiva, database.md §4.4). */
+export const INTELLIGENCE_HUB_RELATED_ENTITY_TYPES = ["trend_research", "campaign", "content_piece", "brand"] as const;
 export type IntelligenceHubRelatedEntityType = (typeof INTELLIGENCE_HUB_RELATED_ENTITY_TYPES)[number];
 
 export const INTELLIGENCE_HUB_SESSION_STATUSES = ["running", "completed", "failed"] as const;
@@ -109,3 +110,17 @@ export type ContentPieceStatus = (typeof CONTENT_PIECE_STATUSES)[number];
 
 export const CONTENT_PACKAGE_STATUSES = ["building", "ready", "failed"] as const;
 export type ContentPackageStatus = (typeof CONTENT_PACKAGE_STATUSES)[number];
+
+/** MVP da Missão 8 só emite `approved`/`rejected`/`edited` — `engagement_metric` reservado no schema para uma missão futura (database.md §4.7). */
+export const LEARNING_SIGNAL_TYPES = ["approved", "rejected", "edited", "engagement_metric"] as const;
+export type LearningSignalType = (typeof LEARNING_SIGNAL_TYPES)[number];
+
+/** MVP da Missão 8 só emite os tipos acima — `engagement_metric` fica fora até existir um mecanismo de captura (flows.md, Fluxo 5, passo 4). */
+export const LEARNING_SIGNAL_TYPES_EMITTED_IN_MVP = ["approved", "rejected", "edited"] as const;
+
+/** Rótulo descritivo de qual comportamento futuro o insight pretende influenciar — não é um destino de escrita separado; todo insight aceito grava em `brand_brain_profiles.learned_preferences` (database.md §4.7). */
+export const LEARNING_INSIGHT_APPLIED_TO = ["brand_brain", "trend_engine", "intelligence_hub", "asset_engine"] as const;
+export type LearningInsightAppliedTo = (typeof LEARNING_INSIGHT_APPLIED_TO)[number];
+
+export const LEARNING_INSIGHT_STATUSES = ["pending_review", "applied", "dismissed"] as const;
+export type LearningInsightStatus = (typeof LEARNING_INSIGHT_STATUSES)[number];

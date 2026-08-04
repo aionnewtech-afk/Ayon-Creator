@@ -34,9 +34,10 @@ export function buildAssetGenerationSystemPrompt(format: ContentPieceFormat): st
 export function buildAssetGenerationUserMessage(params: {
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   consolidatedStrategy: string;
   strategyRationale: string;
   format: ContentPieceFormat;
 }): string {
-  return `${buildBrandContextBlock(params.brandName, params.knownFields)}\n\nEstratégia consolidada desta campanha:\n"${params.consolidatedStrategy}"\n\nPor que essa estratégia foi definida assim:\n"${params.strategyRationale}"\n\nGere a peça no formato indicado no seu papel, reaproveitando essa estratégia — não invente uma direção nova.`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nEstratégia consolidada desta campanha:\n"${params.consolidatedStrategy}"\n\nPor que essa estratégia foi definida assim:\n"${params.strategyRationale}"\n\nGere a peça no formato indicado no seu papel, reaproveitando essa estratégia — não invente uma direção nova.`;
 }

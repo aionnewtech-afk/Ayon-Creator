@@ -13,6 +13,9 @@ import type {
   IntelligenceHubRelatedEntityType,
   IntelligenceHubSessionStatus,
   KnowledgeBaseSourceType,
+  LearningInsightAppliedTo,
+  LearningInsightStatus,
+  LearningSignalType,
   OnboardingQuestionKey,
   CreditLedgerEntryType,
   CreditPackageStatus,
@@ -590,6 +593,48 @@ export interface Database {
           generated_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["content_packages"]["Insert"]>;
+        Relationships: [];
+      };
+      learning_signals: {
+        Row: {
+          id: string;
+          brand_id: string;
+          content_piece_id: string | null;
+          signal_type: LearningSignalType;
+          payload: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          content_piece_id?: string | null;
+          signal_type: LearningSignalType;
+          payload?: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["learning_signals"]["Insert"]>;
+        Relationships: [];
+      };
+      learning_insights: {
+        Row: {
+          id: string;
+          brand_id: string;
+          insight_type: string;
+          summary: Record<string, unknown>;
+          applied_to: LearningInsightAppliedTo;
+          status: LearningInsightStatus;
+          reviewed_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          brand_id: string;
+          insight_type: string;
+          summary: Record<string, unknown>;
+          applied_to: LearningInsightAppliedTo;
+          status?: LearningInsightStatus;
+          reviewed_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["learning_insights"]["Insert"]>;
         Relationships: [];
       };
     };

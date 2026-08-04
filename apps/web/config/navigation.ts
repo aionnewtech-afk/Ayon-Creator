@@ -86,10 +86,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "o-que-funcionou",
     label: "O que Funcionou",
-    description: "Em breve você vai receber sugestões de melhoria com base no que performou melhor nas suas campanhas.",
+    description: "Receba sugestões de melhoria com base no que performou melhor nas suas campanhas.",
     icon: Lightbulb,
     minRole: "admin",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "configuracoes",

@@ -29,6 +29,7 @@ export interface RunCoordinatorParams {
   coordinator: SpecialistRow;
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   objective: string;
   opinions: SpecialistOpinionResult[];
 }
@@ -48,6 +49,7 @@ export async function runCoordinator(params: RunCoordinatorParams): Promise<Coor
   const userMessage = buildCoordinatorUserMessage({
     brandName: params.brandName,
     knownFields: params.knownFields,
+    learnedPreferencesText: params.learnedPreferencesText,
     objective: params.objective,
     opinions: successfulOpinions.map((opinion) => ({
       specialistName: opinion.specialistName,

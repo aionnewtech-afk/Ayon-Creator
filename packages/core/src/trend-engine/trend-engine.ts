@@ -4,7 +4,7 @@ import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { SpecialistRepository } from "../repositories/specialist.repository";
 import { IntelligenceHubSessionRepository } from "../repositories/intelligence-hub-session.repository";
 import { TrendResearchRepository } from "../repositories/trend-research.repository";
-import { knownFieldsFromProfile } from "../brand-brain/onboarding-themes";
+import { knownFieldsFromProfile, learnedPreferencesTextFromProfile } from "../brand-brain/onboarding-themes";
 import { resolveTrendSourceProvider } from "../providers/provider-gateway";
 import { runTrendRankingPanel } from "./run-trend-ranking-panel";
 import { runTrendCoordinator, type RankedTrend } from "./run-trend-coordinator";
@@ -48,6 +48,7 @@ export async function runTrendDiscovery(params: RunTrendDiscoveryParams): Promis
 
   const profile = await brandBrainRepository.findByBrandId(params.brandId);
   const knownFields = knownFieldsFromProfile(profile);
+  const learnedPreferencesText = learnedPreferencesTextFromProfile(profile);
 
   const trendResearch = await trendResearchRepository.create({
     brand_id: params.brandId,
@@ -95,6 +96,7 @@ export async function runTrendDiscovery(params: RunTrendDiscoveryParams): Promis
       sessionId: session.id,
       brandName: params.brandName,
       knownFields,
+      learnedPreferencesText,
       candidates: candidateResult.candidates,
       specialists,
     });
@@ -105,6 +107,7 @@ export async function runTrendDiscovery(params: RunTrendDiscoveryParams): Promis
       coordinator,
       brandName: params.brandName,
       knownFields,
+      learnedPreferencesText,
       candidates: candidateResult.candidates,
       opinions,
     });

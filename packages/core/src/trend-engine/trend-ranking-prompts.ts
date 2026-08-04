@@ -20,9 +20,10 @@ function buildCandidatesBlock(candidates: TrendCandidate[]): string {
 export function buildTrendRankingSpecialistMessage(params: {
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   candidates: TrendCandidate[];
 }): string {
-  return `${buildBrandContextBlock(params.brandName, params.knownFields)}\n\nCandidatos de tendência encontrados para o nicho desta marca (ainda não avaliados, nenhum é campanha ainda):\n${buildCandidatesBlock(params.candidates)}\n\nDê sua opinião especializada sobre quais destes candidatos, se algum, são genuinamente relevantes para esta marca especificamente — e por quê. Cite os candidatos pelo título.`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nCandidatos de tendência encontrados para o nicho desta marca (ainda não avaliados, nenhum é campanha ainda):\n${buildCandidatesBlock(params.candidates)}\n\nDê sua opinião especializada sobre quais destes candidatos, se algum, são genuinamente relevantes para esta marca especificamente — e por quê. Cite os candidatos pelo título.`;
 }
 
 export interface SuccessfulOpinionForTrendCoordinator {
@@ -34,6 +35,7 @@ export interface SuccessfulOpinionForTrendCoordinator {
 export function buildTrendRankingCoordinatorMessage(params: {
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   candidates: TrendCandidate[];
   opinions: SuccessfulOpinionForTrendCoordinator[];
 }): string {
@@ -42,5 +44,5 @@ export function buildTrendRankingCoordinatorMessage(params: {
       ? "Nenhum especialista respondeu com sucesso desta vez."
       : params.opinions.map((o) => `- ${o.specialistName}: "${o.opinion}" (justificativa: ${o.rationale})`).join("\n");
 
-  return `${buildBrandContextBlock(params.brandName, params.knownFields)}\n\nCandidatos de tendência encontrados:\n${buildCandidatesBlock(params.candidates)}\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em um ranqueamento final dos candidatos genuinamente relevantes para esta marca (do mais para o menos relevante). Descarte candidatos que nenhum especialista considerou relevantes. Se nenhum candidato for relevante, retorne uma lista vazia — nunca force um ranqueamento.\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"rankings": [{"title": "título do candidato, igual ao que recebeu", "summary": "do que se trata, 1-2 frases", "rationale": "por que é relevante para esta marca especificamente, ancorado no Brand Brain e nas opiniões dos especialistas", "source_url": "URL da fonte, ou null"}], "overall_rationale": "visão geral de como você chegou a este ranqueamento, citando as opiniões dos especialistas"}.`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nCandidatos de tendência encontrados:\n${buildCandidatesBlock(params.candidates)}\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em um ranqueamento final dos candidatos genuinamente relevantes para esta marca (do mais para o menos relevante). Descarte candidatos que nenhum especialista considerou relevantes. Se nenhum candidato for relevante, retorne uma lista vazia — nunca force um ranqueamento.\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"rankings": [{"title": "título do candidato, igual ao que recebeu", "summary": "do que se trata, 1-2 frases", "rationale": "por que é relevante para esta marca especificamente, ancorado no Brand Brain e nas opiniões dos especialistas", "source_url": "URL da fonte, ou null"}], "overall_rationale": "visão geral de como você chegou a este ranqueamento, citando as opiniões dos especialistas"}.`;
 }

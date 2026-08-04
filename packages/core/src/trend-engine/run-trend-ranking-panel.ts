@@ -26,6 +26,7 @@ export interface RunTrendRankingPanelParams {
   sessionId: string;
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   candidates: TrendCandidate[];
   specialists: SpecialistRow[];
 }
@@ -45,6 +46,7 @@ export async function runTrendRankingPanel(params: RunTrendRankingPanelParams): 
       const userMessage = buildTrendRankingSpecialistMessage({
         brandName: params.brandName,
         knownFields: params.knownFields,
+        learnedPreferencesText: params.learnedPreferencesText,
         candidates: params.candidates,
       });
 

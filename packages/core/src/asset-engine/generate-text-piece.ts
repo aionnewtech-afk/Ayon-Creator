@@ -23,6 +23,7 @@ export interface GenerateTextPieceParams {
   format: ContentPieceFormat;
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
+  learnedPreferencesText?: string;
   consolidatedStrategy: string;
   strategyRationale: string;
 }
@@ -49,6 +50,7 @@ export async function generateTextPiece(params: GenerateTextPieceParams): Promis
     const userMessage = buildAssetGenerationUserMessage({
       brandName: params.brandName,
       knownFields: params.knownFields,
+      learnedPreferencesText: params.learnedPreferencesText,
       consolidatedStrategy: params.consolidatedStrategy,
       strategyRationale: params.strategyRationale,
       format: params.format,

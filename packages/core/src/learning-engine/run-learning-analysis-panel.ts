@@ -6,20 +6,18 @@ import { resolveLlmProvider } from "../providers/provider-gateway";
 import { parseLlmJson } from "../shared/llm-json";
 import { logger } from "../logger";
 import type { KnownFieldsSnapshot } from "../brand-brain/onboarding-prompt";
-import { buildSpecialistUserMessage } from "./intelligence-hub-prompts";
+import { buildLearningAnalysisSpecialistMessage } from "./learning-engine-prompts";
+import type { SpecialistOpinionResult } from "../intelligence-hub/run-specialist-panel";
 
 type SpecialistRow = Database["public"]["Tables"]["specialists"]["Row"];
+type LearningSignalRow = Database["public"]["Tables"]["learning_signals"]["Row"];
 
-const SpecialistOpinionSchema = z.object({
+const LearningOpinionSchema = z.object({
   opinion: z.string().min(1),
   rationale: z.string().min(1),
 });
 
-export type SpecialistOpinionResult =
-  | { specialistId: string; specialistName: string; failed: false; opinion: string; rationale: string }
-  | { specialistId: string; specialistName: string; failed: true; opinion: null; rationale: null };
-
-export interface RunSpecialistPanelParams {
+export interface RunLearningAnalysisPanelParams {
   /** Client de sessão (RLS) — grava specialist_opinions. */
   db: SupabaseClient<Database>;
   /** Client de service role — resolve provider_configs por especialista. */
@@ -28,29 +26,27 @@ export interface RunSpecialistPanelParams {
   sessionId: string;
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
-  learnedPreferencesText?: string;
-  objective: string;
+  signals: LearningSignalRow[];
   specialists: SpecialistRow[];
 }
 
 /**
- * Aciona cada especialista aplicável em paralelo (Promise.allSettled — a
- * falha de um nunca bloqueia os demais, Fluxo 10 passo 7). Cada especialista
- * usa o `system_prompt` do Specialist Registry como está, sem nenhum texto
- * hardcoded de papel aqui — este arquivo só monta o contexto compartilhado.
+ * Aciona cada especialista aplicável a `learning_analysis` em paralelo
+ * (Promise.allSettled, mesmo padrão de run-specialist-panel.ts/
+ * run-trend-ranking-panel.ts — a falha de um nunca bloqueia os demais nem o
+ * Coordinator).
  */
-export async function runSpecialistPanel(params: RunSpecialistPanelParams): Promise<SpecialistOpinionResult[]> {
+export async function runLearningAnalysisPanel(params: RunLearningAnalysisPanelParams): Promise<SpecialistOpinionResult[]> {
   const opinionRepository = new SpecialistOpinionRepository(params.db);
 
   const settled = await Promise.allSettled(
     params.specialists.map(async (specialist) => {
       const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier, specialist.id);
 
-      const userMessage = buildSpecialistUserMessage({
+      const userMessage = buildLearningAnalysisSpecialistMessage({
         brandName: params.brandName,
         knownFields: params.knownFields,
-        learnedPreferencesText: params.learnedPreferencesText,
-        objective: params.objective,
+        signals: params.signals,
       });
 
       const completion = await llmProvider.complete({
@@ -59,7 +55,7 @@ export async function runSpecialistPanel(params: RunSpecialistPanelParams): Prom
         maxTokens: 1024,
       });
 
-      const parsed = SpecialistOpinionSchema.parse(parseLlmJson(completion.text));
+      const parsed = LearningOpinionSchema.parse(parseLlmJson(completion.text));
 
       await opinionRepository.create({
         session_id: params.sessionId,
@@ -86,7 +82,7 @@ export async function runSpecialistPanel(params: RunSpecialistPanelParams): Prom
       };
     }
 
-    logger.warn("intelligence_hub.specialist_failed", {
+    logger.warn("learning_engine.specialist_failed", {
       specialistId: specialist.id,
       specialistKey: specialist.key,
       reason: result.reason instanceof Error ? result.reason.message : String(result.reason),

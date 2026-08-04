@@ -13,6 +13,7 @@ import {
   hasMinimumRole,
   initializeCampaignContentPieces,
   knownFieldsFromProfile,
+  learnedPreferencesTextFromProfile,
   logger,
   recordConsumption,
   runCampaignStrategySession,
@@ -182,6 +183,7 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
   // gerada sem o Brand Brain carregado — arch. §3.5.
   const profile = await brandBrainRepository.findByBrandId(session.brand.id);
   const knownFields = knownFieldsFromProfile(profile);
+  const learnedPreferencesText = learnedPreferencesTextFromProfile(profile);
   const strategySummary = campaign.strategy_summary as { consolidated_strategy?: string; rationale?: string } | null;
   const consolidatedStrategy = strategySummary?.consolidated_strategy ?? "";
   const strategyRationale = strategySummary?.rationale ?? "";
@@ -210,6 +212,7 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
         format: piece.format,
         brandName: session.brand.name,
         knownFields,
+        learnedPreferencesText,
         consolidatedStrategy,
         strategyRationale,
       });
