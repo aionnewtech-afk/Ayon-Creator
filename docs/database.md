@@ -1,7 +1,10 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 21 — Missão 8, Learning Engine, implementada e validada)
+> **Status:** v1.0 (revisão 24 — Missão 9 dividida em 2 etapas)
 > **Última atualização:** 2026-08-04
+> **Mudança desta revisão (24 — Missão 9 dividida em 2 etapas):** nenhuma mudança de schema — `production_mode` (§4.6) já cobria `ai_avatar`/`licensed_stock_video`/`hybrid`/`own_media`/`text_only` desde a revisão 3. Só uma nota de escopo: a **Etapa 1** da Missão 9 usa apenas `licensed_stock_video`; `ai_avatar`/`hybrid` continuam no enum (schema pronto, sem migration necessária depois) mas ficam sem nenhuma linha gravada com esses valores até a **Etapa 2** (futura, recurso Premium) ser implementada. Ver [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9) e [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (23 — fornecedores concretos aprovados):** nenhuma mudança de schema nesta revisão — confirma que `pipeline_runs.status` já suporta o ciclo `queued → running → completed`/`failed` pedido pelo dono do produto (nota em §4.8) e documenta os fornecedores concretos escolhidos para MVP (Pexels/ElevenLabs/HeyGen/Shotstack — ver [architecture.md §5](architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier) e [PRD.md §13](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo)). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (22 — preparação Missão 9):** `provider_configs.capability` (§5.1) ganha `video_render`, nova capacidade da Provider Layer ([architecture.md §5](architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier)). `content_pieces.status` (§4.6) ganha `failed` — primeiro caminho do produto que pode falhar depois de `generating` sem operação humana no meio (pipeline assíncrono de vídeo, §4.6/§4.8). `content_versions.generation_metadata` (§4.6) ganha nota explícita incluindo `video_render_provider_key`. `pipeline_runs` (§4.8), documentada desde revisões antigas mas nunca escrita por nenhuma missão implementada, passa a ser ativamente usada — primeira vez que uma linha real é gravada nela. `credit_ledger` (§7.2) ganha `related_pipeline_run_id` (nova coluna, idempotência de cobrança assíncrona — análoga a `external_payment_id`). `credit_pricing` (§7.3) ganha `video_generation` como novo `trigger_reason`, valores em aberto (PRD §13, item 11). Nenhuma migration aplicada ainda — mudanças de schema propostas aqui aguardam aprovação antes de virar migration real (será `0017` em diante, seguindo a numeração sequencial já usada). Ver [docs/changelog.md](changelog.md) para o relato completo da auditoria que precedeu esta revisão.
 > **Mudança desta revisão (21 — Missão 8 implementada e validada):** migration `0012_learning_engine.sql` aplicada e validada em produção — `learning_signals`/`learning_insights` (§4.7) sem mudança de coluna frente ao já documentado; `specialists.applies_to` de `marketing_strategy`/`branding` estendido para `learning_analysis` (mesmo padrão de `trend_ranking`, migration `0006`). Achado real durante a implementação: `intelligence_hub_sessions.related_entity_type` (§4.4) era `not null` com CHECK restrito a `('trend_research', 'campaign', 'content_piece')` — `learning_analysis` não tem uma entidade única desse tipo. Resolvido de forma aditiva, sem quebrar nenhuma sessão existente: `'brand'` adicionado ao CHECK, `related_entity_id = brand_id` para essa decisão. Confirmado em produção que `applied_to` realmente é só um rótulo — `brand_brain_profiles.learned_preferences` é o único destino de escrita, e passou a ser lido por todo Core Engine que monta contexto de marca (`buildBrandContextBlock`).
 > **Mudança desta revisão (20 — preparação Missão 8, Learning Engine):** §4.7 (`learning_signals`/`learning_insights`) confirmada pronta para migrar sem mudança de coluna; nota adicionada esclarecendo que `applied_to` é só um rótulo descritivo — todo insight aceito grava em `brand_brain_profiles.learned_preferences`, único mecanismo de aplicação. Nenhum novo `trigger_reason` em `credit_pricing` (análise gratuita, aprovado). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (19 — Missão 7 implementada e validada):** migration `0011_asset_engine.sql` aplicada e validada em produção (Supabase real) — `content_pieces`/`content_versions`/`content_packages` (§4.6), `credit_ledger.related_content_piece_id` (§7.2), `credit_pricing` com `asset_generation` (3/6/12, valor final aprovado — ver revisão 23 de [docs/changelog.md](changelog.md)) e `trend_ranking` reajustado de 1/2/4 para 2/4/8. Helpers de RLS `campaign_organization_id`/`content_piece_organization_id` confirmados funcionando (insert/update restrito a `editor+`, select a membros).
@@ -283,7 +286,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | preenchido quando a peça é principal |
 | script | text | |
 | brand_rationale | text | justificativa curta em linguagem de negócio de por que esta peça reflete a marca (Princípio do Consultor Permanente, [architecture.md §1.1](architecture.md#11-princípio-consultor-permanente-justificativa-fundamentada-em-marca-★-novo-revisão-7)); dado-fonte do bloco **"Por que fiz assim?"** no Cartão de Revisão de Peça ([ux-design.md §4.6](ux-design.md#46-cartão-de-revisão-de-peça)) |
-| status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`rejected`) | sem status `published` no MVP |
+| status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`rejected`,`failed` ★ novo, preparação Missão 9) | sem status `published` no MVP; `failed` ★ novo — primeira peça que pode falhar depois de `generating` sem intervenção humana no meio (pipeline assíncrono de vídeo via n8n, [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)/[§8](architecture.md#8-papel-do-n8n)); usuário pode então acionar nova tentativa (mecanismo exato de retry pela UI é decisão de UX, [ux-design.md](ux-design.md)) |
 | approved_by | uuid FK → auth.users (nullable) | |
 | approved_at | timestamptz (nullable) | |
 | created_at | timestamptz | |
@@ -296,7 +299,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | content_piece_id | uuid FK → content_pieces | |
 | version_number | int | |
 | output_storage_path | text | |
-| generation_metadata | jsonb | inclui `llm_provider_key`, `avatar_provider_key`, `voice_provider_key`, `media_provider_key` + tier ativo no momento da geração + custo em créditos |
+| generation_metadata | jsonb | inclui `llm_provider_key`, `avatar_provider_key`, `voice_provider_key`, `media_provider_key`, `video_render_provider_key` (★ novo, preparação Missão 9) + tier ativo no momento da geração + custo em créditos |
 | created_at | timestamptz | |
 
 **`content_packages`** (novo — entrega final do MVP)
@@ -339,6 +342,8 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 
 ### 4.8 `pipeline_runs`
 
+> **★ Ativação real (preparação Missão 9):** esta tabela existe no schema desde revisões antigas, mas nenhuma missão implementada até a revisão 24 chegou a gravar uma linha nela — todo processamento até aqui foi síncrono, sem execução de n8n de verdade. O pipeline de geração de vídeo (§3.5.1) é a primeira escrita real: uma linha por `content_piece` de vídeo em processamento, `engine = 'asset_engine'`, `entity_type = 'content_piece'`, `n8n_execution_id` preenchido pelo workflow do n8n na chamada inicial (usado para correlacionar o webhook de conclusão à execução certa). Granularidade de uma linha por peça (não uma por etapa do pipeline — voz/avatar/render) é a decisão inicial; granularidade mais fina fica para quando houver necessidade real de observabilidade por etapa. **Confirmado (revisão 23):** o ciclo de vida `queued → running → completed`/`failed` já previsto no enum desde a definição original desta tabela é exatamente o usado pelo Fluxo 13 — a linha nasce `queued` (Server Action, antes do webhook para o n8n) e vira `running` assim que o n8n confirma recebimento (passo 2); nenhuma mudança de schema foi necessária para isso.
+
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
@@ -360,7 +365,7 @@ Mapeamento interno **(capability, tier) → fornecedor concreto**. Nunca exposto
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
-| capability | enum(`llm`,`avatar`,`voice`,`media`,`trend_source`) | |
+| capability | enum(`llm`,`avatar`,`voice`,`media`,`trend_source`,`video_render` ★ novo, preparação Missão 9) | `video_render` — [architecture.md §5](architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier), composição final de vídeo (cenas + narração + legenda → MP4); nunca um fornecedor de mídia/avatar/voz |
 | tier | enum(`economico`,`balanceado`,`premium`) | |
 | specialist_id | uuid FK → specialists (nullable) | **substitui o antigo enum fixo** (revisão 10) — usado só quando `capability = llm` e a resolução precisa variar por especialista dentro do Intelligence Hub (tier Premium — architecture.md §10, item 5) |
 | provider_key | text | ex: `openai-mini`, `openai-gpt5`, `claude-sonnet`, `claude-opus`, `heygen`, `elevenlabs` |
@@ -438,6 +443,7 @@ Livro-razão append-only — saldo é sempre `SUM(amount)` por `organization_id`
 | amount | integer | positivo em `grant_plan`/`purchase`, negativo em `consumption`; `adjustment` pode ser qualquer sinal |
 | related_intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | consumo vindo de uma sessão do Intelligence Hub (`campaign_strategy`, `trend_ranking`) |
 | related_content_piece_id | uuid FK → content_pieces (nullable) ★ novo (Missão 7) | consumo vindo da geração de uma peça de conteúdo (`asset_generation`) — nova coluna, como já antecipado na revisão 16; não reaproveita `related_intelligence_hub_session_id` porque geração de peça derivada não abre uma sessão do Intelligence Hub (Fluxo 3, §3.1) |
+| related_pipeline_run_id | uuid FK → pipeline_runs (nullable, **unique**) ★ novo (preparação Missão 9) | consumo vindo de um pipeline assíncrono de geração de vídeo (`video_generation`) — o débito é registrado pelo webhook de conclusão do n8n, não pela Server Action original ([architecture.md §12.3](architecture.md#123-onde-o-portão-de-crédito-é-verificado)); `unique` garante idempotência de webhook exatamente como `external_payment_id` garante para o Mercado Pago — uma segunda entrega do mesmo callback falha por constraint em vez de debitar duas vezes |
 | external_payment_id | text (nullable, **unique**) | id do pagamento do Mercado Pago em lançamentos `purchase` — garante idempotência de webhook (arch. §12.2): uma segunda entrega do mesmo evento falha por constraint em vez de duplicar crédito |
 | description | text | |
 | created_by | uuid FK → auth.users (nullable) | nulo em lançamentos automáticos (`grant_plan`, `consumption`, webhook de `purchase`); preenchido só em `adjustment` manual feito por um admin |
@@ -462,9 +468,10 @@ Preço em créditos por tipo de operação — chave é `trigger_reason` (mesmo 
 |---|---|---|---|
 | `trend_ranking` | 2 | 4 | 8 |
 | `asset_generation` ★ novo (Missão 7) | 3 | 6 | 12 |
+| `video_generation` ★ novo (preparação Missão 9) | a definir | a definir | a definir |
 | `campaign_strategy` | 5 | 10 | 20 |
 
-`trend_ranking` passa de 1/2/4 (seed original, `0008_billing.sql`) para 2/4/8 — ajuste de preço da Missão 7, aplicado via `UPDATE` numa migration nova (nunca editar uma migration já aplicada). `asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas), mas mais caro que `trend_ranking`. Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas.
+`trend_ranking` passa de 1/2/4 (seed original, `0008_billing.sql`) para 2/4/8 — ajuste de preço da Missão 7, aplicado via `UPDATE` numa migration nova (nunca editar uma migration já aplicada). `asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas), mas mais caro que `trend_ranking`. Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas. **`video_generation` (preparação Missão 9):** `trigger_reason` próprio para o pipeline de geração automática de vídeo (§4.6/§4.8, [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)) — deliberadamente separado de `asset_generation` porque o custo real (voz + avatar/mídia + renderização, múltiplos fornecedores pagos) é categoricamente maior e mais variável que uma única chamada de LLM. Valores por tier em aberto (PRD §13, item 11) — linha pode ser inserida com placeholder e ajustada por `UPDATE`, mesmo padrão de `asset_generation`/`trend_ranking`; não bloqueia a migration.
 
 ### 7.4 `credit_packages` ★ novo (Missão 6)
 
@@ -506,6 +513,7 @@ Números de cada plano — dado, não código. Sem esta tabela, o handler de web
 - `audit_logs`: select restrito a `admin`/`owner` da `organization_id`; insert só via service role (Repository, nunca client).
 - `feature_flags`: select liberado a qualquer usuário autenticado (tabela global, sem dado sensível); insert/update/delete só via service role.
 - `subscriptions`/`credit_ledger` (Missão 6): select restrito a membros da organização (CFG-2/CFG-4 precisam ler); insert/update **só via service role** — nunca o client grava diretamente (grants/consumo vêm do portão de crédito no Server Action, compras/mudanças de assinatura vêm de webhook do Mercado Pago, ambos rodando com service role). Nenhum usuário, nem admin, altera saldo diretamente pela aplicação.
+- `pipeline_runs` (★ ativada na preparação da Missão 9): select restrito a membros da organização da `brand`/`campaign`/`content_piece` referenciada (join por `entity_id`, mesmo princípio de isolamento por `brand_id` já usado para as demais tabelas de Core Engine); insert/update **só via service role** — a Server Action cria a linha inicial, o webhook autenticado do n8n (`apps/web/app/api/webhooks/n8n/route.ts`, service role, nunca client) atualiza status/erro ao concluir. Nenhum usuário grava nesta tabela diretamente.
 - `credit_pricing`/`credit_packages`/`plans` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço/números devem ser visíveis, ex. CFG-2/CFG-4), insert/update/delete só via service role.
 
 ## 9. Plataforma — Auditoria e Feature Flags ★ novo (revisão 5)
@@ -546,3 +554,4 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 4. `provider_configs.specialist_id`: confirmar se, no MVP, todo tier usa o mesmo modelo para todos os especialistas (campo fica nulo/irrelevante) ou se o tier Premium já precisa de granularidade por especialista desde o início.
 5. Se `content_packages` deve versionar (permitir gerar o pacote mais de uma vez após reaprovações) ou é sempre 1:1 com a campanha.
 6. `feature_flags`: manter global por enquanto, ou já modelar override por organização (`organization_feature_overrides`) desde a Sprint 1? Adiado até haver um caso de uso real.
+7. **★ novo (preparação Missão 9):** granularidade de `pipeline_runs` para o pipeline de vídeo — uma linha por `content_piece` (decisão inicial, §4.8) é suficiente para o MVP, ou observabilidade por etapa (voz/avatar-mídia/render) precisa de linhas separadas desde já? Não bloqueia a migration inicial — pode começar grosseiro e refinar depois, sem mudança de schema incompatível (mesma tabela, só mais linhas).

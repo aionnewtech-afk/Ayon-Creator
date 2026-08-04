@@ -1,7 +1,8 @@
 # Comportamento de IA por Engine — Ayon Creator
 
-> **Status:** v1.0 (revisão 15 — Missão 8, Learning Engine, implementada e validada)
+> **Status:** v1.0 (revisão 16 — preparação Missão 9, Asset Engine ganha geração automática de vídeo)
 > **Última atualização:** 2026-08-04
+> **Mudança desta revisão (16 — preparação Missão 9 + correção de auditoria):** §5 (Asset Engine) corrigida — ainda dizia "Ainda sem código", mas o Asset Engine foi implementado e validado desde a Missão 7 (o próprio §8, item 2, já registrava isso corretamente; a seção §5 em si nunca foi atualizada quando a Missão 7 fechou — mesma classe de lacuna já encontrada 2x antes para o Trend Engine, revisões 12/13). §5 ganha também os princípios de comportamento específicos da geração automática de vídeo (narração, seleção de cenas) — achado desta auditoria antes da Missão 9.
 > **Mudança desta revisão (15 — Missão 8 implementada e validada):** §6 validado com Anthropic real — insights gerados na validação foram específicos (citando formatos e contagens reais, ex. "3/3 aprovados em escrito vs. 0/2 em audiovisual") e honestos sobre amostra pequena, sem forçar conclusão. §8 item 2 atualizado: Learning Engine deixa de ser hipótese — todos os Engines documentados neste arquivo (Trend, Asset, Learning) estão agora implementados e validados com Anthropic real.
 > **Mudança desta revisão (14 — preparação Missão 8, Learning Engine):** §6 resolve a "frequência modesta" com o número mínimo aprovado (5 `learning_signals` não usados) e ganha uma nota de honestidade sobre sinal insuficiente, espelhando a mesma regra já aplicada ao Trend Engine (§4). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (13 — correção de auditoria):** §8 item 2 corrigido — ainda listava o Asset Engine como "hipótese não implementada", mas foi implementado e validado com Anthropic real na Missão 7. Achado em auditoria de rotina antes da Missão 8, não durante a implementação da Missão 7 em si — mesmo padrão do achado equivalente sobre o Trend Engine na auditoria pré-Missão 7 (revisão 12 abaixo).
@@ -52,12 +53,21 @@ O Intelligence Hub tem uma exigência comportamental que nenhum outro Engine tem
 
 ## 5. Asset Engine
 
-Ainda sem código — comportamento a seguir quando a Missão de "Criar Campanha: Geração de Conteúdo" for implementada.
+**Implementado e validado com Anthropic real desde a Missão 7** (5 formatos textuais via LLM Provider) — os princípios abaixo já foram confirmados em produção para texto. Geração automática de vídeo (preparação Missão 9) ainda não tem código, mas herda os mesmos princípios, com adições específicas abaixo.
 
 - **Voz consistente com o Brand Brain em toda peça**, sempre usando `tone_of_voice`/`favorite_words` e nunca `forbidden_words` — isso não é uma preferência estética, é uma regra que o conteúdo gerado precisa satisfazer literalmente.
 - **Coerência entre peça principal e derivadas**: uma legenda, um e-mail e um roteiro da mesma campanha devem soar como a mesma ideia central adaptada a formatos diferentes — nunca mensagens centrais contraditórias entre si.
 - **Justificativa (`brand_rationale`) é específica, não genérica** — "esse roteiro usa um tom mais direto porque a marca valoriza objetividade e o público-alvo tem pouco tempo disponível", nunca "este conteúdo segue as melhores práticas de marketing digital".
 - **Nunca inventa especificações de produto/preço/prazo** que não vieram do Brand Brain/Knowledge Base — se a informação não existe, o Asset Engine deve gerar algo genérico o suficiente para não afirmar algo falso, nunca preencher a lacuna com um palpite apresentado como fato.
+
+### 5.1 Geração automática de vídeo ★ novo (preparação Missão 9)
+
+Sem código ainda — comportamento a seguir quando o pipeline de vídeo ([architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9), [flows.md Fluxo 13](flows.md#fluxo-13--pipeline-de-geração-de-vídeo-n8n-★-novo-preparação-missão-9)) for implementado. Os princípios comuns acima (voz consistente, justificativa específica, nunca inventar fatos) valem integralmente — os itens abaixo são específicos do que muda quando o "texto" vira "roteiro narrado + cenas":
+
+- **A narração é o roteiro, não um resumo dele.** O texto enviado ao Voice Provider é o mesmo `script` já validado pelo Intelligence Hub/Brand Brain — nunca uma versão reescrita ou resumida especificamente para narração, para não introduzir uma segunda fonte de verdade sobre "o que a peça diz".
+- **Seleção de cenas (`licensed_stock_video`/`hybrid`) reflete o conteúdo específico do trecho, nunca ilustração genérica.** Um trecho sobre "atendimento humano" não deveria puxar um clipe genérico de "pessoas em um escritório" só porque bateu a palavra-chave — a mesma exigência de "nunca genérico" (§1, item 1) vale para a escolha visual, não só para o texto.
+- **Honestidade sobre limitação de cena.** Quando nenhum clipe do banco licenciado é genuinamente relevante para um trecho do roteiro, o comportamento correto é degradar visualmente (ex: cena mais neutra, ou reduzir a duração daquele trecho) — nunca forçar um clipe irrelevante só para preencher o tempo de vídeo, mesmo espírito de honestidade já exigido do Trend Engine (§4) e do Learning Engine (§6).
+- **Legenda nunca diverge da narração.** O texto da legenda (`captionCues`) precisa corresponder exatamente ao que é dito em áudio — isso é um requisito técnico de sincronização, mas também comportamental: uma legenda editorializada ou resumida diferente do áudio quebra a confiança do usuário no material entregue.
 
 ## 6. Learning Engine (Brand Evolution)
 
