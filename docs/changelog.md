@@ -4,6 +4,58 @@
 
 ---
 
+## v2.9 (revisão 26) — 2026-08-03 — Preparação doc-first da Missão 8 (Learning Engine)
+
+**Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores.
+
+**Decisões apresentadas ao dono do produto antes de escrever qualquer documento — todas aprovadas como recomendado:**
+
+1. **Mecanismo de geração dos insights:** via Intelligence Hub — novo tipo de decisão `learning_analysis`, painel Marketing + Branding (Copywriting não participa), Coordinator generalizado reaproveitado sem mudança de schema (já antecipado em `docs/prompts/coordinator.md` desde a Missão 5).
+2. **Cobrança em créditos:** gratuito, em todos os planos — nenhum `trigger_reason` novo em `credit_pricing`. Mesma filosofia de "não é feature paga de automação total" já registrada em `architecture.md` §3.6.
+3. **Escopo de sinais do MVP:** só `approved`/`rejected`/`edited` — `engagement_metric` fica fora, sem mecanismo de captura definido ainda.
+4. **Gatilho e cadência:** síncrono, sob demanda (sem cron/n8n), com mínimo de 5 `learning_signals` não usados antes de qualquer análise — resolve [PRD.md §13, item 3](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo).
+
+**O que mudou nos documentos:**
+
+- **`docs/architecture.md`:** §3.6 ganha o escopo completo do MVP aprovado — mecanismo, cobrança, escopo de sinais, gatilho, e o esclarecimento de que `applied_to` é um rótulo descritivo, não um destino de escrita separado (todo insight aceito grava em `brand_brain_profiles.learned_preferences`).
+- **`docs/database.md`:** §4.7 confirmada pronta para migrar sem mudança de coluna (nem `intelligence_hub_sessions.trigger_reason` nem `specialists.applies_to` têm enum/constraint — `learning_analysis` é só dado novo, mesmo padrão de `trend_ranking`).
+- **`docs/flows.md`:** Fluxo 8 reescrito com o mecanismo completo (gatilho, limite mínimo, Intelligence Hub, aplicação via Brand Brain).
+- **`docs/ux-design.md`:** §3.8 (EVOL) simplificada — EVOL-2 removida, EVOL-3 vira seção da EVOL-1, mesmo raciocínio de simplificação de CAMP-4/5/6 (Missão 7). Referências cruzadas corrigidas.
+- **`docs/engine-behavior.md`:** §6 resolve o número mínimo de sinais e ganha nota de honestidade sobre sinal insuficiente.
+- **`PRD.md`:** §13 item 3 resolvido.
+
+**Sem novo `credit_pricing`** — análise gratuita, decisão de produto explícita (item 2 acima).
+
+**Próximo passo:** iniciar a implementação de código da Missão 8 após aprovação explícita do dono do produto.
+
+---
+
+## v2.8 (revisão 25) — 2026-08-03 — Auditoria completa pré-Missão 8 (Learning Engine)
+
+**Status:** documentação corrigida — **aguardando decisões arquiteturais e de produto + aprovação explícita do dono do produto antes de iniciar o doc-first da Missão 8**, seguindo o mesmo processo já usado antes de toda missão.
+
+**Escopo da auditoria:** leitura completa de README.md, PRD.md, architecture.md, database.md, flows.md, ux-design.md, engine-behavior.md, CONVENTIONS.md, CHANGELOG.md, docs/changelog.md, docs/prompts/, todas as 11 migrations, `apps/web/config/navigation.ts` e toda a árvore `apps/web`/`packages/*` relevante a Fluxo 4/Fluxo 8 — mesmo padrão de rigor das auditorias pré-Missão 5/6/7.
+
+**Inconsistências encontradas e corrigidas** (nenhuma delas é uma decisão de produto — só desalinhamento entre documentos ou documento não revisado após uma missão concluir):
+
+1. **`architecture.md` §3.6** linkava para `database.md#46-learning_signals--learning_insights` (âncora da seção 4.6), mas `learning_signals`/`learning_insights` estão de fato documentadas em **§4.7**. Corrigido.
+2. **`docs/engine-behavior.md` §8, item 2** ainda listava o Asset Engine como "hipótese não implementada" — foi implementado e validado com Anthropic real na Missão 7. Mesma lacuna já corrigida para o Trend Engine na auditoria pré-Missão 7 (v2.5), desta vez para o Asset Engine. Corrigido — só o Learning Engine segue como hipótese agora.
+3. **`docs/flows.md` Fluxo 4, passo 2** descrevia um mecanismo de rejeição/edição que não corresponde ao código real da Missão 7: dizia que rejeitar "volta para `generating`" (na prática é um estado terminal, `rejected` — regenerar é uma ação explícita separada) e que editar cria "nova `content_versions`" (na prática atualiza `content_pieces.script` diretamente, sem versionar). Corrigido para nomear as Server Actions reais (`approveContentPieceAction`/`rejectContentPieceAction`/`regenerateContentPieceAction`/`editContentPieceAction`/`uploadContentPieceMediaAction`) e seu comportamento exato, mantendo marcada como pendente (★ Missão 8) a emissão de `learning_signals` nesses pontos — que ainda não existe no código.
+
+**Verificado e confirmado consistente, sem necessidade de correção:** `apps/web/config/navigation.ts` (item "O que Funcionou" já `implemented: false`, `minRole: "admin"`, alinhado a `ux-design.md` §3.8/§2.4); README.md "Estado do projeto" ↔ `CHANGELOG.md` raiz (ambos param em `v0.7.0`); `docs/prompts/coordinator.md` já antecipa `learning_analysis` como decisão futura do Coordinator generalizado (Missão 5, migration `0007`), sem exigir mudança de schema; `specialists.applies_to` é `text[]` livre (sem enum/constraint), extensível por `UPDATE` como já feito para `trend_ranking` (migration `0006`); `credit_ledger.related_content_piece_id`/`related_intelligence_hub_session_id` já cobrem os dois tipos de origem de consumo que existem hoje, sem necessidade de nova coluna estrutural para o Learning Engine em si (a decisão de cobrar ou não pela análise é de produto, não de schema — ver abaixo).
+
+**Decisões arquiteturais e de produto identificadas para a Missão 8 (Learning Engine) — apresentadas ao dono do produto antes de qualquer doc-first, conforme pedido explícito:**
+
+1. **Mecanismo de geração dos insights:** rodar através do Intelligence Hub (painel de especialistas + Coordinator generalizado, novo tipo de decisão `learning_analysis` — já antecipado em `docs/prompts/coordinator.md` desde a Missão 5) ou uma chamada direta e mais simples ao LLM Provider, sem painel de especialistas?
+2. **Cobrança em créditos:** gerar um `learning_insight` é uma operação faturável (novo `trigger_reason` em `credit_pricing`, mesmo padrão de `campaign_strategy`/`trend_ranking`/`asset_generation`) ou gratuita (mesma isenção hoje aplicada à conversa de onboarding, por não gerar um ativo monetizável novo — é análise de dados que o cliente já pagou para gerar)?
+3. **Escopo de sinais do MVP:** só `approved`/`rejected`/`edited` (já têm ponto de captura natural nas Server Actions existentes da Missão 7) ou também `engagement_metric` (Fluxo 5, passo 4 — hoje marcado como "mecanismo de captura exato é decisão em aberto", exigiria uma tela nova para o usuário registrar manualmente onde/quando publicou)?
+4. **Frequência/gatilho** (PRD §13.3, ainda em aberto): análise síncrona sob demanda (usuário abre "O que Funcionou" ou aciona "buscar novidades" → Server Action agrega sinais e chama o LLM ali mesmo, mesmo padrão síncrono de toda missão até aqui) ou algum mecanismo periódico (exigiria cron/n8n, ainda não implementado em nenhuma parte do repositório)?
+5. **Limite mínimo de sinais** (PRD §13.3) antes da primeira sugestão poder ser gerada — para não aparecer uma sugestão fraca a partir de 1-2 eventos.
+
+**Próximo passo:** apresentar essas decisões ao dono do produto antes de escrever qualquer documento de escopo da Missão 8.
+
+---
+
 ## v2.7 (revisão 24) — 2026-08-03 — Missão 7 (Asset Engine) implementada e validada
 
 **Status:** implementado e validado ponta a ponta com Supabase + Anthropic reais. Documentação atualizada em todos os 5 documentos doc-first + README.md + PRD.md.

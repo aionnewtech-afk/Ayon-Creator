@@ -1,7 +1,9 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 20 — Missão 7, Asset Engine, implementada e validada)
+> **Status:** v1.0 (revisão 22 — preparação doc-first da Missão 8, Learning Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (22 — preparação Missão 8, Learning Engine):** Fluxo 8 reescrito com o escopo do MVP aprovado — gatilho síncrono sob demanda (sem cron/n8n), mínimo de 5 `learning_signals` não usados antes de qualquer análise, geração via Intelligence Hub (novo tipo de decisão `learning_analysis`, painel Marketing + Branding), gratuito em todos os planos, e mecanismo único de aplicação (`brand_brain_profiles.learned_preferences`, `applied_to` como rótulo descritivo, não destino de escrita separado). Resolve [PRD.md §13, item 3](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo).
+> **Mudança desta revisão (21 — correção de auditoria):** Fluxo 4, passo 2, reescrito para refletir os nomes e o comportamento reais das Server Actions da Missão 7 (`apps/web/app/(platform)/criar-campanha/asset-actions.ts`) — rejeitar é estado terminal (`rejected`), não volta sozinho para `generating`; regenerar é ação explícita e separada da rejeição; editar atualiza `content_pieces.script` diretamente, sem criar `content_versions` nova (histórico de versões existe só para regeneração via LLM e upload de mídia). A emissão de `learning_signals` nesses três pontos segue marcada como pendente (★ Missão 8) — não existe no código ainda. Achado em auditoria de rotina antes da Missão 8.
 > **Mudança desta revisão (20 — Missão 7 implementada e validada):** Fluxo 3 confirmado em produção com Supabase + Anthropic reais — aprovação da estratégia dispara `initializeCampaignContentPieces` (9 peças) seguido de geração síncrona dos 5 formatos textuais (§3.2), falha parcial de uma peça nunca bloqueia as demais (mesmo espírito do painel de especialistas, Fluxo 10). §3.3 (montagem do pacote) confirmada síncrona e automática — dispara dentro da própria Server Action de aprovação assim que a última peça vira `approved`, sem Realtime e sem passo manual separado. Editar/regenerar peça textual (Fluxo 4) e upload manual de `own_media` validados; download do pacote via signed URL confirmado.
 > **Mudança desta revisão (19 — preparação Missão 7, Asset Engine):** Fluxo 3, §3.2, reescrito — escopo do MVP limitado a `text_only`/`own_media` (upload manual, sem depender de `brand_media_assets`), `ai_avatar`/`licensed_stock_video`/`hybrid` mantidos como especificação futura. §3.3 corrigida para não mencionar Realtime (decisão do dono do produto: sem Realtime no MVP, mesmo padrão de todas as missões anteriores).
 > **Mudança desta revisão (18 — Missão 6 implementada e validada):** Fluxo 6 e Fluxo 12 confirmados em produção com Mercado Pago sandbox real — assinatura ativada via webhook, créditos concedidos, consumo debitado só após sucesso, bloqueio por saldo/assinatura testado e funcionando com CTA correto.
@@ -81,13 +83,15 @@ Disparado por campanha em `generating`. Para cada formato previsto na estratégi
 > Aprovação humana é **obrigatória** para toda peça, em todos os planos, antes da montagem do pacote final.
 
 1. Usuário abre a campanha em `ready_for_review` e visualiza cada `content_piece` (preview da `content_versions` mais recente, junto com `content_pieces.brand_rationale` — ver Cartão de Revisão de Peça, [ux-design.md §4.6](ux-design.md#46-cartão-de-revisão-de-peça)).
-2. Para cada peça, usuário pode:
-   - **Aprovar** → `status = approved`, grava `approved_by`/`approved_at`, emite `learning_signals` (`signal_type = approved`).
-   - **Rejeitar/pedir regeneração** → volta para `generating`, nova `content_versions`, emite `learning_signals` (`signal_type = rejected`, motivo no `payload`).
-   - **Editar manualmente** → nova `content_versions` com a edição, emite `learning_signals` (`signal_type = edited`, diff no `payload`).
-3. Quando todas as peças estão `approved`, `campaigns.status = approved`, disparando a montagem do pacote (Fluxo 3.3).
+2. Para cada peça, usuário pode (ações reais desde a Missão 7 — `criar-campanha/asset-actions.ts`):
+   - **Aprovar** (`approveContentPieceAction`) → `status = approved`, grava `approved_by`/`approved_at`, emite `learning_signals` (`signal_type = approved`) ★ Missão 8.
+   - **Rejeitar** (`rejectContentPieceAction`) → `status = rejected` (estado terminal, **não** volta sozinho para `generating`), motivo opcional gravado em `audit_logs`; emite `learning_signals` (`signal_type = rejected`, motivo no `payload`) ★ Missão 8.
+   - **Regenerar** (`regenerateContentPieceAction`, só `text_only`) → ação explícita e separada da rejeição, nova chamada ao LLM Provider, nova `content_versions`, novo custo em créditos (`asset_generation`).
+   - **Editar manualmente** (`editContentPieceAction`, só `text_only`) → atualiza `content_pieces.script` diretamente (**não** cria `content_versions` nova — o histórico de versões existe só para regeneração via LLM), sem custo em créditos; emite `learning_signals` (`signal_type = edited`, diff no `payload`) ★ Missão 8.
+   - **Enviar arquivo** (`uploadContentPieceMediaAction`, só `own_media`) → nova `content_versions` com o arquivo enviado, sem custo em créditos.
+3. Quando todas as peças estão `approved`, a própria Server Action de aprovação monta o pacote automaticamente (Fluxo 3.3), sem passo manual separado.
 
-> Todo evento deste fluxo alimenta o **Fluxo 8 — Brand Evolution**.
+> Todo evento de aprovação/rejeição/edição deste fluxo alimenta o **Fluxo 8 — Brand Evolution** (★ Missão 8 — a emissão de `learning_signals` ainda não existe no código; hoje só `audit_logs` registra rejeição com motivo).
 
 ## Fluxo 5 — Entrega do Pacote de Conteúdo (MVP)
 
@@ -137,15 +141,15 @@ Mantido apenas como referência de arquitetura futura (ver [database.md §6](dat
 
 ## Fluxo 8 — "O que funcionou" (Brand Evolution / Learning Engine)
 
-1. O **Learning Engine** consome continuamente os `learning_signals` gerados pelos Fluxos 4 e 5 de uma marca.
-2. Periodicamente (gatilho exato = decisão em aberto PRD §13.3), agrega os sinais e gera candidatos em `learning_insights`, **status `pending_review`**, com um texto em linguagem simples. Exemplo real:
+> **Escopo do MVP aprovado pelo dono do produto** (preparação Missão 8): só sinais `approved`/`rejected`/`edited` (Fluxo 4); `engagement_metric` (Fluxo 5, passo 4) fica fora do MVP. Análise **gratuita em todos os planos** — nenhum `trigger_reason` novo em `credit_pricing`.
+
+1. O usuário aciona a análise **sob demanda** (ex.: abre "O que Funcionou" com sinais novos desde a última rodada, ou usa uma ação explícita "buscar novidades") — **síncrono, sem cron/n8n**, mesmo padrão de toda missão até aqui.
+2. A Server Action verifica se há **pelo menos 5 `learning_signals`** ainda não usados numa análise anterior da marca. Se não houver, nenhuma análise roda — tela mostra o quanto falta, nunca uma sugestão fraca a partir de 1-2 eventos.
+3. Se houver sinal suficiente, a Server Action monta o contexto (sinais agregados + Brand Brain) e aciona o **Intelligence Hub** com um novo tipo de decisão, `learning_analysis` — painel Marketing + Branding (Copywriting não participa; mesmo Coordinator generalizado das demais decisões, Missão 5). Gera candidatos em `learning_insights`, **status `pending_review`**, com um texto em linguagem simples. Exemplo real:
    > "Percebemos que vídeos de até 35 segundos performam melhor. Deseja atualizar sua estratégia?"
-3. O usuário vê essa sugestão na área **"O que funcionou"** e decide: **aceitar** (`status = applied`, `reviewed_by` preenchido) ou **descartar** (`status = dismissed`).
-4. **Regra inegociável, sem exceção por plano:** nenhum `learning_insight` é aplicado sem essa decisão explícita do usuário. Não existe "aplicação automática" nem no Business.
-5. Ao ser aceito, o insight atualiza:
-   - `brand_brain_profiles.learned_preferences` (`applied_to = brand_brain`);
-   - o ranqueamento usado pelo **Trend Engine** (`applied_to = trend_engine`);
-   - os prompts/parâmetros usados pelo **Intelligence Hub** (`applied_to = intelligence_hub`) ou pelo **Asset Engine** (`applied_to = asset_engine`).
+4. O usuário vê essa sugestão na área **"O que funcionou"** e decide: **aceitar** (`status = applied`, `reviewed_by` preenchido) ou **descartar** (`status = dismissed`).
+5. **Regra inegociável, sem exceção por plano:** nenhum `learning_insight` é aplicado sem essa decisão explícita do usuário. Não existe "aplicação automática" nem no Business.
+6. Ao ser aceito, o insight grava em `brand_brain_profiles.learned_preferences` — **único mecanismo de aplicação** (ver [database.md §4.7](database.md#47-learning_signals--learning_insights)). `applied_to` (`brand_brain`/`trend_engine`/`intelligence_hub`/`asset_engine`) é um rótulo descritivo de qual comportamento futuro o insight pretende influenciar, não um destino de escrita separado — todo Core Engine já carrega o Brand Brain como portão obrigatório (§1.1 / [architecture.md §3.6](architecture.md#36-learning-engine-produto-brand-evolution)) e portanto já vê a preferência atualizada na próxima vez que rodar, qualquer que seja o rótulo.
 
 ## Fluxo 9 — Troca de Provedor (Provider Swap — operação interna)
 

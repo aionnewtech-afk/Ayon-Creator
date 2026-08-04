@@ -1,7 +1,9 @@
 # Comportamento de IA por Engine — Ayon Creator
 
-> **Status:** v1.0 (revisão 12 — auditoria pré-Missão 7) — aprovado
+> **Status:** v1.0 (revisão 14 — preparação doc-first da Missão 8) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (14 — preparação Missão 8, Learning Engine):** §6 resolve a "frequência modesta" com o número mínimo aprovado (5 `learning_signals` não usados) e ganha uma nota de honestidade sobre sinal insuficiente, espelhando a mesma regra já aplicada ao Trend Engine (§4). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (13 — correção de auditoria):** §8 item 2 corrigido — ainda listava o Asset Engine como "hipótese não implementada", mas foi implementado e validado com Anthropic real na Missão 7. Achado em auditoria de rotina antes da Missão 8, não durante a implementação da Missão 7 em si — mesmo padrão do achado equivalente sobre o Trend Engine na auditoria pré-Missão 7 (revisão 12 abaixo).
 > **Mudança desta revisão (12 — correção de auditoria):** §4 (Trend Engine) e §8 item 2 corrigidos — ainda diziam "sem código"/"não validado", mas o Trend Engine foi implementado e validado com Anthropic real desde a Missão 5. Achado numa auditoria de rotina antes da Missão 7, não durante a implementação da Missão 5 em si — o documento simplesmente não foi revisado quando o Trend Engine foi concluído.
 > **O que este documento é:** o padrão de comportamento esperado de cada Core Engine quando ele efetivamente "fala" (gera texto, opina, sugere, justifica) — tom, princípios de raciocínio, o que é um bom resultado, o que nunca deve acontecer. É a referência para quem escreve um `system_prompt` (seja o da conversa de onboarding, seja um especialista no Specialist Registry, seja o Coordinator).
 > **O que este documento não é:** não substitui o [PRD.md](../PRD.md) (visão de produto, escopo, modelo de negócio), não substitui o [architecture.md](architecture.md) (como os sistemas se conectam), não substitui o [flows.md](flows.md) (sequência de passos) nem o [ux-design.md](ux-design.md) (telas e microinterações). Este documento cobre exclusivamente **comportamento** — o que o texto/decisão gerada por cada Engine deve soar como.
@@ -63,7 +65,8 @@ Ainda sem código — comportamento a seguir quando a Missão de "O que Funciono
 - **Específico, nunca genérico.** "Poste mais conteúdo" ou "engaje mais o público" nunca são sugestões válidas — toda sugestão nomeia um padrão concreto observado nos dados da própria marca.
 - **Tom de colega reportando uma descoberta**, não de sistema anunciando uma mudança — a pergunta ao final ("Deseja atualizar sua estratégia?") é sempre genuína, nunca retórica.
 - **Nunca sugere algo que viole uma diretriz explícita do Brand Brain** (ex.: nunca sugerir usar uma `forbidden_word` mesmo que os dados "sugerissem" isso — nesse caso, o insight correto é notar o conflito, não sugerir a violação).
-- **Frequência modesta.** Não gera insight a cada evento — precisa de acúmulo de sinal suficiente (quantidade exata é decisão de produto, PRD §13.3) para não parecer barulhento ou aleatório.
+- **Frequência modesta.** Não gera insight a cada evento — precisa de acúmulo de sinal suficiente. **Resolvido (preparação Missão 8, PRD §13 item 3):** mínimo de 5 `learning_signals` não usados numa análise anterior antes de qualquer tentativa, para não parecer barulhento ou aleatório.
+- **Honesto sobre sinal insuficiente**, mesmo espírito do item equivalente do Trend Engine (§4 acima) — se a marca ainda não acumulou os 5 sinais mínimos, o comportamento correto é dizer isso claramente na tela ("O que Funcionou"), nunca forçar uma sugestão fraca só para preencher o espaço.
 
 ## 7. Contrato de saída comum
 
@@ -72,7 +75,7 @@ Todo Engine que gera texto estruturado segue o mesmo padrão de contrato já est
 ## 8. Decisões em Aberto
 
 1. ~~O conteúdo exato dos `system_prompt` de cada especialista do Intelligence Hub...~~ **Resolvido (revisão 11, refletindo architecture.md §10 item 7 e docs/changelog.md v1.6):** os 4 `system_prompt`s do Specialist Registry passaram por validação qualitativa real (Supabase + Anthropic reais) e foram aprovados pelo dono do produto — documentados individualmente em [docs/prompts/](prompts/).
-2. ~~Comportamento de Trend Engine, Asset Engine e Learning Engine... ainda não foram validados com IA real.~~ **Parcialmente resolvido (Missão 5):** Trend Engine validado com Anthropic real, mesmo padrão de rigor do Brand Brain e do Intelligence Hub (ver §4 acima). **Ainda em aberto:** comportamento de Asset Engine (§5) e Learning Engine (§6) seguem como hipótese não implementada — tratar como tal até cada Engine ser de fato construído e testado.
+2. ~~Comportamento de Trend Engine, Asset Engine e Learning Engine... ainda não foram validados com IA real.~~ **Parcialmente resolvido (Missões 5 e 7):** Trend Engine (Missão 5) e Asset Engine (Missão 7) validados com Anthropic real, mesmo padrão de rigor do Brand Brain e do Intelligence Hub (ver §4/§5 acima). **Ainda em aberto:** comportamento de Learning Engine (§6) segue como hipótese não implementada — tratar como tal até o Engine ser de fato construído e testado.
 
 ## 9. Histórico
 

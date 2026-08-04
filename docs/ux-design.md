@@ -1,7 +1,8 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 19 — Missão 7, Asset Engine, implementada e validada)
+> **Status:** v1.3 (revisão 20 — preparação doc-first da Missão 8, Learning Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (20 — preparação Missão 8, Learning Engine):** §3.8 (EVOL) consolidada — EVOL-2 (detalhe) removida do MVP e EVOL-3 (histórico) vira uma seção/aba dentro da EVOL-1, mesmo raciocínio de simplificação já usado em CAMP-4/5/6 (Missão 7). Novos estados-chave: "sinal insuficiente" (menos de 5 `learning_signals` novos) e "analisando" (ação "Buscar novidades"). Referências a EVOL-2/EVOL-3 em §4.3, §6 e Jornada 4 corrigidas para refletir a tela única. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (19 — Missão 7 implementada e validada):** CAMP-4/5/6 implementadas como uma única tela (`ContentPackageReview`, dentro de `/criar-campanha`) e validadas em produção — Cartão de Revisão de Peça (§4.6) diferenciando texto (aprovar/editar/regenerar) de visual (aprovar/enviar arquivo) confirmado; estado final "Pacote pronto" com link de download (signed URL) confirmado assim que a última peça é aprovada, sem Realtime.
 > **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §3.5 (CAMP-4/5/6) ajustada ao escopo do MVP — texto gerado por IA + upload manual para formatos visuais, sem estado "gerando vídeo com avatar". §4.4 corrigida: rastreador de progresso não é mais descrito como "alimentado por Realtime" (decisão do dono do produto: sem Realtime no MVP). §4.5/§4.6 ajustadas para diferenciar geração de texto (aprovar/editar/regenerar) de upload manual de formato visual (aprovar/enviar arquivo).
 > **Mudança desta revisão (17 — correção de auditoria):** §3.9 (CFG) ganha nota explícita marcando CFG-1/3/5/6 como não implementadas (só CFG-2/4 têm código); §3.6 (HIST) ganha a mesma nota para HIST-1/2. Nenhuma das duas é uma decisão nova — só torna explícito o que já era verdade, corrigindo uma lacuna de sinalização identificada em auditoria anterior (v1.9) e nunca fechada para estes itens.
@@ -177,11 +178,13 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 
 ### 3.8 O que Funcionou (`EVOL`)
 
+**Escopo do MVP aprovado pelo dono do produto (preparação Missão 8):** EVOL-1 e EVOL-2 consolidadas numa única tela — o Cartão de Sugestão (§4.3) já carrega o texto completo do insight, então uma tela de detalhe separada seria um clique extra sem informação nova (mesmo raciocínio de simplificação já aplicado a CAMP-4/5/6 na Missão 7, que viraram uma única tela `ContentPackageReview`). EVOL-3 (histórico) permanece como uma seção/aba dentro da mesma tela, não uma rota própria.
+
 | ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para |
 |---|---|---|---|---|---|
-| EVOL-1 | Sugestões Pendentes | Cards de sugestões aguardando decisão (§4.3) | vazio ("ainda não há sugestões — continue aprovando campanhas"), nova sugestão chegando | Menu, notificação | EVOL-2 |
-| EVOL-2 | Detalhe da Sugestão | Contexto completo da sugestão + decisão (aceitar/descartar) | aplicando | EVOL-1 | EVOL-1 |
-| EVOL-3 | Histórico de Sugestões | Sugestões já aceitas/descartadas, com data e quem decidiu | vazio | EVOL-1 | — |
+| EVOL-1 | Sugestões Pendentes + Histórico | Lista de cards de sugestões aguardando decisão (§4.3), com aceitar/descartar inline; seção/aba de histórico (aceitas/descartadas, com data e quem decidiu) na mesma tela | **sinal insuficiente** (menos de 5 `learning_signals` novos — mostra quantos faltam), **vazio** ("ainda não há sugestões — continue aprovando campanhas"), **analisando** (ação "Buscar novidades" em andamento), nova sugestão chegando, aplicando decisão | Menu, notificação | — |
+
+~~EVOL-2 | Detalhe da Sugestão~~ **Removida do MVP** — decisão consolidada acima. ~~EVOL-3 | Histórico de Sugestões~~ **Consolidada na EVOL-1 acima** (seção/aba, não rota própria).
 
 ### 3.9 Configurações (`CFG`)
 
@@ -254,7 +257,7 @@ Não é um chat de perguntas e respostas — é a primeira aparição da Ayon co
 
 - Frase em linguagem simples e específica (nunca genérica) — ex.: "Percebemos que vídeos de até 35 segundos performam melhor. Deseja atualizar sua estratégia?"
 - Duas ações de mesmo peso visual: **Aceitar** e **Descartar** (nunca um "aceitar" pré-marcado ou destacado de forma a induzir aceite automático).
-- Ao aceitar: pequena confirmação positiva (não intrusiva) + o card migra para o Histórico (EVOL-3).
+- Ao aceitar: pequena confirmação positiva (não intrusiva) + o card migra da lista de pendentes para a seção de Histórico, na mesma tela (EVOL-1).
 - Ao descartar: sem necessidade de justificativa obrigatória (fricção mínima), mas com opção leve de motivo.
 
 ### 4.4 Rastreador de Progresso (Pipeline Stepper)
@@ -343,7 +346,7 @@ Usado em:
 | Reação + micro-insight a cada turno | ONB-2 | Fazer a Ayon parecer consultora reagindo de verdade, nunca formulário disfarçado (§1.1) |
 | Chip surgindo no painel "O que a Ayon já sabe" | ONB-2 | Tornar tangível o crescimento do entendimento — substitui qualquer barra de progresso (§4.10) |
 | Checklist de formatos preenchendo em tempo real | CAMP-4 | Dar sensação de progresso tangível durante geração longa |
-| Confirmação sutil ao aceitar sugestão | EVOL-2 | Reforçar positivamente o loop de aprendizado sem ser infantil |
+| Confirmação sutil ao aceitar sugestão | EVOL-1 | Reforçar positivamente o loop de aprendizado sem ser infantil |
 | Celebração da entrega do pacote | CAMP-6 | Marcar o fim do "trabalho pesado" como conquista do usuário |
 | Aprovar/Rejeitar com desfazer (undo toast) | CAMP-5 | Reduzir medo de errar ao revisar rapidamente várias peças |
 | Transição suave ao trocar de marca | GLOBAL-2 | Deixar claro que o contexto mudou, sem parecer um reload cru |
@@ -361,7 +364,7 @@ Usado em:
 `Qualquer tela → KB-1 → KB-2 → KB-1` (pode ser feito em paralelo a qualquer outro fluxo, sem interromper campanhas em andamento)
 
 ### Jornada 4 — Aceitar uma sugestão do Brand Evolution
-`GLOBAL-1 (notificação) ou EVOL-1 → EVOL-2 → (aceitar) → EVOL-3` — efeito prático aparece na próxima campanha criada (CAMP-2/CAMP-3), sem necessidade de o usuário "ver" a mudança tecnicamente.
+`GLOBAL-1 (notificação) ou EVOL-1 → (aceitar, inline no card) → card migra para a seção de Histórico, mesma tela` — efeito prático aparece na próxima campanha criada (CAMP-2/CAMP-3), sem necessidade de o usuário "ver" a mudança tecnicamente.
 
 ### Jornada 5 — Convidar time (Business)
 `CFG-5 (criar marca, se necessário) → CFG-6 (convidar usuário, definir papel por marca) → e-mail de convite → AUTH-1 (novo usuário aceita)`

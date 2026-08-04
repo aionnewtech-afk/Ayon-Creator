@@ -1,7 +1,8 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 19 — Missão 7, Asset Engine, implementada e validada)
+> **Status:** v1.0 (revisão 20 — preparação doc-first da Missão 8, Learning Engine) — **aguardando confirmação final do dono do produto antes do código**
 > **Última atualização:** 2026-08-03
+> **Mudança desta revisão (20 — preparação Missão 8, Learning Engine):** §4.7 (`learning_signals`/`learning_insights`) confirmada pronta para migrar sem mudança de coluna; nota adicionada esclarecendo que `applied_to` é só um rótulo descritivo — todo insight aceito grava em `brand_brain_profiles.learned_preferences`, único mecanismo de aplicação. Nenhum novo `trigger_reason` em `credit_pricing` (análise gratuita, aprovado). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (19 — Missão 7 implementada e validada):** migration `0011_asset_engine.sql` aplicada e validada em produção (Supabase real) — `content_pieces`/`content_versions`/`content_packages` (§4.6), `credit_ledger.related_content_piece_id` (§7.2), `credit_pricing` com `asset_generation` (3/6/12, valor final aprovado — ver revisão 23 de [docs/changelog.md](changelog.md)) e `trend_ranking` reajustado de 1/2/4 para 2/4/8. Helpers de RLS `campaign_organization_id`/`content_piece_organization_id` confirmados funcionando (insert/update restrito a `editor+`, select a membros).
 > **Mudança desta revisão (18 — preparação Missão 7, Asset Engine):** §4.6 (`content_pieces`/`content_versions`/`content_packages`) confirmada pronta para migrar, sem mudança de coluna, escopo MVP = `text_only`/`own_media`. §7.2 (`credit_ledger`) ganha `related_content_piece_id` (nova coluna, como já antecipado na revisão 16 — não reaproveita `related_intelligence_hub_session_id`). §7.3 (`credit_pricing`) ganha proposta de preço para `asset_generation` (2/4/8 créditos), pendente de aprovação.
 > **Mudança desta revisão (17 — Missão 6 implementada e validada):** migrations `0008_billing.sql` (`subscriptions`, `credit_ledger`, `credit_pricing`, `credit_packages`), `0009_drop_organizations_plan.sql` (coluna morta desde a Sprint 1, nunca usada em código, substituída por `subscriptions.plan`) e `0010_plans.sql` (nova tabela `plans` — §7.5, achado durante a implementação) aplicadas e validadas em produção (Supabase + Mercado Pago sandbox reais). `organizations.plan` removida.
@@ -309,6 +310,8 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 
 ### 4.7 `learning_signals` / `learning_insights`
 
+**Confirmado pronto para migrar, sem mudança de coluna** (preparação Missão 8) — o schema abaixo já estava especificado desde antes da Missão 4 e segue válido para o MVP aprovado. `intelligence_hub_sessions.trigger_reason` é `text` livre (migration `0004`, sem enum/constraint), então o novo tipo de decisão `learning_analysis` não exige migration própria; o mesmo vale para `specialists.applies_to` (`text[]` livre, migration `0004`) — habilitar Marketing/Branding para `learning_analysis` é um `UPDATE`, mesmo padrão já usado para `trend_ranking` (migration `0006`).
+
 **`learning_signals`**
 
 | Coluna | Tipo | Notas |
@@ -328,7 +331,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | brand_id | uuid FK → brands | |
 | insight_type | text | |
 | summary | jsonb | inclui o texto exibido ao usuário (ex: "Percebemos que vídeos de até 35 segundos performam melhor...") |
-| applied_to | enum(`brand_brain`,`trend_engine`,`intelligence_hub`,`asset_engine`) | |
+| applied_to | enum(`brand_brain`,`trend_engine`,`intelligence_hub`,`asset_engine`) | rótulo descritivo de qual comportamento futuro o insight pretende influenciar — **não é um destino de escrita diferente**: todo insight aceito grava em `brand_brain_profiles.learned_preferences` (único mecanismo de aplicação, preparação Missão 8), porque todo Core Engine já carrega o Brand Brain como portão obrigatório (§1.1) e portanto já vê a preferência atualizada, qualquer que seja o `applied_to` |
 | status | enum(`pending_review`,`applied`,`dismissed`) | **nunca** pula `pending_review` — aplicação automática não existe em nenhum plano |
 | reviewed_by | uuid FK → auth.users (nullable) | |
 | created_at | timestamptz | |
