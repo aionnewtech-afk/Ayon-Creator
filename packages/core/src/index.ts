@@ -19,6 +19,9 @@ export * from "./repositories/credit-ledger.repository";
 export * from "./repositories/credit-pricing.repository";
 export * from "./repositories/credit-package.repository";
 export * from "./repositories/plan.repository";
+export * from "./repositories/content-piece.repository";
+export * from "./repositories/content-version.repository";
+export * from "./repositories/content-package.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
@@ -44,6 +47,9 @@ export * from "./trend-engine/run-trend-ranking-panel";
 export * from "./trend-engine/run-trend-coordinator";
 export * from "./trend-engine/trend-engine";
 export * from "./billing/credit-gate";
+export * from "./asset-engine/asset-generation-prompts";
+export * from "./asset-engine/generate-text-piece";
+export * from "./asset-engine/initialize-campaign-content-pieces";
 export * from "./knowledge-base/knowledge-source-labels";
 // `./knowledge-base/extract-document-text` fica FORA deste barrel de propósito:
 // depende de pdf-parse (acessa `fs`), e este arquivo é importado por Client
@@ -57,3 +63,7 @@ export * from "./knowledge-base/knowledge-source-labels";
 // (Node-only), e este barrel é importado por Client Components. Quem precisar
 // (Server Actions de assinatura/compra de créditos, a rota de webhook) importa
 // direto o arquivo: `@ayon/core/src/billing/mercado-pago-client`.
+// `./asset-engine/build-content-package` fica FORA do barrel pelo mesmo
+// motivo: `jszip` gera `nodebuffer` (Node-only). Quem precisar (Server
+// Action de montagem do pacote) importa direto o arquivo:
+// `@ayon/core/src/asset-engine/build-content-package`.

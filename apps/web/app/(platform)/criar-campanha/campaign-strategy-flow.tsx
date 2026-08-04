@@ -8,6 +8,8 @@ import {
   createCampaignStrategyAction,
   type SpecialistOpinionView,
 } from "./actions";
+import { ContentPackageReview } from "./content-package-review";
+import type { ContentPieceView } from "./asset-actions";
 
 interface StrategyResult {
   campaignId: string;
@@ -32,6 +34,7 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
+  const [contentPieces, setContentPieces] = useState<ContentPieceView[] | null>(null);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -66,23 +69,16 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
     setApproving(true);
     const response = await approveCampaignStrategyAction(result.campaignId);
     setApproving(false);
-    if (response.ok) {
+    if (response.ok && response.contentPieces) {
+      setContentPieces(response.contentPieces);
       setMode("approved");
     } else {
       setError(response.error ?? "Não consegui aprovar agora. Tenta de novo?");
     }
   }
 
-  if (mode === "approved") {
-    return (
-      <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
-        <h1 className="text-2xl font-semibold text-foreground">Estratégia aprovada</h1>
-        <p className="text-muted-foreground">
-          A equipe de especialistas já sabe qual caminho seguir para a {brandName}. A geração do
-          conteúdo em si ainda não está disponível nesta versão — isso chega numa próxima missão.
-        </p>
-      </div>
-    );
+  if (mode === "approved" && contentPieces) {
+    return <ContentPackageReview brandName={brandName} initialContentPieces={contentPieces} />;
   }
 
   if (mode === "results" && result) {

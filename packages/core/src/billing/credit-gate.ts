@@ -70,11 +70,14 @@ export interface RecordConsumptionParams {
   serviceRoleDb: SupabaseClient<Database>;
   organizationId: string;
   costCredits: number;
-  intelligenceHubSessionId: string;
+  /** Sessão do Intelligence Hub que gerou o consumo (`campaign_strategy`/`trend_ranking`). */
+  intelligenceHubSessionId?: string;
+  /** Peça de conteúdo que gerou o consumo (`asset_generation`, Missão 7) — nunca os dois ao mesmo tempo. */
+  contentPieceId?: string;
   description: string;
 }
 
-/** Débito real — chamado só depois que a sessão do Intelligence Hub concluiu com sucesso (Fluxo 6, passo 3). */
+/** Débito real — chamado só depois que a operação (sessão do Intelligence Hub ou geração de peça) concluiu com sucesso (Fluxo 6, passo 3). */
 export async function recordConsumption(params: RecordConsumptionParams): Promise<void> {
   const creditLedgerRepository = new CreditLedgerRepository(params.serviceRoleDb);
 
@@ -83,6 +86,7 @@ export async function recordConsumption(params: RecordConsumptionParams): Promis
     type: "consumption",
     amount: -params.costCredits,
     related_intelligence_hub_session_id: params.intelligenceHubSessionId,
+    related_content_piece_id: params.contentPieceId,
     description: params.description,
   });
 }

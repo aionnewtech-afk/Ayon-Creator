@@ -80,6 +80,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.45.4
         version: 2.111.0
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       mammoth:
         specifier: ^1.8.0
         version: 1.12.0

@@ -7,6 +7,9 @@
 import type {
   BrandStatus,
   CampaignStatus,
+  ContentPackageStatus,
+  ContentPieceFormat,
+  ContentPieceStatus,
   IntelligenceHubRelatedEntityType,
   IntelligenceHubSessionStatus,
   KnowledgeBaseSourceType,
@@ -16,6 +19,7 @@ import type {
   CreditPricingStatus,
   OrganizationMemberRole,
   PlanStatus,
+  ProductionMode,
   ProviderCapability,
   ProviderConfigStatus,
   ProviderTier,
@@ -440,6 +444,7 @@ export interface Database {
           type: CreditLedgerEntryType;
           amount: number;
           related_intelligence_hub_session_id: string | null;
+          related_content_piece_id: string | null;
           external_payment_id: string | null;
           description: string | null;
           created_by: string | null;
@@ -451,6 +456,7 @@ export interface Database {
           type: CreditLedgerEntryType;
           amount: number;
           related_intelligence_hub_session_id?: string | null;
+          related_content_piece_id?: string | null;
           external_payment_id?: string | null;
           description?: string | null;
           created_by?: string | null;
@@ -515,6 +521,75 @@ export interface Database {
           status?: PlanStatus;
         };
         Update: Partial<Database["public"]["Tables"]["plans"]["Insert"]>;
+        Relationships: [];
+      };
+      content_pieces: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          format: ContentPieceFormat;
+          production_mode: ProductionMode | null;
+          is_primary: boolean;
+          intelligence_hub_session_id: string | null;
+          script: string | null;
+          brand_rationale: string | null;
+          status: ContentPieceStatus;
+          approved_by: string | null;
+          approved_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          format: ContentPieceFormat;
+          production_mode?: ProductionMode | null;
+          is_primary?: boolean;
+          intelligence_hub_session_id?: string | null;
+          script?: string | null;
+          brand_rationale?: string | null;
+          status?: ContentPieceStatus;
+          approved_by?: string | null;
+          approved_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["content_pieces"]["Insert"]>;
+        Relationships: [];
+      };
+      content_versions: {
+        Row: {
+          id: string;
+          content_piece_id: string;
+          version_number: number;
+          output_storage_path: string | null;
+          generation_metadata: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          content_piece_id: string;
+          version_number?: number;
+          output_storage_path?: string | null;
+          generation_metadata?: Record<string, unknown> | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["content_versions"]["Insert"]>;
+        Relationships: [];
+      };
+      content_packages: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          storage_path: string | null;
+          status: ContentPackageStatus;
+          generated_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          storage_path?: string | null;
+          status?: ContentPackageStatus;
+          generated_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["content_packages"]["Insert"]>;
         Relationships: [];
       };
     };

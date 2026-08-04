@@ -3,18 +3,27 @@
 import { revalidatePath } from "next/cache";
 import {
   AuditRepository,
+  BrandBrainRepository,
   CampaignRepository,
+  ContentPieceRepository,
   InactiveSubscriptionError,
   InsufficientCreditsError,
   ensureSufficientCredits,
+  generateTextPiece,
   hasMinimumRole,
+  initializeCampaignContentPieces,
+  knownFieldsFromProfile,
   logger,
   recordConsumption,
   runCampaignStrategySession,
 } from "@ayon/core";
+import { TEXT_ONLY_CONTENT_PIECE_FORMATS } from "@ayon/types";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import type { ContentPieceView } from "./asset-actions";
+
+const ASSET_GENERATION_TRIGGER_REASON = "asset_generation";
 
 export interface SpecialistOpinionView {
   specialistId: string;
@@ -128,11 +137,20 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
   }
 }
 
+export interface ApproveCampaignStrategyResult {
+  ok: boolean;
+  error?: string;
+  contentPieces?: ContentPieceView[];
+}
+
 /**
  * Aprovação explícita da estratégia consolidada — nunca automática (Princípio
- * do Consultor Permanente, PRD §1.1).
+ * do Consultor Permanente, PRD §1.1). Dispara em seguida o Asset Engine
+ * (Fluxo 2, passo 10 → Fluxo 3): cria as 9 `content_pieces` previstas e gera
+ * os 5 formatos textuais (MVP da Missão 7 — os 4 visuais ficam aguardando
+ * upload manual do cliente, arch. §3.5).
  */
-export async function approveCampaignStrategyAction(campaignId: string): Promise<{ ok: boolean; error?: string }> {
+export async function approveCampaignStrategyAction(campaignId: string): Promise<ApproveCampaignStrategyResult> {
   const session = await getCurrentSession();
 
   if (!session?.organization || !session.membership || !session.brand) {
@@ -144,10 +162,13 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
   }
 
   const db = createClient();
+  const serviceRoleDb = createServiceRoleClient();
   const campaignRepository = new CampaignRepository(db);
   const auditRepository = new AuditRepository(db);
+  const contentPieceRepository = new ContentPieceRepository(db);
+  const brandBrainRepository = new BrandBrainRepository(db);
 
-  await campaignRepository.update(campaignId, { status: "approved" });
+  const campaign = await campaignRepository.update(campaignId, { status: "approved" });
 
   await auditRepository.record({
     organization_id: session.organization.id,
@@ -157,7 +178,77 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
     entity_id: campaignId,
   });
 
+  // Regra inegociável (Princípio do Consultor Permanente): nenhuma peça é
+  // gerada sem o Brand Brain carregado — arch. §3.5.
+  const profile = await brandBrainRepository.findByBrandId(session.brand.id);
+  const knownFields = knownFieldsFromProfile(profile);
+  const strategySummary = campaign.strategy_summary as { consolidated_strategy?: string; rationale?: string } | null;
+  const consolidatedStrategy = strategySummary?.consolidated_strategy ?? "";
+  const strategyRationale = strategySummary?.rationale ?? "";
+  const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+
+  await campaignRepository.update(campaignId, { status: "generating" });
+
+  const pieces = await initializeCampaignContentPieces(db, campaignId, campaign.intelligence_hub_session_id);
+
+  for (const piece of pieces) {
+    if (!(TEXT_ONLY_CONTENT_PIECE_FORMATS as readonly string[]).includes(piece.format)) continue;
+
+    try {
+      const { costCredits } = await ensureSufficientCredits({
+        serviceRoleDb,
+        organizationId: session.organization.id,
+        triggerReason: ASSET_GENERATION_TRIGGER_REASON,
+        tier,
+      });
+
+      await generateTextPiece({
+        db,
+        serviceRoleDb,
+        tier,
+        contentPieceId: piece.id,
+        format: piece.format,
+        brandName: session.brand.name,
+        knownFields,
+        consolidatedStrategy,
+        strategyRationale,
+      });
+
+      await recordConsumption({
+        serviceRoleDb,
+        organizationId: session.organization.id,
+        costCredits,
+        contentPieceId: piece.id,
+        description: `Peça de conteúdo (${piece.format}) — ${session.brand.name}`,
+      });
+    } catch (error) {
+      // Falha parcial nunca bloqueia as demais peças (mesmo espírito do
+      // painel de especialistas, Fluxo 10 passo 7) — peça fica em `draft`,
+      // pode ser regenerada individualmente depois.
+      logger.error("asset_engine.text_piece_failed", {
+        contentPieceId: piece.id,
+        format: piece.format,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  await campaignRepository.update(campaignId, { status: "ready_for_review" });
+
+  const updatedPieces = await contentPieceRepository.findByCampaignId(campaignId);
+
   revalidatePath("/criar-campanha");
 
-  return { ok: true };
+  return {
+    ok: true,
+    contentPieces: updatedPieces.map((piece) => ({
+      id: piece.id,
+      format: piece.format,
+      productionMode: piece.production_mode,
+      isPrimary: piece.is_primary,
+      script: piece.script,
+      brandRationale: piece.brand_rationale,
+      status: piece.status,
+    })),
+  };
 }

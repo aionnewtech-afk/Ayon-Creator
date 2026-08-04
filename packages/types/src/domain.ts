@@ -84,3 +84,28 @@ export type CreditPackageStatus = (typeof CREDIT_PACKAGE_STATUSES)[number];
 
 export const PLAN_STATUSES = ["active", "inactive"] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
+
+export const CONTENT_PIECE_FORMATS = [
+  "video",
+  "caption",
+  "stories",
+  "carousel",
+  "thumbnail",
+  "blog_post",
+  "email",
+  "script",
+  "teleprompter",
+] as const;
+export type ContentPieceFormat = (typeof CONTENT_PIECE_FORMATS)[number];
+
+/** Formatos gerados por IA (LLM Provider) no MVP da Missão 7 — os demais exigem upload manual (`own_media`). */
+export const TEXT_ONLY_CONTENT_PIECE_FORMATS = ["caption", "blog_post", "email", "script", "teleprompter"] as const;
+
+export const PRODUCTION_MODES = ["ai_avatar", "licensed_stock_video", "own_media", "hybrid", "text_only"] as const;
+export type ProductionMode = (typeof PRODUCTION_MODES)[number];
+
+export const CONTENT_PIECE_STATUSES = ["draft", "generating", "ready_for_review", "approved", "rejected"] as const;
+export type ContentPieceStatus = (typeof CONTENT_PIECE_STATUSES)[number];
+
+export const CONTENT_PACKAGE_STATUSES = ["building", "ready", "failed"] as const;
+export type ContentPackageStatus = (typeof CONTENT_PACKAGE_STATUSES)[number];
