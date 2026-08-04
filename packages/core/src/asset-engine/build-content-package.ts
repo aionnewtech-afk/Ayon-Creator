@@ -60,7 +60,9 @@ export async function buildContentPackage(params: {
         continue;
       }
 
-      const fileName = latestVersion.output_storage_path.split("/").pop() ?? `${piece.format}`;
+      const rawFileName = latestVersion.output_storage_path.split("/").pop() ?? piece.format;
+      const idPrefix = `${piece.id}-`;
+      const fileName = rawFileName.startsWith(idPrefix) ? rawFileName.slice(idPrefix.length) : rawFileName;
       zip.file(fileName, await data.arrayBuffer());
     }
 
