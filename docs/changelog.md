@@ -4,6 +4,43 @@
 
 ---
 
+## v2.11 (revisão 28) — 2026-08-04 — Sprint de Hardening: auditoria completa + Missão H1 (segurança crítica) implementada e validada
+
+**Status:** implementado e validado ponta a ponta. `docs/hardening-plan.md` criado com auditoria completa do MVP em 10 categorias (bugs, dívidas técnicas, UX, performance, segurança, escalabilidade, testes, CI/CD, observabilidade, checklist de v1.0) e priorização P0/P1/P2. Missão H1 (os 5 itens P0 de segurança/race condition) implementada e validada; H2–H5 seguem como plano aprovado, aguardando início.
+
+**Decisões apresentadas ao dono do produto antes do H1 — todas aprovadas como recomendado:**
+
+1. **Alvo do upgrade do Next.js:** 15.5.x (última estável da série, resolve as 23 vulnerabilidades relacionadas ao framework).
+2. **Versão do React:** mantida em 18 (Next 15 suporta `^18 || ^19`), para isolar a migração a uma única variável.
+3. **Limite de upload:** 20MB (cobre o maior limite já documentado, `own_media`).
+
+**Achado novo durante a auditoria técnica do H1 (não estava no plano original):** `next.config.js` nunca configurou `serverActions.bodySizeLimit` — default do Next.js é 1MB, abaixo de qualquer upload real. Nunca foi pego em validação porque todo teste de upload usava arquivos sintéticos minúsculos. Resolvido junto com a validação de upload (item 5.3b).
+
+**Implementação (H1 — os 5 itens P0):**
+
+- Migration `0013_hardening_storage_rls.sql`: as 3 policies `for all` de `storage.objects` viram 12 policies por operação — `select` continua `is_org_member`, `insert`/`update`/`delete` passam a exigir `is_org_editor`.
+- Migration `0014_hardening_provisioning_lock.sql`: `ensure_initial_provisioning`, função Postgres única com `pg_advisory_xact_lock(hashtext(user_id))`, substituindo as 5 escritas separadas via PostgREST que causavam a race condition documentada desde a Missão 4. Ganhou checagem `auth.uid()` contra impersonação (achado durante o próprio desenvolvimento, antes de qualquer teste).
+- Migration `0015_hardening_credit_ledger_balance.sql`: trigger `enforce_credit_ledger_balance` (`select ... for update` + recálculo do saldo antes do insert) — garantia atômica contra saldo negativo, substituindo o check-then-act antigo do portão de crédito.
+- `next.config.mjs`: `experimental.serverActions.bodySizeLimit = "20mb"`. `uploadContentPieceMediaAction` ganha validação de tamanho (20MB) e tipo MIME (`image/`/`video/`) com mensagens específicas.
+- `next`/`eslint-config-next` `14.2.35` → `15.5.22`. `cookies()` migrado para `async`/`await` de forma própria em `lib/supabase/server.ts` — **atalho `UnsafeUnwrappedCookies` do codemod oficial rejeitado deliberadamente** (documentado pelo próprio Next.js como temporário); `createClient()` agora `async`, `await` propagado a 32 call sites em 17 arquivos. `serverComponentsExternalPackages` → `serverExternalPackages` (chave estável no Next 15).
+
+**Validação real (testes de concorrência/permissão contra Supabase remoto + E2E completo no browser, Supabase + Anthropic reais, marca de teste "Padaria Trigo Dourado"):**
+
+1. RLS de Storage: sessão real de `viewer` tenta remover arquivo em `content-output` — `.remove()` retorna sucesso com array vazio (comportamento do Supabase Storage quando RLS filtra todas as linhas-alvo); confirmado via `.list()` com service role que o arquivo **não** foi removido.
+2. Provisionamento inicial: 5 chamadas concorrentes do mesmo usuário novo → exatamente 1 organização criada, as outras 4 retornam `already_provisioned = true` com o mesmo `organization_id`.
+3. Portão de crédito: 10 débitos concorrentes contra saldo insuficiente para todos → só o número exato suportado pelo saldo é aceito, saldo final nunca negativo.
+4. Upload: arquivo de 21MB rejeitado com mensagem amigável; tipo não aceito rejeitado; upload válido persistido.
+5. Next.js 15: fluxo completo validado no browser — login/provisionamento, todas as 6 telas principais, campanha completa (painel de especialistas com divergência real entre Marketing e Branding relatada pelo Coordinator, 5 peças de texto via Anthropic real, upload das 4 peças visuais, aprovação das 9 peças, montagem automática do pacote, download real do `.zip` assinado). Nenhuma regressão.
+6. `pnpm audit --prod` re-executado: 25 → 5 vulnerabilidades (2 `moderate`, 3 `high`), zero relacionadas ao Next.js. As 5 remanescentes (`postcss` via `next`, `sharp`/`libvips`) ficam registradas como novo item P1 em `docs/hardening-plan.md` (5.10), fora do escopo aprovado do H1.
+
+**Dois erros de implementação autocorrigidos antes de qualquer teste de usuário (não são bugs encontrados em validação):** posicionamento de `serverActions` fora de `experimental` no config (Next 15 rejeitou, corrigido após grep no tipo `ExperimentalConfig` do pacote instalado); atalho `UnsafeUnwrappedCookies` do codemod revertido manualmente em favor de `async`/`await` próprio.
+
+**Documentação atualizada nesta revisão:** `docs/hardening-plan.md` (Missão H1 marcada concluída, checklist §10 atualizado, novo item 5.10), `CHANGELOG.md` (`[0.8.1]`), `README.md`.
+
+**Próximo passo:** H2 (Fundação de qualidade — CI mínimo + testes de smoke/RLS/concorrência) fica para uma missão futura; não iniciada nesta sprint por instrução explícita do dono do produto.
+
+---
+
 ## v2.10 (revisão 27) — 2026-08-04 — Missão 8 (Learning Engine) implementada e validada
 
 **Status:** implementado e validado ponta a ponta com Supabase + Anthropic reais. Documentação atualizada em todos os documentos doc-first + README.md + PRD.md.

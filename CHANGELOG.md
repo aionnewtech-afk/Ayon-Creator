@@ -2,6 +2,21 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.8.1] — 2026-08-04
+
+### Corrigido
+
+- **Missão H1 — Sprint de Hardening, segurança crítica (P0)**: os 5 itens de segurança/race condition mais graves da auditoria pré-v1.0 (`docs/hardening-plan.md`), todos validados sob concorrência/permissão real e com regressão completa no browser.
+  - **RLS de Storage**: as 3 policies `for all` de `storage.objects` (`brand-media`/`knowledge-base`/`content-output`) — que permitiam escrita a qualquer `viewer`, não só `editor+` — viram 12 policies por operação (`select` = `is_org_member`; `insert`/`update`/`delete` = `is_org_editor`). Migration `0013_hardening_storage_rls.sql`.
+  - **Race condition no Provisionamento Inicial**: as 5 escritas separadas via PostgREST (sem transação, reproduzida criando organizações duplicadas desde a Missão 4) viram uma função Postgres única (`ensure_initial_provisioning`) com `pg_advisory_xact_lock` por usuário + checagem `auth.uid()` contra impersonação. Migration `0014_hardening_provisioning_lock.sql`.
+  - **Race condition no portão de crédito**: trigger `enforce_credit_ledger_balance` (`select ... for update` + recálculo do saldo antes do insert) substitui o check-then-act antigo — garantia atômica contra saldo negativo mesmo sob concorrência real. Migration `0015_hardening_credit_ledger_balance.sql`.
+  - **Validação de upload**: `next.config.mjs` ganha `serverActions.bodySizeLimit` explícito (20MB — o default do Next.js era 1MB e nunca tinha sido configurado). `uploadContentPieceMediaAction` passa a validar tamanho e tipo MIME real, com mensagens específicas.
+  - **Next.js `14.2.35` → `15.5.22`** (React mantido em 18): resolve as 23 vulnerabilidades de dependência específicas do framework encontradas em `pnpm audit --prod` (10 `high`, incluindo DoS/SSRF em Server Actions/RSC). `cookies()` migrado para `async`/`await` próprio (não o atalho temporário `UnsafeUnwrappedCookies` do codemod oficial) em todos os 17 arquivos afetados.
+
+### Observado durante a validação real (não é bug de código)
+
+- `pnpm audit --prod` re-executado após o upgrade: 25 → 5 vulnerabilidades (2 `moderate`, 3 `high`), nenhuma relacionada ao Next.js — as 5 remanescentes (`postcss` transitivo, `sharp`/`libvips`) ficam registradas como novo item de follow-up em `docs/hardening-plan.md`, fora do escopo desta missão.
+
 ## [0.8.0] — 2026-08-04
 
 ### Adicionado
