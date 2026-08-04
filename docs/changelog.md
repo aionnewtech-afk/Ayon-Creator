@@ -4,6 +4,23 @@
 
 ---
 
+## v2.21 (revisão 38) — 2026-08-04 — Missão 9, Etapa 1: gap de UI fechado + bug real de narração corrigido + guia de uso do zero
+
+**Contexto:** ao preparar um passo a passo de uso "como usuário normal" (`docs/GETTING_STARTED.md`), a verificação real revelou que a Missão 9 nunca tinha sido conectada à interface — `generateVideoContentPieceAction` existia e estava validada por testes automatizados desde o fechamento formal da Etapa 1, mas nenhum componente de UI a chamava. `content-package-review.tsx` (CAMP-5) tinha só um branch binário (`text_only` vs. "qualquer outra coisa"), então a peça `video` caía no fluxo de upload manual pensado para `own_media`.
+
+**UI conectada:**
+- `content-package-review.tsx` ganha um terceiro branch para `licensed_stock_video`: botão **"Gerar vídeo automaticamente"** (`draft`), estado **"Gerando vídeo automaticamente..."** (`generating`), player de vídeo + Aprovar/Gerar de novo (`ready_for_review`), erro + **"Tentar novamente"** (`failed`).
+- Polling simples (decisão de UX que estava em aberto desde `ux-design.md` §10, resolvida aqui): `getContentPieceAction` (novo, `asset-actions.ts`) consultado a cada 4s enquanto alguma peça de vídeo está `generating` — sem Realtime, sem infraestrutura nova.
+- `ContentPieceView` ganha `mediaUrl` (signed URL da última `content_version`) — usado tanto pelo vídeo automático quanto, de brinde, pelo preview de `own_media` já enviado (nunca existia antes).
+
+**★ Bug real encontrado e corrigido durante a validação end-to-end real (navegador de verdade, campanha real da Todo Canto Turismo):** o pipeline falhava com `"content_piece ... não tem script para narrar"`. Causa raiz: `approveCampaignStrategyAction` só chama `generateTextPiece` para formatos `text_only` — a peça `video` (agora `licensed_stock_video`, não mais `own_media`) nunca tinha `content_pieces.script` preenchido, e `narrateVideoContentPiece` exige um script para sintetizar a narração. Corrigido reaproveitando o texto já gerado da peça principal "Roteiro" (`is_primary`) como narração do vídeo — mesma narrativa central em dois formatos, sem chamada de LLM redundante, e sem risco do vídeo narrado divergir do roteiro escrito exibido ao usuário. Confirmado corrigido com uma segunda execução real do pipeline (mesma peça, script agora presente): `completed`, MP4 real de 37,5MB gravado no Storage, `content_versions` correta.
+
+**`docs/GETTING_STARTED.md` (novo):** guia completo do zero — Docker/n8n, variáveis de ambiente, comando de start, criação de conta, confirmação de e-mail, assinatura de plano (Mercado Pago sandbox — achado real: sem assinatura ativa a criação de campanha é bloqueada), onboarding conversacional, criação de campanha e geração do primeiro vídeo. Todos os passos executados de verdade no navegador antes de serem documentados — inclusive o próprio achado do bug acima, encontrado durante essa execução real.
+
+**Validação real:** `pnpm typecheck`/`lint`/`build` limpos nos 5 workspaces. Fluxo completo repetido no navegador (Anthropic real para o painel de especialistas + 5 peças de texto; ElevenLabs + Pexels + Shotstack + n8n reais para o vídeo) usando um objetivo real da Todo Canto Turismo — vídeo automático gerado, revisado e aprovável na tela, exatamente como um usuário final experimentaria.
+
+---
+
 ## v2.20 (revisão 37) — 2026-08-04 — Missão 9, Etapa 1: ENCERRADA — n8n provisionado, Fluxo 13 validado de ponta a ponta em ambiente real
 
 **Status: Missão 9, Etapa 1, completa e fechada.** Todos os critérios de aceite cumpridos com validação real (nenhum mock, nenhuma simulação):

@@ -42,6 +42,8 @@ export interface ContentPieceView {
   script: string | null;
   brandRationale: string | null;
   status: ContentPieceStatus;
+  /** Signed URL da última content_version, quando existir (own_media enviado ou vídeo já gerado — Missão 9). */
+  mediaUrl?: string;
 }
 
 export interface ContentPieceActionResult {
@@ -63,6 +65,26 @@ function toView(piece: Database["public"]["Tables"]["content_pieces"]["Row"]): C
     brandRationale: piece.brand_rationale,
     status: piece.status,
   };
+}
+
+/**
+ * Mesmo que `toView`, mas também assina a URL da última `content_version`
+ * quando existir — usado onde a UI precisa mostrar o preview (upload manual
+ * já enviado, ou vídeo gerado automaticamente, Missão 9).
+ */
+async function toViewWithMedia(
+  db: Awaited<ReturnType<typeof createClient>>,
+  piece: Database["public"]["Tables"]["content_pieces"]["Row"],
+): Promise<ContentPieceView> {
+  const view = toView(piece);
+  if (piece.production_mode === "text_only") return view;
+
+  const contentVersionRepository = new ContentVersionRepository(db);
+  const latest = await contentVersionRepository.findLatestByContentPieceId(piece.id);
+  if (!latest?.output_storage_path) return view;
+
+  const { data: signed } = await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(latest.output_storage_path, 3600);
+  return { ...view, mediaUrl: signed?.signedUrl };
 }
 
 /**
@@ -251,7 +273,7 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
 
     const updated = await contentPieceRepository.findById(contentPieceId);
     revalidatePath("/criar-campanha");
-    return { ok: true, contentPiece: updated ? toView(updated) : undefined };
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
   } catch (error) {
     if (error instanceof InactiveSubscriptionError) {
       return {
@@ -277,6 +299,26 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
     });
     return { ok: false, error: FRIENDLY_ERROR };
   }
+}
+
+/**
+ * Recarrega o estado atual de uma peça — usado pela UI para fazer polling
+ * enquanto o pipeline de vídeo está rodando (`generating`), já que a
+ * geração é assíncrona (Fluxo 13). Mecanismo de atualização de progresso
+ * (Realtime vs. polling) era decisão em aberto (ux-design.md §10) —
+ * resolvido aqui como polling simples, sem infraestrutura nova.
+ */
+export async function getContentPieceAction(contentPieceId: string): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership) return { ok: false, error: FRIENDLY_ERROR };
+
+  const db = await createClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece) return { ok: false, error: FRIENDLY_ERROR };
+
+  return { ok: true, contentPiece: await toViewWithMedia(db, piece) };
 }
 
 /** Upload manual de um formato visual (`own_media`, MVP da Missão 7) — CAMP-5. Sem custo em créditos. */

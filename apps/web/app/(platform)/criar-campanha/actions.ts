@@ -236,6 +236,24 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
     }
   }
 
+  // ★ Missão 9 — achado real durante a validação em ambiente real: a peça
+  // `video` (production_mode `licensed_stock_video`) nunca é `text_only`,
+  // então o loop acima nunca preenche `content_pieces.script` para ela — e
+  // `narrateVideoContentPiece` (Fluxo 13, passo 3) exige um script para
+  // narrar. Em vez de uma chamada de LLM redundante, reaproveita o mesmo
+  // texto já gerado para a peça principal "Roteiro" (is_primary), que é
+  // literalmente o roteiro/narrativa central da campanha — garante também
+  // que o vídeo narrado nunca diverge do roteiro escrito exibido ao usuário.
+  const primaryScriptPiece = pieces.find((piece) => piece.is_primary);
+  const videoPiece = pieces.find((piece) => piece.format === "video" && piece.production_mode === "licensed_stock_video");
+
+  if (primaryScriptPiece && videoPiece) {
+    const generatedPrimary = await contentPieceRepository.findById(primaryScriptPiece.id);
+    if (generatedPrimary?.script) {
+      await contentPieceRepository.update(videoPiece.id, { script: generatedPrimary.script });
+    }
+  }
+
   await campaignRepository.update(campaignId, { status: "ready_for_review" });
 
   const updatedPieces = await contentPieceRepository.findByCampaignId(campaignId);

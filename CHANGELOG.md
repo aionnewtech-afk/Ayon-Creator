@@ -2,6 +2,18 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.10.1] — 2026-08-04
+
+### Adicionado
+
+- `docs/GETTING_STARTED.md`: guia de uso do zero (Docker/n8n, variáveis de ambiente, criação de conta, assinatura de plano, primeira campanha, primeiro vídeo automático) — cada passo executado de verdade no navegador antes de documentado.
+- `content-package-review.tsx` (CAMP-5) ganha o fluxo de vídeo automático (`licensed_stock_video`): botão "Gerar vídeo automaticamente", estado de progresso, player de vídeo, "Tentar novamente". `getContentPieceAction` (novo) faz polling simples enquanto o pipeline assíncrono roda.
+
+### Corrigido
+
+- **Peça de vídeo nunca chegava à interface** — `generateVideoContentPieceAction` existia desde o fechamento da Missão 9 mas nenhum componente a chamava; a peça `video` caía no fluxo de upload manual de `own_media`. Corrigido.
+- **Bug real de narração** — `approveCampaignStrategyAction` nunca preenchia `content_pieces.script` para a peça de vídeo (só gera texto para formatos `text_only`), fazendo o pipeline falhar com "não tem script para narrar". Corrigido reaproveitando o script da peça principal "Roteiro" como narração do vídeo — mesma narrativa em dois formatos, sem chamada de LLM redundente. Encontrado e corrigido durante validação real no navegador (campanha real da Todo Canto Turismo).
+
 ## [0.10.0] — 2026-08-04
 
 ### Adicionado
