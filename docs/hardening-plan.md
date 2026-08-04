@@ -1,6 +1,6 @@
 # Plano de Hardening — Ayon Creator (rumo à v1.0)
 
-> **Status:** **Missão H1 (P0 — segurança crítica) implementada, validada e encerrada — `v0.8.2`.** Auditoria pós-H1 fechou os 2 achados residuais (guarda de RPC incompleta + cleanup de ambiente). H2–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
+> **Status:** **Missão H1 (P0 — segurança crítica) encerrada — `v0.8.2`.** **Missão H2 (fundação de qualidade: testes automatizados + CI) auditada, com escopo técnico aprovado — aguardando aprovação final para iniciar a implementação** (bloqueada por um pré-requisito externo: criação do repositório no GitHub). H3–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
 > **Metodologia:** cada achado abaixo é verificável — vem de leitura direta de código/schema, `pnpm audit`, ou de um "Observado, não corrigido" já registrado em release anterior (citado com a versão onde foi encontrado). Nenhum item é especulação.
 > **Prioridade:** **P0** = bloqueia o lançamento da v1.0 · **P1** = fortemente recomendado antes da v1.0 · **P2** = aceitável adiar para pós-v1.0.
 > **Próximo passo:** após sua aprovação, cada item (ou grupo de itens relacionados) vira uma missão pequena e isolada, seguindo o mesmo processo doc-first + validação real já usado em todas as missões anteriores.
@@ -108,7 +108,7 @@ Nenhum desses itens exige rearquitetura. São, na maioria, correções pequenas 
 | 7.1 | **Zero testes automatizados em todo o repositório** — nenhum arquivo `*.test.ts`/`*.spec.ts`, nenhum framework (`vitest`/`jest`/`playwright`/`cypress`) em nenhum `package.json`. | **P0** | Busca exaustiva nesta auditoria, sem nenhum resultado. |
 | 7.2 | **Toda validação até hoje foi manual**, via browser, refeita do zero a cada missão — nada garante que a Missão 8 não quebrou algo da Missão 3. Não há rede de segurança de regressão. | **P0** | Padrão observado em todo o histórico de `docs/changelog.md`. |
 | 7.3 | **Nenhum teste de RLS** — as próprias afirmações de segurança deste relatório (§5) vêm de leitura de código, não de teste automatizado que prove que um `viewer` de fato não consegue o que não deveria. | **P0** | Ausência confirmada. |
-| 7.4 | **Nenhum teste de credit gate** — a race condition de 1.2/5.4 seria pega por um teste de concorrência simples, que não existe. | **P1** | Ausência confirmada. |
+| 7.4 | **Nenhum teste de credit gate** — a race condition de 1.2/5.4 seria pega por um teste de concorrência simples, que não existe. | **P0** ★ corrigido na auditoria do H2 (antes P1 — inconsistente com a própria "Priorização consolidada" abaixo, que já incluía "teste de concorrência do credit gate" no item P0 nº 8) | Ausência confirmada; teste ad hoc já escrito e usado para validar a correção do H1 (item 1.2/5.4), nunca formalizado como teste automatizado comitado ao repositório. |
 
 ---
 
@@ -279,3 +279,38 @@ Corrigido pela migration `0016_hardening_provisioning_grant_fix.sql`: `if p_user
 **Validação de ambiente limpo (checagem final):** zero organizações/usuários com `h1test`/`h1-fix` no nome ou e-mail; `typecheck`/`lint`/`build` re-executados do zero, todos limpos; `supabase migration list --linked` confirma `0016` aplicada (`local == remote`).
 
 **Itens do checklist §10 marcados como concluídos por esta missão:** todos os 5 itens de "Segurança" exceto "`pnpm audit --prod` sem `high`/`critical` pendente" — reduzido de 25 para 5 vulnerabilidades (zero relacionadas ao Next.js), mas ainda não zerado; ver nota acima.
+
+---
+
+## Missão H2 — Fundação de qualidade: auditoria e escopo técnico aprovado
+
+**Status:** auditoria concluída, decisões arquiteturais aprovadas pelo dono do produto — aguardando aprovação final antes da implementação. Escopo: itens P0 de §7 (Testes automatizados) e §8 (CI/CD) — **7.1, 7.2, 7.3, 7.4** (corrigido de P1 para P0 nesta auditoria — ver nota no item da tabela) **, 8.1, 8.2**.
+
+### Achados da auditoria (verificação direta do repositório, não apenas leitura de código)
+
+1. **Repositório sem remote git.** `git remote -v` vazio, só existe a branch local `master`; o CLI `gh` não está instalado neste ambiente. GitHub Actions é **literalmente impossível hoje** — não é uma questão de configuração, é ausência total de repositório remoto. Bloqueia 8.1/8.2 por completo até ser resolvido.
+2. **Zero framework de teste, zero arquivo de teste** — confirmado de novo (mesmo resultado da auditoria original que gerou o item 7.1).
+3. **`docs/hardening-plan.md` tinha uma inconsistência interna:** o item 7.4 (teste de concorrência do credit gate) estava listado como **P1** na tabela §7, mas a "Priorização consolidada" (P0 item nº 8) já o incluía como parte do bloco de testes automatizados obrigatório para a v1.0. Corrigido nesta revisão: 7.4 agora é **P0**, alinhado ao agrupamento da própria Missão H2 (`docs/hardening-plan.md` §"Próximos passos").
+4. **Nenhuma outra menção a testes/CI em nenhum dos 5 documentos de produto** (PRD.md, architecture.md, database.md, flows.md, ux-design.md) nem em CONVENTIONS.md além da linha já existente sobre o prefixo `test:` de Conventional Commits (§7, sem infraestrutura correspondente até agora) — nenhuma correção necessária nesses documentos, H2 não muda nada product-facing.
+5. **`resolveLlmProvider` (`packages/core/src/providers/provider-gateway.ts`) não tem nenhum ponto de injeção de teste** — sempre instancia `AnthropicLlmProvider` a partir de `provider_configs` + `ANTHROPIC_API_KEY`. Um provider fake para o smoke test do CI precisa de um gate explícito dentro dessa função (não um mock injetado de fora).
+6. **Docker Desktop está instalado localmente, mas o daemon não está rodando** (`failed to connect to the docker API`, mesmo erro observado ao aplicar migrations no H1) — `supabase start` (Postgres+Auth+Storage+PostgREST locais) não funciona nesta máquina até o Docker Desktop ser iniciado. Não bloqueia CI (runners do GitHub Actions têm Docker por padrão), mas bloqueia rodar a suíte de RLS/concorrência localmente até isso ser corrigido.
+7. **As 16 migrations nunca foram testadas aplicando do zero** contra um Postgres vazio — todo o histórico foi aplicado incrementalmente contra o mesmo projeto Supabase remoto desde a Sprint 1. `supabase start` no CI (decisão aprovada abaixo) valida isso de brinde, na primeira execução.
+
+### Decisões arquiteturais aprovadas pelo dono do produto
+
+1. **Hosting do CI:** você cria um repositório no GitHub (público ou privado) e me passa a URL — eu configuro o remote, faço o push do histórico atual e escrevo o workflow do GitHub Actions. **Isso é um pré-requisito da implementação — a URL do repositório é necessária antes de qualquer código deste item ser escrito.**
+2. **Frameworks:** **Vitest** (testes de RLS/concorrência batendo direto no Supabase local via client, sem browser, mais testes unitários de `packages/core`) + **Playwright** (smoke test de browser real, único jeito de exercitar Server Actions de ponta a ponta como as validações manuais de toda missão já fazem).
+3. **Banco de teste para RLS/concorrência:** **Postgres local efêmero via Supabase CLI** (`supabase start`, Docker) — sobe Postgres+Auth+Storage+PostgREST, aplica as 16 migrations do zero, roda os testes, derruba tudo. Isolado por completo do projeto real; não exige `SUPABASE_SERVICE_ROLE_KEY` do projeto de produção como secret de CI.
+4. **LLM no smoke test:** **provider fake**, selecionável por variável de ambiente só em modo de teste — determinístico, instantâneo, zero custo de token, zero flakiness. A validação com Anthropic real continua manual a cada missão, como já é hoje; o smoke test garante que o encanamento (Server Actions, credit gate, RLS) não quebrou, não que o texto gerado é bom.
+
+### Escopo técnico planejado (para implementação, após sua aprovação final)
+
+| Item | Abordagem técnica |
+|---|---|
+| 7.1 / 7.2 (fundação de testes) | `vitest` adicionado como devDependency em `packages/core` (testes unitários co-localizados, ex. `slug.test.ts`) e num novo diretório `supabase/tests/` (testes de integração que precisam de Postgres real). `playwright` adicionado em `apps/web/e2e/`. Scripts `test`/`test:e2e` no `package.json` raiz. |
+| 7.3 (RLS) | `supabase/tests/rls.test.ts` — formaliza os testes ad hoc já escritos e validados durante o H1 (viewer não consegue escrever em Storage, member vs. editor, isolamento entre organizações) como suíte comitada, rodando contra o Postgres local efêmero. |
+| 7.4 (concorrência do credit gate) | `supabase/tests/concurrency.test.ts` — formaliza o teste de 10 débitos concorrentes contra saldo insuficiente (já validado ad hoc no H1) como suíte comitada. Mesmo arquivo ou um segundo (`provisioning.test.ts`) formaliza o teste de 5 provisionamentos concorrentes do mesmo usuário (item 1.1, já corrigido no H1, nunca testado de forma automatizada). |
+| 8.1 / 8.2 (CI) | `.github/workflows/ci.yml`: job 1 (`typecheck`+`lint`+`build`, rápido, sem Docker) roda sempre; job 2 (`supabase start` + Vitest) e job 3 (Playwright com o provider fake) rodam em paralelo. Branch protection em `master` (exigir os 3 jobs verdes antes de merge) é uma configuração manual do dono do produto nas Settings do GitHub — não é algo que um commit resolve sozinho, fica registrado aqui como passo pendente pós-implementação. |
+| Provider fake (suporte ao smoke test) | `packages/core/src/providers/fake-llm-provider.ts`, implementando `LlmProvider` com resposta fixa e instantânea. `resolveLlmProvider` ganha um gate explícito no início (`if (process.env.LLM_PROVIDER_MODE === "fake") return new FakeLlmProvider();`) — nome de env var deliberadamente inequívoco, nunca setada em `.env.local`/produção. |
+
+**Fora do escopo do H2** (registrados para H3+ ou além): 8.3 (staging separado), 8.4 (automação de deploy de migration), retry/timeout no LLM Provider (2.3/4.2 — relevante para reduzir flakiness do smoke test real manual, mas não bloqueia o H2 porque o smoke test de CI usa o provider fake), item 5.10 (postcss/sharp, achado do H1).

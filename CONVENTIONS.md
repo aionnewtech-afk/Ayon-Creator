@@ -69,6 +69,20 @@ Exceção: tabelas de log/evento imutável (ex.: `audit_logs`) não têm `delete
 - `strict: true` em todos os `tsconfig.json` do monorepo, sem exceção por pacote.
 - Nenhum `any` implícito; `unknown` + narrowing quando o tipo de fato não é conhecido.
 
-## 10. Histórico
+## 10. Testes automatizados ★ novo (Missão H2)
+
+- **Vitest** para testes que não precisam de browser: unitários de `packages/core` (co-localizados com o código, ex. `slug.test.ts` ao lado de `slug.ts`) e de integração contra Postgres real em `supabase/tests/` (RLS, concorrência — provisionamento, portão de crédito).
+- **Playwright** para o smoke test de fluxo completo em browser real (`apps/web/e2e/`) — login → onboarding → campanha → aprovação → pacote. É o único jeito de exercitar Server Actions de ponta a ponta como as validações manuais de cada missão sempre fizeram.
+- Testes de RLS/concorrência rodam contra um **Postgres local efêmero** (`supabase start`, via Docker), nunca contra o projeto Supabase real — sobe com as migrations aplicadas do zero a cada execução, sem estado compartilhado entre execuções nem com o ambiente de desenvolvimento.
+- O smoke test de Playwright usa um **`LlmProvider` fake** (`packages/core/src/providers/fake-llm-provider.ts`), selecionado só por uma variável de ambiente inequívoca (nunca setada em `.env.local`/produção) — determinístico, sem custo de token, sem depender da API da Anthropic estar no ar. A validação com Anthropic real continua sendo manual a cada missão, como já era antes do H2; o smoke test garante que o encanamento (Server Actions, credit gate, RLS) não regrediu, não que o texto gerado é bom.
+- Nomenclatura: `*.test.ts` para Vitest, `*.spec.ts` para Playwright — mesmo padrão já previsto no prefixo `test:` de Conventional Commits (§7).
+
+## 11. CI/CD ★ novo (Missão H2)
+
+- GitHub Actions (`.github/workflows/ci.yml`), disparado em todo push/PR para `master`. Três jobs: `typecheck`+`lint`+`build` (rápido, sem Docker); suíte Vitest (`supabase start` + `supabase/tests/`); smoke test Playwright (com o `LlmProvider` fake).
+- Branch protection em `master` (exigir os 3 jobs verdes antes de merge) é configuração manual nas Settings do repositório GitHub — não é algo que um commit resolve sozinho.
+- Aplicação de migration continua manual (`supabase db push`) — automatizar isso é item 8.4, fora do escopo do H2.
+
+## 12. Histórico
 
 Ver [docs/changelog.md](docs/changelog.md) — mudanças de convenção relevantes para o escopo de produto também são registradas lá.

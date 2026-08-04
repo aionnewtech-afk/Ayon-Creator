@@ -4,6 +4,38 @@
 
 ---
 
+## v2.13 (revisão 30) — 2026-08-04 — Auditoria e preparação doc-first da Missão H2 (Fundação de qualidade)
+
+**Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores. H2 não é escopo de produto (não muda PRD.md/architecture.md/database.md/flows.md/ux-design.md) — é fundação de engenharia, documentada em `docs/hardening-plan.md` e `CONVENTIONS.md`.
+
+**Escopo:** itens P0 de §7 (Testes automatizados) e §8 (CI/CD) do plano de hardening — 7.1, 7.2, 7.3, 7.4, 8.1, 8.2.
+
+**Achados da auditoria:**
+
+1. **Repositório sem remote git** — `git remote -v` vazio, `gh` CLI não instalado neste ambiente. GitHub Actions é impossível hoje sem esse pré-requisito externo.
+2. **Zero framework de teste, zero arquivo de teste** — confirmado de novo, mesmo resultado da auditoria original.
+3. **Inconsistência interna corrigida:** item 7.4 (teste de concorrência do credit gate) estava marcado **P1** na tabela §7, mas a "Priorização consolidada" já o incluía no bloco P0. Corrigido para P0, alinhado ao agrupamento da própria Missão H2.
+4. **Nenhuma outra correção necessária** nos 5 documentos de produto — H2 não introduz nem contradiz nenhuma decisão de produto já registrada.
+5. **`resolveLlmProvider` sem ponto de injeção de teste** — precisa de um gate explícito por variável de ambiente para suportar um provider fake no smoke test.
+6. **Docker Desktop instalado mas com o daemon parado** nesta máquina — não bloqueia CI (runners do GitHub Actions têm Docker por padrão), mas bloqueia rodar a suíte de RLS/concorrência localmente até ser iniciado.
+7. **As 16 migrations nunca foram testadas aplicando do zero** contra um Postgres vazio — `supabase start` no CI valida isso de brinde.
+
+**Decisões arquiteturais apresentadas ao dono do produto antes de qualquer doc-first — todas aprovadas como recomendado:**
+
+1. **Hosting do CI:** dono do produto cria o repositório no GitHub e passa a URL — pré-requisito externo antes da implementação.
+2. **Frameworks:** Vitest (RLS/concorrência + unitários de `packages/core`) + Playwright (smoke test de browser real).
+3. **Banco de teste:** Postgres local efêmero via Supabase CLI (`supabase start`, Docker) — isolado do projeto real, migrations aplicadas do zero a cada execução.
+4. **LLM no smoke test:** provider fake selecionável por variável de ambiente — determinístico, sem custo de token; validação com Anthropic real continua manual a cada missão.
+
+**O que mudou nos documentos:**
+
+- **`docs/hardening-plan.md`:** item 7.4 corrigido de P1 para P0. Nova seção "Missão H2 — Fundação de qualidade: auditoria e escopo técnico aprovado" com os achados, as 4 decisões aprovadas e a tabela de escopo técnico planejado (estrutura de arquivos de teste, workflow de CI, provider fake).
+- **`CONVENTIONS.md`:** novo §10 "Testes automatizados" (frameworks, onde cada tipo de teste vive, banco de teste, provider fake, nomenclatura) e §11 "CI/CD" (workflow, branch protection como passo manual, migration continua manual). §10 "Histórico" renumerado para §12.
+
+**Próximo passo:** aguardando (1) sua aprovação final para iniciar a implementação e (2) a URL do repositório GitHub que você criar — pré-requisito para os itens 8.1/8.2.
+
+---
+
 ## v2.12 (revisão 29) — 2026-08-04 — Fechamento da Missão H1: correção da RPC de provisionamento + limpeza de ambiente
 
 **Status:** implementado e validado. Fecha os 2 achados residuais de uma auditoria rápida pós-H1 (verificação direta contra o Postgres remoto), autorizando o início do H2.
