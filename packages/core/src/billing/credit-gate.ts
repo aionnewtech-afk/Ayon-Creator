@@ -74,6 +74,13 @@ export interface RecordConsumptionParams {
   intelligenceHubSessionId?: string;
   /** Peça de conteúdo que gerou o consumo (`asset_generation`, Missão 7) — nunca os dois ao mesmo tempo. */
   contentPieceId?: string;
+  /**
+   * Execução de pipeline assíncrono que gerou o consumo (`video_generation`,
+   * Missão 9) — `related_pipeline_run_id` é `unique` (migration `0017`), então
+   * uma reentrega do webhook de conclusão do n8n com o mesmo `pipelineRunId`
+   * é tratada como idempotente aqui (ver catch abaixo), nunca duplica o débito.
+   */
+  pipelineRunId?: string;
   description: string;
 }
 
@@ -100,6 +107,7 @@ export async function recordConsumption(params: RecordConsumptionParams): Promis
       amount: -params.costCredits,
       related_intelligence_hub_session_id: params.intelligenceHubSessionId,
       related_content_piece_id: params.contentPieceId,
+      related_pipeline_run_id: params.pipelineRunId,
       description: params.description,
     });
   } catch (error) {
@@ -107,6 +115,12 @@ export async function recordConsumption(params: RecordConsumptionParams): Promis
     if (message.includes("insufficient_credit_balance")) {
       const available = await creditLedgerRepository.getBalance(params.organizationId);
       throw new InsufficientCreditsError(params.costCredits, available);
+    }
+    // Idempotência do webhook de conclusão do n8n (Fluxo 13, passo 6) —
+    // `related_pipeline_run_id` é `unique`; uma reentrega do mesmo callback
+    // colide aqui e é tratada como sucesso silencioso, nunca duplica o débito.
+    if (params.pipelineRunId && (message.includes("duplicate key") || message.includes("credit_ledger_related_pipeline_run_id_key"))) {
+      return;
     }
     throw error;
   }

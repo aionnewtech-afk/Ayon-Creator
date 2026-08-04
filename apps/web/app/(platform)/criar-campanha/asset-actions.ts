@@ -10,6 +10,7 @@ import {
   InactiveSubscriptionError,
   InsufficientCreditsError,
   LearningSignalRepository,
+  N8nDispatchError,
   ensureSufficientCredits,
   generateTextPiece,
   hasMinimumRole,
@@ -17,6 +18,7 @@ import {
   learnedPreferencesTextFromProfile,
   logger,
   recordConsumption,
+  triggerVideoGeneration,
 } from "@ayon/core";
 import { buildContentPackage, PackageNotReadyError } from "@ayon/core/src/asset-engine/build-content-package";
 import type { ContentPieceFormat, ContentPieceStatus, Database, ProductionMode } from "@ayon/types";
@@ -198,6 +200,78 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
       };
     }
     logger.error("asset_engine.regenerate_failed", {
+      contentPieceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+/**
+ * Dispara a geração automática de vídeo (`licensed_stock_video`, Missão 9,
+ * Etapa 1 — Fluxo 13) — CAMP-5. Diferente de `regenerateContentPieceAction`,
+ * não espera o resultado: dispara o pipeline assíncrono via n8n e retorna
+ * imediatamente com a peça em `generating`. UI precisa de status assíncrono
+ * (Realtime/polling — decisão de UX ainda em aberto, ux-design.md §10) para
+ * refletir a conclusão; por enquanto, um refresh manual da página já reflete
+ * o resultado quando o webhook de conclusão processar.
+ */
+export async function generateVideoContentPieceAction(contentPieceId: string): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode gerar vídeo." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+  const campaignRepository = new CampaignRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.production_mode !== "licensed_stock_video") {
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+
+  const campaign = await campaignRepository.findById(piece.campaign_id);
+  if (!campaign) return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+
+    await triggerVideoGeneration({
+      db,
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      campaignId: piece.campaign_id,
+      tier,
+      contentPieceId,
+      searchQuery: campaign.title,
+    });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? toView(updated) : undefined };
+  } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para gerar esse vídeo. Compre mais créditos em Configurações.",
+      };
+    }
+    if (error instanceof N8nDispatchError) {
+      logger.error("asset_engine.video_dispatch_failed", { contentPieceId, reason: error.message });
+      return { ok: false, error: "Não consegui iniciar a geração do vídeo agora. Tenta de novo em instantes?" };
+    }
+    logger.error("asset_engine.video_generate_failed", {
       contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

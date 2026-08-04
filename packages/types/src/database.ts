@@ -21,6 +21,9 @@ import type {
   CreditPackageStatus,
   CreditPricingStatus,
   OrganizationMemberRole,
+  PipelineRunEngine,
+  PipelineRunEntityType,
+  PipelineRunStatus,
   PlanStatus,
   ProductionMode,
   ProviderCapability,
@@ -448,6 +451,7 @@ export interface Database {
           amount: number;
           related_intelligence_hub_session_id: string | null;
           related_content_piece_id: string | null;
+          related_pipeline_run_id: string | null;
           external_payment_id: string | null;
           description: string | null;
           created_by: string | null;
@@ -460,6 +464,7 @@ export interface Database {
           amount: number;
           related_intelligence_hub_session_id?: string | null;
           related_content_piece_id?: string | null;
+          related_pipeline_run_id?: string | null;
           external_payment_id?: string | null;
           description?: string | null;
           created_by?: string | null;
@@ -574,6 +579,31 @@ export interface Database {
           generation_metadata?: Record<string, unknown> | null;
         };
         Update: Partial<Database["public"]["Tables"]["content_versions"]["Insert"]>;
+        Relationships: [];
+      };
+      pipeline_runs: {
+        Row: {
+          id: string;
+          entity_type: PipelineRunEntityType;
+          entity_id: string;
+          engine: PipelineRunEngine;
+          n8n_execution_id: string | null;
+          status: PipelineRunStatus;
+          error: string | null;
+          started_at: string;
+          finished_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          entity_type: PipelineRunEntityType;
+          entity_id: string;
+          engine: PipelineRunEngine;
+          n8n_execution_id?: string | null;
+          status?: PipelineRunStatus;
+          error?: string | null;
+          finished_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["pipeline_runs"]["Insert"]>;
         Relationships: [];
       };
       content_packages: {

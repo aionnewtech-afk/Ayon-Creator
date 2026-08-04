@@ -24,11 +24,18 @@ export * from "./repositories/content-version.repository";
 export * from "./repositories/content-package.repository";
 export * from "./repositories/learning-signal.repository";
 export * from "./repositories/learning-insight.repository";
+export * from "./repositories/pipeline-run.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
 export * from "./providers/trend-source-provider";
 export * from "./providers/anthropic-web-search-trend-source-provider";
+export * from "./providers/voice-provider";
+export * from "./providers/elevenlabs-voice-provider";
+export * from "./providers/media-provider";
+export * from "./providers/pexels-media-provider";
+export * from "./providers/video-render-provider";
+export * from "./providers/shotstack-video-render-provider";
 export * from "./providers/provider-gateway";
 export * from "./brand-brain/onboarding-themes";
 export * from "./brand-brain/knowledge-panel";
@@ -52,6 +59,11 @@ export * from "./billing/credit-gate";
 export * from "./asset-engine/asset-generation-prompts";
 export * from "./asset-engine/generate-text-piece";
 export * from "./asset-engine/initialize-campaign-content-pieces";
+export * from "./asset-engine/video-pipeline-narrate";
+export * from "./asset-engine/video-pipeline-scenes";
+export * from "./asset-engine/video-pipeline-render";
+export * from "./asset-engine/video-pipeline-complete";
+export * from "./asset-engine/video-pipeline-trigger";
 export * from "./learning-engine/learning-engine-prompts";
 export * from "./learning-engine/run-learning-analysis-panel";
 export * from "./learning-engine/run-learning-coordinator";
@@ -73,3 +85,8 @@ export * from "./knowledge-base/knowledge-source-labels";
 // motivo: `jszip` gera `nodebuffer` (Node-only). Quem precisar (Server
 // Action de montagem do pacote) importa direto o arquivo:
 // `@ayon/core/src/asset-engine/build-content-package`.
+// `./shared/verify-n8n-webhook-secret` fica FORA do barrel pelo mesmo motivo
+// (Missão 9, achado real durante a validação de build) — usa `node:crypto`
+// (`timingSafeEqual`), e o build do Next.js quebra ao tentar empacotar um
+// módulo `node:` no bundle do client. Quem precisar (as 4 rotas do Fluxo 13)
+// importa direto: `@ayon/core/src/shared/verify-n8n-webhook-secret`.

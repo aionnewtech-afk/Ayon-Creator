@@ -30,7 +30,7 @@ export const KNOWLEDGE_BASE_SOURCE_TYPES = [
 ] as const;
 export type KnowledgeBaseSourceType = (typeof KNOWLEDGE_BASE_SOURCE_TYPES)[number];
 
-export const PROVIDER_CAPABILITIES = ["llm", "avatar", "voice", "media", "trend_source"] as const;
+export const PROVIDER_CAPABILITIES = ["llm", "avatar", "voice", "media", "trend_source", "video_render"] as const;
 export type ProviderCapability = (typeof PROVIDER_CAPABILITIES)[number];
 
 export const PROVIDER_CONFIG_STATUSES = ["active", "inactive", "error"] as const;
@@ -105,7 +105,14 @@ export const TEXT_ONLY_CONTENT_PIECE_FORMATS = ["caption", "blog_post", "email",
 export const PRODUCTION_MODES = ["ai_avatar", "licensed_stock_video", "own_media", "hybrid", "text_only"] as const;
 export type ProductionMode = (typeof PRODUCTION_MODES)[number];
 
-export const CONTENT_PIECE_STATUSES = ["draft", "generating", "ready_for_review", "approved", "rejected"] as const;
+export const CONTENT_PIECE_STATUSES = [
+  "draft",
+  "generating",
+  "ready_for_review",
+  "approved",
+  "rejected",
+  "failed",
+] as const;
 export type ContentPieceStatus = (typeof CONTENT_PIECE_STATUSES)[number];
 
 export const CONTENT_PACKAGE_STATUSES = ["building", "ready", "failed"] as const;
@@ -124,3 +131,18 @@ export type LearningInsightAppliedTo = (typeof LEARNING_INSIGHT_APPLIED_TO)[numb
 
 export const LEARNING_INSIGHT_STATUSES = ["pending_review", "applied", "dismissed"] as const;
 export type LearningInsightStatus = (typeof LEARNING_INSIGHT_STATUSES)[number];
+
+/**
+ * ★ novo (Missão 9) — `pipeline_runs` estava documentada desde revisões
+ * antigas de database.md, mas nenhuma migration a criou até agora (nenhuma
+ * missão anterior precisou de execução assíncrona via n8n de fato). Primeira
+ * escrita real: pipeline de geração de vídeo (Fluxo 13).
+ */
+export const PIPELINE_RUN_ENTITY_TYPES = ["trend_research", "campaign", "content_piece", "intelligence_hub_session"] as const;
+export type PipelineRunEntityType = (typeof PIPELINE_RUN_ENTITY_TYPES)[number];
+
+export const PIPELINE_RUN_ENGINES = ["trend_engine", "intelligence_hub", "asset_engine", "brand_brain", "learning_engine"] as const;
+export type PipelineRunEngine = (typeof PIPELINE_RUN_ENGINES)[number];
+
+export const PIPELINE_RUN_STATUSES = ["queued", "running", "completed", "failed"] as const;
+export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
