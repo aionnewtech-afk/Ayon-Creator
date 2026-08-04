@@ -58,7 +58,7 @@ export async function runTrendDiscoveryAction(): Promise<RunTrendDiscoveryResult
   }
 
   try {
-    const sessionDb = createClient();
+    const sessionDb = await createClient();
     const serviceRoleDb = createServiceRoleClient();
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;
 

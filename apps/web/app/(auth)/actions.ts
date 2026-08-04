@@ -18,7 +18,7 @@ export async function signInAction(formData: FormData): Promise<void> {
     redirectWithError("/login", "Informe e-mail e senha.");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
@@ -41,7 +41,7 @@ export async function signUpAction(formData: FormData): Promise<void> {
     redirectWithError("/cadastro", "A senha deve ter pelo menos 8 caracteres.");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -78,7 +78,7 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
     redirectWithError("/recuperar-senha", "Informe seu e-mail.");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${appConfig.url}/auth/callback?redirectTo=/recuperar-senha/nova-senha`,
   });
@@ -99,7 +99,7 @@ export async function updatePasswordAction(formData: FormData): Promise<void> {
     redirectWithError("/recuperar-senha/nova-senha", "A senha deve ter pelo menos 8 caracteres.");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {

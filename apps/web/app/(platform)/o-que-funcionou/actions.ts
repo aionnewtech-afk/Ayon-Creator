@@ -72,7 +72,7 @@ export async function runLearningAnalysisAction(): Promise<RunLearningAnalysisAc
   }
 
   try {
-    const db = createClient();
+    const db = await createClient();
     const serviceRoleDb = createServiceRoleClient();
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;
 
@@ -123,7 +123,7 @@ export async function acceptInsightAction(insightId: string): Promise<InsightDec
     return { ok: false, error: "Só quem administra a conta pode aplicar sugestões." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const learningInsightRepository = new LearningInsightRepository(db);
   const brandBrainRepository = new BrandBrainRepository(db);
 
@@ -166,7 +166,7 @@ export async function dismissInsightAction(insightId: string): Promise<InsightDe
     return { ok: false, error: "Só quem administra a conta pode descartar sugestões." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const learningInsightRepository = new LearningInsightRepository(db);
 
   const insight = await learningInsightRepository.findById(insightId);

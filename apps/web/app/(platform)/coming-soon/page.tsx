@@ -3,7 +3,8 @@ import { Sparkles } from "lucide-react";
 import { buttonVariants, EmptyState } from "@ayon/ui";
 import { NAV_ITEMS } from "@/config/navigation";
 
-export default function ComingSoonPage({ searchParams }: { searchParams: { item?: string } }) {
+export default async function ComingSoonPage(props: { searchParams: Promise<{ item?: string }> }) {
+  const searchParams = await props.searchParams;
   const item = NAV_ITEMS.find((navItem) => navItem.slug === searchParams.item);
 
   return (

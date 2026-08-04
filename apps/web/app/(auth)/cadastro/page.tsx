@@ -14,11 +14,12 @@ import {
 } from "@ayon/ui";
 import { signUpAction } from "../actions";
 
-export default function CadastroPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; sent?: string };
-}) {
+export default async function CadastroPage(
+  props: {
+    searchParams: Promise<{ error?: string; sent?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   if (searchParams.sent) {
     return (
       <EmptyState

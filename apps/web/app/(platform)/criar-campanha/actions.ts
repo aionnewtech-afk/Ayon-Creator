@@ -69,7 +69,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
   }
 
   try {
-    const sessionDb = createClient();
+    const sessionDb = await createClient();
     const serviceRoleDb = createServiceRoleClient();
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;
 
@@ -162,7 +162,7 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
     return { ok: false, error: "Só quem edita ou administra a conta pode aprovar campanhas por enquanto." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const serviceRoleDb = createServiceRoleClient();
   const campaignRepository = new CampaignRepository(db);
   const auditRepository = new AuditRepository(db);

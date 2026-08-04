@@ -3,7 +3,7 @@ import { BrandRepository, OrganizationRepository, UserRepository, ensureInitialP
 import { createClient } from "./supabase/server";
 
 export async function getCurrentSession() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

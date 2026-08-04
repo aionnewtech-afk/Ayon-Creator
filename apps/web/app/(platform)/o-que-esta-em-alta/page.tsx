@@ -18,7 +18,7 @@ export default async function OQueEstaEmAltaPage() {
     redirect("/painel");
   }
 
-  const db = createClient();
+  const db = await createClient();
   const trendResearchRepository = new TrendResearchRepository(db);
   const latest = await trendResearchRepository.findLatestByBrandId(session.brand.id);
 

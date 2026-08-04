@@ -18,7 +18,7 @@ export default async function ConhecaSuaEmpresaPage() {
     redirect("/painel");
   }
 
-  const db = createClient();
+  const db = await createClient();
   const brandBrainRepository = new BrandBrainRepository(db);
   const profile = await brandBrainRepository.findByBrandId(session.brand.id);
 

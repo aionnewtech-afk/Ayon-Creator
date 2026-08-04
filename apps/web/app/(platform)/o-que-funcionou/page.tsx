@@ -32,7 +32,7 @@ export default async function OQueFuncionouPage() {
     );
   }
 
-  const db = createClient();
+  const db = await createClient();
   const learningInsightRepository = new LearningInsightRepository(db);
   const insights = await learningInsightRepository.findByBrandId(session.brand.id);
 

@@ -29,7 +29,7 @@ export default async function ConfiguracoesPage() {
     );
   }
 
-  const db = createClient();
+  const db = await createClient();
   const subscriptionRepository = new SubscriptionRepository(db);
   const creditLedgerRepository = new CreditLedgerRepository(db);
   const planRepository = new PlanRepository(db);

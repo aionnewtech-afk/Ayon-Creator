@@ -29,7 +29,7 @@ export default async function ConversaPage() {
     redirect("/conheca-sua-empresa");
   }
 
-  const db = createClient();
+  const db = await createClient();
   const brandBrainRepository = new BrandBrainRepository(db);
   const knowledgeBaseRepository = new KnowledgeBaseItemRepository(db);
 

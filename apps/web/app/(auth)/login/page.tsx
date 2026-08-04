@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@ayon/ui";
 import { signInAction } from "../actions";
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; redirectTo?: string };
-}) {
+export default async function LoginPage(
+  props: {
+    searchParams: Promise<{ error?: string; redirectTo?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   return (
     <Card>
       <CardHeader>

@@ -29,7 +29,7 @@ export default async function EnsineSuaEmpresaPage() {
     );
   }
 
-  const db = createClient();
+  const db = await createClient();
   const knowledgeBaseRepository = new KnowledgeBaseItemRepository(db);
   const items = await knowledgeBaseRepository.findByBrandId(session.brand.id);
 

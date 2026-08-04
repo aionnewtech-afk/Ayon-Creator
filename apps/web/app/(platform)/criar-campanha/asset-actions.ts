@@ -28,6 +28,10 @@ const CONTENT_OUTPUT_BUCKET = "content-output";
 const ASSET_GENERATION_TRIGGER_REASON = "asset_generation";
 const FRIENDLY_ERROR = "Não consegui fazer isso agora. Pode tentar de novo em instantes?";
 
+/** Hardening (Missão H1, docs/hardening-plan.md item 5.3) — limite e tipos aceitos para upload de own_media (vídeo/stories/carrossel/thumbnail). */
+const MAX_OWN_MEDIA_SIZE_BYTES = 20 * 1024 * 1024;
+const ACCEPTED_OWN_MEDIA_MIME_PREFIXES = ["image/", "video/"];
+
 export interface ContentPieceView {
   id: string;
   format: ContentPieceFormat;
@@ -66,7 +70,7 @@ function toView(piece: Database["public"]["Tables"]["content_pieces"]["Row"]): C
  * outras partes do Asset Engine.
  */
 async function emitLearningSignal(
-  db: ReturnType<typeof createClient>,
+  db: Awaited<ReturnType<typeof createClient>>,
   input: { brandId: string; contentPieceId: string; signalType: "approved" | "rejected" | "edited"; payload: Record<string, unknown> },
 ): Promise<void> {
   const learningSignalRepository = new LearningSignalRepository(db);
@@ -94,7 +98,7 @@ export async function editContentPieceAction(contentPieceId: string, script: str
     return { ok: false, error: "Só quem edita ou administra a conta pode editar peças." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const contentPieceRepository = new ContentPieceRepository(db);
   const campaignRepository = new CampaignRepository(db);
 
@@ -125,7 +129,7 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
     return { ok: false, error: "Só quem edita ou administra a conta pode regenerar peças." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const serviceRoleDb = createServiceRoleClient();
   const contentPieceRepository = new ContentPieceRepository(db);
   const campaignRepository = new CampaignRepository(db);
@@ -216,9 +220,15 @@ export async function uploadContentPieceMediaAction(
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "Escolhe um arquivo pra enviar." };
   }
+  if (file.size > MAX_OWN_MEDIA_SIZE_BYTES) {
+    return { ok: false, error: "Esse arquivo é maior que 20MB — tenta um arquivo menor?" };
+  }
+  if (!ACCEPTED_OWN_MEDIA_MIME_PREFIXES.some((prefix) => file.type.startsWith(prefix))) {
+    return { ok: false, error: "Esse tipo de arquivo não é aceito aqui. Envie uma imagem ou um vídeo." };
+  }
 
   try {
-    const db = createClient();
+    const db = await createClient();
     const contentPieceRepository = new ContentPieceRepository(db);
     const contentVersionRepository = new ContentVersionRepository(db);
 
@@ -266,7 +276,7 @@ export async function approveContentPieceAction(contentPieceId: string): Promise
     return { ok: false, error: "Só quem edita ou administra a conta pode aprovar peças." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const contentPieceRepository = new ContentPieceRepository(db);
   const campaignRepository = new CampaignRepository(db);
 
@@ -329,7 +339,7 @@ export async function rejectContentPieceAction(contentPieceId: string, reason?: 
     return { ok: false, error: "Só quem edita ou administra a conta pode rejeitar peças." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const contentPieceRepository = new ContentPieceRepository(db);
   const campaignRepository = new CampaignRepository(db);
   const auditRepository = new AuditRepository(db);

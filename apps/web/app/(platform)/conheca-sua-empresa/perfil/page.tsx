@@ -21,7 +21,7 @@ export default async function PerfilDaMarcaPage() {
     redirect("/painel");
   }
 
-  const db = createClient();
+  const db = await createClient();
   const brandBrainRepository = new BrandBrainRepository(db);
   const answersRepository = new BrandOnboardingAnswerRepository(db);
 

@@ -1,7 +1,8 @@
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@ayon/ui";
 import { updatePasswordAction } from "../../actions";
 
-export default function NovaSenhaPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function NovaSenhaPage(props: { searchParams: Promise<{ error?: string }> }) {
+  const searchParams = await props.searchParams;
   return (
     <Card>
       <CardHeader>

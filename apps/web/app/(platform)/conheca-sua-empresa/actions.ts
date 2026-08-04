@@ -48,7 +48,7 @@ export async function sendOnboardingMessageAction(
   }
 
   try {
-    const sessionDb = createClient();
+    const sessionDb = await createClient();
     const serviceRoleDb = createServiceRoleClient();
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;
     const llmProvider = await resolveLlmProvider(serviceRoleDb, tier);
@@ -99,7 +99,7 @@ export async function confirmOnboardingSynthesisAction(): Promise<{ ok: boolean;
     return { ok: false, error: "Só quem administra a conta pode confirmar o entendimento da Ayon." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const brandBrainRepository = new BrandBrainRepository(db);
   const auditRepository = new AuditRepository(db);
 
@@ -140,7 +140,7 @@ export async function updateBrandBrainFieldAction(
     return { ok: false, error: "Só quem administra a conta pode editar o perfil da marca." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const brandBrainRepository = new BrandBrainRepository(db);
   const patch = replaceProfileFieldPatch(questionKey, value);
 

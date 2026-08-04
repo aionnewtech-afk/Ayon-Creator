@@ -71,7 +71,7 @@ export async function uploadKnowledgeDocumentAction(formData: FormData): Promise
       buffer,
     });
 
-    const db = createClient();
+    const db = await createClient();
     const storagePath = `${session.organization.id}/${session.brand.id}/${crypto.randomUUID()}-${file.name}`;
 
     const { error: uploadError } = await db.storage.from(KNOWLEDGE_BASE_BUCKET).upload(storagePath, buffer, {
@@ -128,7 +128,7 @@ export async function createManualNoteAction(input: {
 
   const title = input.title.trim() || contentText.slice(0, 60);
 
-  const db = createClient();
+  const db = await createClient();
   const knowledgeBaseRepository = new KnowledgeBaseItemRepository(db);
 
   const item = await knowledgeBaseRepository.create({
@@ -156,7 +156,7 @@ export async function updateKnowledgeItemTagsAction(itemId: string, tags: string
     return { ok: false, error: "Só quem edita ou administra a conta pode gerenciar a Knowledge Base." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const knowledgeBaseRepository = new KnowledgeBaseItemRepository(db);
   await knowledgeBaseRepository.update(itemId, { tags });
 
@@ -176,7 +176,7 @@ export async function deleteKnowledgeItemAction(itemId: string): Promise<Knowled
     return { ok: false, error: "Só quem edita ou administra a conta pode gerenciar a Knowledge Base." };
   }
 
-  const db = createClient();
+  const db = await createClient();
   const knowledgeBaseRepository = new KnowledgeBaseItemRepository(db);
   await knowledgeBaseRepository.softDelete(itemId);
 

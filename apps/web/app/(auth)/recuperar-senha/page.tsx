@@ -3,11 +3,12 @@ import { MailCheck } from "lucide-react";
 import { buttonVariants, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Input, Label } from "@ayon/ui";
 import { requestPasswordResetAction } from "../actions";
 
-export default function RecuperarSenhaPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; sent?: string };
-}) {
+export default async function RecuperarSenhaPage(
+  props: {
+    searchParams: Promise<{ error?: string; sent?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   if (searchParams.sent) {
     return (
       <EmptyState
