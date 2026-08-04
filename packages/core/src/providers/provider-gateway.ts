@@ -3,9 +3,15 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ProviderConfigRepository } from "../repositories/provider-config.repository";
 import { AnthropicLlmProvider } from "./anthropic-llm-provider";
 import { AnthropicWebSearchTrendSourceProvider } from "./anthropic-web-search-trend-source-provider";
+import { ElevenLabsVoiceProvider } from "./elevenlabs-voice-provider";
 import { FakeLlmProvider } from "./fake-llm-provider";
 import type { LlmProvider } from "./llm-provider";
+import type { MediaProvider } from "./media-provider";
+import { PexelsMediaProvider } from "./pexels-media-provider";
+import { ShotstackVideoRenderProvider } from "./shotstack-video-render-provider";
 import type { TrendSourceProvider } from "./trend-source-provider";
+import type { VideoRenderProvider } from "./video-render-provider";
+import type { VoiceProvider } from "./voice-provider";
 
 /**
  * Único ponto de código que resolve `(capability, tier)` → adapter concreto
@@ -68,4 +74,74 @@ export async function resolveTrendSourceProvider(
   }
 
   return new AnthropicWebSearchTrendSourceProvider(config.provider_key, apiKey);
+}
+
+/**
+ * Resolve `(capability: "voice", tier)` → adapter concreto (Missão 9, Etapa
+ * 1 — architecture.md §3.5.1/§5). O Asset Engine nunca conhece o fornecedor
+ * concreto por trás desta função, apenas `VoiceProvider`.
+ */
+export async function resolveVoiceProvider(db: SupabaseClient<Database>, tier: ProviderTier): Promise<VoiceProvider> {
+  const repository = new ProviderConfigRepository(db);
+  const config = await repository.findActive("voice", tier);
+
+  if (!config) {
+    throw new Error(`Nenhum provider_config ativo para (capability=voice, tier=${tier}).`);
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY não configurada — necessária para sintetizar narração (ver `.env.local.example`).");
+  }
+
+  return new ElevenLabsVoiceProvider(config.provider_key, apiKey);
+}
+
+/**
+ * Resolve `(capability: "media", tier)` → adapter concreto (Missão 9, Etapa
+ * 1 — architecture.md §3.5.1/§5). O Asset Engine nunca conhece o fornecedor
+ * concreto por trás desta função, apenas `MediaProvider`.
+ */
+export async function resolveMediaProvider(db: SupabaseClient<Database>, tier: ProviderTier): Promise<MediaProvider> {
+  const repository = new ProviderConfigRepository(db);
+  const config = await repository.findActive("media", tier);
+
+  if (!config) {
+    throw new Error(`Nenhum provider_config ativo para (capability=media, tier=${tier}).`);
+  }
+
+  const apiKey = process.env.PEXELS_API_KEY;
+  if (!apiKey) {
+    throw new Error("PEXELS_API_KEY não configurada — necessária para buscar cenas (ver `.env.local.example`).");
+  }
+
+  return new PexelsMediaProvider(config.provider_key, apiKey);
+}
+
+/**
+ * Resolve `(capability: "video_render", tier)` → adapter concreto (Missão 9,
+ * Etapa 1 — architecture.md §3.5.1/§5, capacidade nova). O Asset Engine
+ * nunca conhece o fornecedor concreto por trás desta função, apenas
+ * `VideoRenderProvider`.
+ */
+export async function resolveVideoRenderProvider(
+  db: SupabaseClient<Database>,
+  tier: ProviderTier,
+): Promise<VideoRenderProvider> {
+  const repository = new ProviderConfigRepository(db);
+  const config = await repository.findActive("video_render", tier);
+
+  if (!config) {
+    throw new Error(`Nenhum provider_config ativo para (capability=video_render, tier=${tier}).`);
+  }
+
+  const apiKey = process.env.SHOTSTACK_API_KEY;
+  const host = process.env.SHOTSTACK_HOST;
+  if (!apiKey || !host) {
+    throw new Error(
+      "SHOTSTACK_API_KEY/SHOTSTACK_HOST não configuradas — necessárias para compor o vídeo final (ver `.env.local.example`).",
+    );
+  }
+
+  return new ShotstackVideoRenderProvider(config.provider_key, apiKey, host);
 }
