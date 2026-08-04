@@ -1,6 +1,6 @@
 # Plano de Hardening — Ayon Creator (rumo à v1.0)
 
-> **Status:** **Missão H1 (P0 — segurança crítica) encerrada — `v0.8.2`.** **Missão H2 (fundação de qualidade: testes automatizados + CI) auditada, com escopo técnico aprovado — aguardando aprovação final para iniciar a implementação** (bloqueada por um pré-requisito externo: criação do repositório no GitHub). H3–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
+> **Status:** **Missão H1 (P0 — segurança crítica) encerrada — `v0.8.2`.** **Missão H2 (fundação de qualidade: testes automatizados + CI) implementada, validada e encerrada — `v0.9.0`.** Repositório publicado em `github.com/aionnewtech-afk/Ayon-Creator`, CI rodando no GitHub Actions. H3–H5 seguem como rascunho, aguardando priorização. Este documento é o resultado de uma auditoria completa do repositório (código, migrations, dependências, histórico de `docs/changelog.md`/`CHANGELOG.md`) feita após a conclusão do MVP (Missões 1–8, `v0.8.0`).
 > **Metodologia:** cada achado abaixo é verificável — vem de leitura direta de código/schema, `pnpm audit`, ou de um "Observado, não corrigido" já registrado em release anterior (citado com a versão onde foi encontrado). Nenhum item é especulação.
 > **Prioridade:** **P0** = bloqueia o lançamento da v1.0 · **P1** = fortemente recomendado antes da v1.0 · **P2** = aceitável adiar para pós-v1.0.
 > **Próximo passo:** após sua aprovação, cada item (ou grupo de itens relacionados) vira uma missão pequena e isolada, seguindo o mesmo processo doc-first + validação real já usado em todas as missões anteriores.
@@ -314,3 +314,34 @@ Corrigido pela migration `0016_hardening_provisioning_grant_fix.sql`: `if p_user
 | Provider fake (suporte ao smoke test) | `packages/core/src/providers/fake-llm-provider.ts`, implementando `LlmProvider` com resposta fixa e instantânea. `resolveLlmProvider` ganha um gate explícito no início (`if (process.env.LLM_PROVIDER_MODE === "fake") return new FakeLlmProvider();`) — nome de env var deliberadamente inequívoco, nunca setada em `.env.local`/produção. |
 
 **Fora do escopo do H2** (registrados para H3+ ou além): 8.3 (staging separado), 8.4 (automação de deploy de migration), retry/timeout no LLM Provider (2.3/4.2 — relevante para reduzir flakiness do smoke test real manual, mas não bloqueia o H2 porque o smoke test de CI usa o provider fake), item 5.10 (postcss/sharp, achado do H1).
+
+---
+
+## Missão H2 — Fundação de qualidade: concluída e validada (`v0.9.0`)
+
+**Status:** os 6 itens P0 (7.1, 7.2, 7.3, 7.4, 8.1, 8.2) implementados exatamente conforme o escopo técnico aprovado acima, validados localmente (Docker + Supabase CLI) e depois numa execução real do GitHub Actions — não só simulados.
+
+**Repositório publicado:** `https://github.com/aionnewtech-afk/Ayon-Creator` — remote configurado, histórico completo (todos os commits e as 9 tags de `v0.1.0` a `v0.8.2`) enviado antes da implementação do H2.
+
+**Achados durante a implementação (fora do que qualquer migration anterior previa):**
+
+1. **Grants ausentes num Postgres local criado só a partir das migrations.** `supabase start` aplicou as 16 migrations sem erro (confirmando de brinde que elas aplicam limpo do zero, nunca testado antes), mas `anon`/`authenticated`/`service_role` ficaram sem `select`/`insert`/`update`/`delete` em nenhuma tabela — o projeto remoto tem esses grants porque a própria plataforma Supabase os concede ao provisionar um projeto novo, algo que nenhuma migration deste repositório jamais precisou fazer. Corrigido com `supabase/seed.sql` (convenção oficial do CLI — roda só em `start`/`db reset`, nunca em `db push` contra o remoto).
+2. **CI quebrou na primeira execução real:** `pnpm@11.18.0` exige Node.js ≥22.13, mas o workflow fixava `node-version: 20` — os 3 jobs falhavam no bootstrap do próprio pnpm (`ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`). Não pego na validação local porque a máquina de desenvolvimento já tinha Node 24 instalado por outros motivos. Corrigido para `node-version: 22`; `engines.node` do `package.json` raiz corrigido de `>=20` (nunca foi verdade) para `>=22.13`.
+3. **Kong (gateway local) com IP de upstream desatualizado após `supabase db reset`** — reproduzido uma vez durante o desenvolvimento (uploads de Storage retornavam 502), resolvido com `supabase stop && supabase start` completo. Não afeta CI (cada job sobe a stack do zero, sem histórico de `db reset` no meio).
+4. **`slugify()` remove underscore em vez de tratá-lo como separador** — descoberto pelo primeiro teste unitário real do repositório, que assumia o comportamento errado. Corrigido o teste, não a função (comportamento já em produção, fora do escopo do H2 mudar).
+5. **Cleanup do smoke test esquecia `learning_signals`** (aprovar peça emite sinal, Missão 8) — bloqueava a exclusão de `content_pieces` por FK. Corrigido antes do primeiro commit.
+
+**Validação real:**
+
+- **7.1/7.2 (fundação de testes):** `pnpm --filter core test` (Vitest, `packages/core/src/slug.test.ts`, 7 casos) e a suíte de `supabase/tests/` rodando contra Postgres local efêmero — ambos verificados localmente e no CI.
+- **7.3 (RLS):** `supabase/tests/rls.test.ts` — editor sobe arquivo (sucesso), viewer lê (sucesso, `select` continua `is_org_member`), viewer tenta subir (bloqueado), viewer tenta apagar (bloqueado — `.remove()` retorna array vazio, confirmado via `.list()` com service role que o arquivo não foi removido, mesma pegadinha documentada no H1).
+- **7.4 (concorrência):** `supabase/tests/concurrency.test.ts` — 5 provisionamentos concorrentes → exatamente 1 organização; chamada anônima e tentativa de impersonação rejeitadas (`42501`); 10 débitos concorrentes contra saldo de 5 → exatamente 5 aceitos, saldo nunca negativo.
+- **Smoke test (Playwright):** login → objetivo de campanha → painel de especialistas + Coordinator (via `LlmProvider` fake) → aprovação da estratégia → 5 peças de texto → upload de mídia própria nas 4 peças visuais → aprovação das 9 peças → pacote montado automaticamente → link de download visível. Rodou 2× localmente e 1× no CI real, todas verdes.
+- **8.1/8.2 (CI):** `.github/workflows/ci.yml` executado de ponta a ponta no GitHub Actions (não só localmente) após a correção do item 2 acima — os 3 jobs (`quality`, `integration-tests`, `e2e`) terminaram verdes.
+
+**Itens do checklist §10 marcados como concluídos por esta missão:**
+- [x] CI rodando typecheck + lint + build em todo push/PR
+- [x] Suite mínima de smoke tests dos fluxos críticos, rodando no CI
+- [x] Teste automatizado confirmando RLS nos pontos críticos (Storage — `credit_ledger`/`specialists` ficam para H3, que cobre índices/observabilidade e pode ampliar a suíte)
+
+**Pendente, não bloqueante:** branch protection em `master` (exigir os 3 jobs verdes antes de merge) é uma configuração manual nas Settings do GitHub — registrada aqui como passo pendente, fora do alcance de qualquer commit.

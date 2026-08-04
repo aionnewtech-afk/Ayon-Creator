@@ -2,6 +2,19 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.9.0] — 2026-08-04
+
+### Adicionado
+
+- **Missão H2 — Fundação de qualidade**: zero teste automatizado e zero pipeline de CI em todo o repositório até aqui. Repositório publicado em `github.com/aionnewtech-afk/Ayon-Creator`.
+  - **Testes**: Vitest para unitários (`packages/core`) e para RLS/concorrência (`supabase/tests/`, novo pacote do workspace, formaliza os testes ad hoc do H1 como suíte comitada rodando contra Postgres local efêmero). Playwright para o smoke test de browser do fluxo crítico completo (`apps/web/e2e/`), com um `LlmProvider` fake (`packages/core/src/providers/fake-llm-provider.ts`, `LLM_PROVIDER_MODE=fake`) — determinístico, sem custo de token nem dependência da API da Anthropic estar no ar.
+  - **CI**: `.github/workflows/ci.yml` — 3 jobs no GitHub Actions (`quality`, `integration-tests`, `e2e`), os 2 últimos em paralelo, cada um sobe seu próprio Supabase local isolado.
+  - **`supabase/seed.sql`** (novo): corrige grants ausentes num Postgres local criado só a partir das migrations (a plataforma Supabase concede isso automaticamente no projeto remoto; nenhuma migration deste repositório precisava até agora) — roda só em `supabase start`/`db reset`, nunca contra o remoto.
+
+### Corrigido durante a validação real (primeira execução do CI no GitHub Actions)
+
+- CI falhava no bootstrap do próprio `pnpm` (`ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`) — `pnpm@11.18.0` exige Node.js ≥22.13, o workflow fixava `node-version: 20`. Corrigido para 22; `engines.node` do `package.json` raiz corrigido de `>=20` (nunca foi verdade) para `>=22.13`.
+
 ## [0.8.2] — 2026-08-04
 
 ### Corrigido

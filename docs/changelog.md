@@ -4,6 +4,33 @@
 
 ---
 
+## v2.14 (revisão 31) — 2026-08-04 — Missão H2 (Fundação de qualidade) implementada, validada e encerrada
+
+**Status:** implementado e validado — repositório publicado no GitHub, CI real rodando no GitHub Actions. Fecha os itens P0 de §7/§8 do plano de hardening (7.1, 7.2, 7.3, 7.4, 8.1, 8.2).
+
+**Pré-requisito resolvido antes da implementação:** repositório criado em `github.com/aionnewtech-afk/Ayon-Creator`; remote `origin` configurado e histórico completo (todos os commits + as 9 tags de `v0.1.0` a `v0.8.2`) enviado.
+
+**Implementação:**
+
+- **Testes:** Vitest em `packages/core` (unitários, `slug.test.ts`) e no novo pacote de workspace `supabase/tests/` (RLS e concorrência, formalizando os testes ad hoc já validados no H1 — RLS de Storage, race condition do provisionamento, race condition do portão de crédito — como suíte comitada rodando contra Postgres local efêmero via `supabase start`). Playwright em `apps/web/e2e/` — smoke test do fluxo crítico completo (login → campanha → aprovação da estratégia → 5 peças de texto → upload de mídia própria → aprovação das 9 peças → pacote montado → download), usando um `LlmProvider` fake (`packages/core/src/providers/fake-llm-provider.ts`, selecionado só por `LLM_PROVIDER_MODE=fake`) — determinístico, sem custo de token; validação com Anthropic real continua manual a cada missão, como já era.
+- **Decisão de escopo:** o smoke test semeia uma marca já onboarded direto via service role (`e2e/support/seed.ts`), pulando a conversa real de onboarding — mantém o smoke test rápido e determinístico; a conversa em si segue validada manualmente.
+- **CI:** `.github/workflows/ci.yml` — 3 jobs (`quality`: typecheck+lint+build, sem Docker; `integration-tests`: Vitest de RLS/concorrência; `e2e`: Playwright), os 2 últimos em paralelo, cada um sobe seu próprio Supabase local isolado via `supabase/setup-cli`, credenciais capturadas dinamicamente via `supabase status -o json`.
+
+**Achados durante a implementação (nenhum previsto por nenhuma migration/decisão anterior):**
+
+1. Um Postgres local criado só a partir das nossas migrations não replica os grants que o projeto remoto hospedado recebe automaticamente da plataforma Supabase — corrigido com `supabase/seed.sql` (convenção oficial do CLI, roda só em `start`/`db reset`, nunca contra o remoto). De brinde, confirma que as 16 migrations aplicam limpo do zero pela primeira vez.
+2. CI falhou na primeira execução real: `pnpm@11.18.0` exige Node.js ≥22.13, o workflow fixava `node-version: 20`. Corrigido para 22; `engines.node` do `package.json` raiz corrigido de `>=20` (nunca foi verdade) para `>=22.13`.
+3. `slugify()` remove underscore em vez de tratá-lo como separador — descoberto pelo primeiro teste unitário do repositório, que assumia o comportamento errado. Teste corrigido, função não mudou (comportamento já em produção).
+4. Cleanup do smoke test esquecia `learning_signals` (aprovar peça emite sinal, Missão 8), bloqueando a exclusão de `content_pieces` por FK — corrigido antes do primeiro commit.
+
+**Validação real:** suíte completa (`packages/core` + `supabase/tests` + Playwright) rodando localmente (Docker + Supabase CLI) e depois numa execução real do GitHub Actions após a correção do achado 2 — os 3 jobs terminaram verdes.
+
+**Documentação atualizada nesta revisão:** `docs/hardening-plan.md` (seção "Missão H2 — concluída e validada", checklist §10 atualizado), `CONVENTIONS.md` (já atualizado na preparação, sem mudança adicional), `README.md` (badge de CI, estado do projeto), `CHANGELOG.md` (`[0.9.0]`).
+
+**Próximo passo:** H2 encerrada. H3 (índices de banco + observabilidade) fica para quando o dono do produto autorizar o início.
+
+---
+
 ## v2.13 (revisão 30) — 2026-08-04 — Auditoria e preparação doc-first da Missão H2 (Fundação de qualidade)
 
 **Status:** documentação pronta — **aguardando aprovação explícita do dono do produto antes do código**, seguindo o mesmo processo doc-first das missões anteriores. H2 não é escopo de produto (não muda PRD.md/architecture.md/database.md/flows.md/ux-design.md) — é fundação de engenharia, documentada em `docs/hardening-plan.md` e `CONVENTIONS.md`.
