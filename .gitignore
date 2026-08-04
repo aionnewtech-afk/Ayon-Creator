@@ -19,6 +19,12 @@ dist/
 supabase/.branches
 supabase/.temp
 
+# testes (Missão H2)
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
 # misc
 .DS_Store
 *.log

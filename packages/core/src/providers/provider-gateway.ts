@@ -3,6 +3,7 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ProviderConfigRepository } from "../repositories/provider-config.repository";
 import { AnthropicLlmProvider } from "./anthropic-llm-provider";
 import { AnthropicWebSearchTrendSourceProvider } from "./anthropic-web-search-trend-source-provider";
+import { FakeLlmProvider } from "./fake-llm-provider";
 import type { LlmProvider } from "./llm-provider";
 import type { TrendSourceProvider } from "./trend-source-provider";
 
@@ -19,6 +20,13 @@ export async function resolveLlmProvider(
   tier: ProviderTier,
   specialistId?: string,
 ): Promise<LlmProvider> {
+  // Smoke test de CI (Missão H2, CONVENTIONS.md §10) — nunca setada em
+  // .env.local/produção. Nome deliberadamente inequívoco para não ser
+  // ligada por acidente.
+  if (process.env.LLM_PROVIDER_MODE === "fake") {
+    return new FakeLlmProvider();
+  }
+
   const repository = new ProviderConfigRepository(db);
   const config = await repository.findActive("llm", tier, specialistId);
 

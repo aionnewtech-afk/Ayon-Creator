@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Missão H2 (Fundação de qualidade — docs/hardening-plan.md, CONVENTIONS.md
+# §11) — 3 jobs: qualidade (typecheck/lint/build, sem Docker, roda sempre),
+# testes de integração (RLS/concorrência contra Postgres local efêmero) e
+# smoke test de browser (Playwright, LlmProvider fake) — os dois últimos em
+# paralelo, cada um sobe seu próprio Supabase local isolado.
+
+jobs:
+  quality:
+    name: Typecheck, lint e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+  integration-tests:
+    name: Testes de RLS e concorrência
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Subir Supabase local (Postgres + Auth + Storage + PostgREST) e exportar credenciais
+        id: supabase
+        run: |
+          supabase start
+          # Credenciais da instância local desta run (nunca do projeto
+          # remoto) — capturadas dinamicamente em vez de hardcoded, então
+          # continuam corretas mesmo se uma versão futura do CLI mudar o
+          # par anon/service_role "demo" padrão.
+          status=$(supabase status -o json)
+          echo "url=$(echo "$status" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "anon_key=$(echo "$status" | jq -r '.ANON_KEY')" >> "$GITHUB_OUTPUT"
+          echo "service_role_key=$(echo "$status" | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_OUTPUT"
+
+      - name: Esperar a stack local responder (evita o warm-up flake do primeiro request)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "${{ steps.supabase.outputs.url }}/rest/v1/" -H "apikey: ${{ steps.supabase.outputs.anon_key }}" >/dev/null; then
+              echo "Supabase local respondendo após ${i} tentativa(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Supabase local não respondeu a tempo." >&2
+          exit 1
+
+      - name: Testes unitários (packages/core)
+        run: pnpm --filter core test
+
+      - name: Testes de RLS e concorrência (supabase/tests)
+        run: pnpm --filter @ayon/supabase-tests test
+        env:
+          SUPABASE_URL: ${{ steps.supabase.outputs.url }}
+          SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase.outputs.service_role_key }}
+
+  e2e:
+    name: Smoke test (Playwright + LlmProvider fake)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Subir Supabase local (Postgres + Auth + Storage + PostgREST) e exportar credenciais
+        id: supabase
+        run: |
+          supabase start
+          status=$(supabase status -o json)
+          echo "url=$(echo "$status" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "anon_key=$(echo "$status" | jq -r '.ANON_KEY')" >> "$GITHUB_OUTPUT"
+          echo "service_role_key=$(echo "$status" | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_OUTPUT"
+
+      - name: Esperar a stack local responder (evita o warm-up flake do primeiro request)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "${{ steps.supabase.outputs.url }}/rest/v1/" -H "apikey: ${{ steps.supabase.outputs.anon_key }}" >/dev/null; then
+              echo "Supabase local respondendo após ${i} tentativa(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Supabase local não respondeu a tempo." >&2
+          exit 1
+
+      - name: Instalar browser do Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Smoke test
+        run: pnpm --filter web test:e2e
+        env:
+          SUPABASE_URL: ${{ steps.supabase.outputs.url }}
+          SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase.outputs.service_role_key }}
+
+      - name: Publicar relatório do Playwright em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

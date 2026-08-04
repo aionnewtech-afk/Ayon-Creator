@@ -1,0 +1,18 @@
+{
+  "name": "@ayon/supabase-tests",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ayon/types": "workspace:*",
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
+  }
+}
