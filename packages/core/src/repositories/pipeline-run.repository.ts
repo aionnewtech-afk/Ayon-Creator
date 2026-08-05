@@ -49,4 +49,12 @@ export class PipelineRunRepository {
     if (error) throw error;
     return data;
   }
+
+  /** Mais recentes, qualquer entidade — uso administrativo (tela Logs, §15.8). */
+  async findRecent(limit = 100): Promise<PipelineRunRow[]> {
+    const { data, error } = await this.db.from("pipeline_runs").select("*").order("started_at", { ascending: false }).limit(limit);
+
+    if (error) throw error;
+    return data ?? [];
+  }
 }
