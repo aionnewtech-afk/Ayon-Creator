@@ -1,7 +1,9 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 30 — Missão 11 aprovada, ressalva de composição resolvida)
+> **Status:** v1.0 (revisão 32 — Missão 12 aprovada, ajustes incorporados)
 > **Última atualização:** 2026-08-05
+> **Mudança desta revisão (32 — Missão 12 aprovada, ajustes incorporados):** Fluxo 6, passo 1, e Fluxo 16 atualizados para os 2 papéis administrativos (`super_admin`/`support_admin`, não só `super_admin`) — o bypass de crédito vale para qualquer `platform_admin`, senão uma sessão de suporte de `support_admin` impersonando um cliente real debitaria o cliente por engano. Fluxo 16, texto exato do banner de impersonação (sem botão de fechar). Ver [architecture.md §15](architecture.md#15-super-admin--plataforma-administrativa-★-missão-12) e [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (31 — Missão 12 em preparação, Super Admin):** Fluxo 6 (Consumo de Créditos e Billing) ganha o bypass de `super_admin`, no mesmo passo já existente (portão de crédito) — sem passo novo. Novo **Fluxo 16 — Impersonação e Ações Administrativas**. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (30 — Missão 11 aprovada, ressalva de composição resolvida):** Fluxo 15 reescrito — resolução do `visual_brief` da campanha (passo 2, novo), geração de múltiplos candidatos por rodada quando viável (passos 3/4), escolha do usuário (passo 5, novo). Mecanismo de composição corrigido de "asset `html`" para "timeline em camadas" (achado real de pesquisa, sem impacto na forma dos passos, só no mecanismo interno do passo 3). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (29 — Missão 11 aprovada, escopo ajustado):** Fluxo 13, passo 3, reescrito — seleção de voz automática (1ª geração), sem legenda, seleção de cenas por trecho do roteiro. Fluxo 15, passo 2, reescrito — composição real via Shotstack `html` asset (não só foto+logo). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (28 — preparação Missão 11):** Fluxo 13 ganha identidade visual automática, `stage` granular e seleção de cenas revisada (passos 3/7 amendados). Novo **Fluxo 15 — Gerar Mídia Visual Automaticamente**, mesmo desenho assíncrono do Fluxo 13 aplicado a `stories`/`carousel`/`thumbnail`. Ver [docs/changelog.md](changelog.md).
@@ -117,9 +119,9 @@ Mantido apenas como referência de arquitetura futura (ver [database.md §6](dat
 
 > **Isenção esclarecida na revisão técnica pré-Missão 2:** a conversa "Conheça sua empresa" (Fluxo 1, Brand Brain via LLM Provider) **não** consome créditos nem é bloqueada por saldo insuficiente — ela não gera um ativo monetizável (peça de conteúdo/campanha), é a etapa que faz o cliente conhecer o produto antes de qualquer geração paga. Consumo de crédito começa no Fluxo 2 (Intelligence Hub) em diante.
 
-1. Antes de qualquer sessão do Intelligence Hub (`campaign_strategy`, Fluxo 10; `trend_ranking`, Fluxo 2) ou pipeline de geração de vídeo (`video_generation`, Fluxo 13, ★ preparação Missão 9), a Server Action chama o portão de crédito: checa se `subscriptions.status = active` **e** se o saldo (`SUM(credit_ledger.amount)` da organização) é suficiente para o custo daquela operação (`credit_pricing`, por `trigger_reason` + `tier` — nunca por fornecedor, que é invisível ao cliente). Ver [architecture.md §12.3](architecture.md#123-onde-o-portão-de-crédito-é-verificado).
+1. Antes de qualquer sessão do Intelligence Hub (`campaign_strategy`, Fluxo 10; `trend_ranking`, Fluxo 2) ou pipeline de geração de vídeo (`video_generation`, Fluxo 13, ★ preparação Missão 9), a Server Action chama o portão de crédito: **★ Missão 12 — se o ator autenticado é `platform_admin` (`super_admin` ou `support_admin`, `platform_admins`), o portão retorna liberado imediatamente** (`costCredits: 0`), sem checar `subscriptions.status` nem saldo, mesmo se a organização sendo usada não é a "casa" do admin (impersonação, Fluxo 16) — a organização visitada nunca é debitada, independente de qual dos 2 papéis está agindo. Para qualquer outro ator: checa se `subscriptions.status` é `active` **ou `trialing`** (★ Missão 12) **e** se o saldo (`SUM(credit_ledger.amount)` da organização) é suficiente para o custo daquela operação (`credit_pricing`, por `trigger_reason` + `tier` — nunca por fornecedor, que é invisível ao cliente). Ver [architecture.md §12.3](architecture.md#123-onde-o-portão-de-crédito-é-verificado) e [architecture.md §15.5](architecture.md#155-super-admin-ilimitado--portão-de-crédito-e-limites-de-plano-centralizados).
 2. Se assinatura inativa ou saldo insuficiente: operação é bloqueada **antes** de qualquer chamada à Provider Layer (nunca depois — não desperdiça uma chamada de LLM/fornecedor pago que o cliente não pode pagar), com mensagem direta e CTA para CFG-2 (reativar assinatura) ou CFG-4 (comprar créditos), sem perder o contexto do que o usuário estava fazendo (objetivo de campanha digitado, por exemplo).
-3. Se suficiente: operação roda normalmente; **só ao concluir com sucesso**, lançamento `consumption` (`amount` negativo) é gravado em `credit_ledger`. Para sessões do Intelligence Hub, vinculado via `related_intelligence_hub_session_id`, gravado pela própria Server Action ao final. Para o pipeline de vídeo (★ preparação Missão 9), vinculado via `related_pipeline_run_id`, gravado pelo **webhook de conclusão do n8n** (Fluxo 13, passo 6) — não pela Server Action original, já que a operação não termina dentro dela. Uma sessão/pipeline que falha (Fluxo 10, passo 7; Fluxo 13, passo 5 — falha) **não gera cobrança**.
+3. Se suficiente: operação roda normalmente; **só ao concluir com sucesso**, lançamento `consumption` (`amount` negativo) é gravado em `credit_ledger` — **exceto para qualquer `platform_admin` (★ Missão 12), onde a gravação é pulada por completo** (nenhuma linha em `credit_ledger`, nenhum rastro de consumo na organização usada). Para sessões do Intelligence Hub, vinculado via `related_intelligence_hub_session_id`, gravado pela própria Server Action ao final. Para o pipeline de vídeo (★ preparação Missão 9), vinculado via `related_pipeline_run_id`, gravado pelo **webhook de conclusão do n8n** (Fluxo 13, passo 6) — não pela Server Action original, já que a operação não termina dentro dela. Uma sessão/pipeline que falha (Fluxo 10, passo 7; Fluxo 13, passo 5 — falha) **não gera cobrança**.
 4. Renovação de cota mensal gera lançamento `grant_plan` no início de cada ciclo (`current_period_start`/`current_period_end` de `subscriptions`), no valor fixo do plano (Starter 100 / Pro 500 / Business 1.500 — PRD §8).
 5. Painel de uso (CFG-4) exibe saldo atual e histórico de `credit_ledger` por organização, discriminado por tipo de lançamento e tier (nunca por fornecedor).
 
@@ -229,6 +231,23 @@ Sub-fluxo acionado pelo Fluxo 3, §3.2, sempre que uma `content_piece` de format
 5. Usuário escolhe um candidato (quando houve mais de 1) — `content_pieces.selected_version_id` é preenchido com a escolha, essa é a versão usada no pacote final (Fluxo 5).
 6. Peça já gerada automaticamente pode, a qualquer momento, ser substituída por upload manual (ou vice-versa) — sem restrição de ordem, sempre a última ação do usuário prevalece como versão atual.
 
+## Fluxo 16 — Impersonação e Ações Administrativas ★ novo (preparação Missão 12, ajustado na aprovação)
+
+Sub-fluxo restrito a `platform_admin` — `super_admin` ou `support_admin` ([architecture.md §15](architecture.md#15-super-admin--plataforma-administrativa-★-missão-12)), acessado pelo menu administrativo dedicado ([ux-design.md §2](ux-design.md#2-arquitetura-de-informação-navegação)). Impersonação é disponível para os 2 papéis; ações administrativas exclusivas (editar planos/providers, excluir organização, criar admins) exigem `super_admin` — matriz completa em [architecture.md §15.1.1](architecture.md#1511-matriz-de-capacidades).
+
+**Entrar como organização (impersonação):**
+1. Na tela Organizações, o admin (qualquer papel) clica "Entrar como organização" numa linha da lista.
+2. Server Action revalida `is_platform_admin()` no servidor (nunca confia em estado de UI) e seta o cookie `httpOnly` `impersonating_organization_id`.
+3. Toda tela do produto (não administrativa) passa a mostrar uma **barra fixa no topo, sem botão de fechar/ocultar** (★ ajuste do dono do produto — round 2): "Você está visualizando como: [Organização]" + botão "Sair da impersonação" — e opera com o contexto daquela organização (`getCurrentSession()`, [architecture.md §15.4](architecture.md#154-impersonação-entrar-como-organização)), como se o admin fosse membro dela.
+4. Qualquer geração/consumo feito nesse estado **não debita a organização visitada** (Fluxo 6, passo 1, bypass de `platform_admin`) — a organização nunca vê cobrança pela sessão de suporte, independente de qual papel está agindo.
+5. "Sair da impersonação" limpa o cookie e retorna ao contexto normal do admin (organização "casa" ou telas administrativas).
+
+**Ação administrativa (ex.: editar organização, ajustar crédito):**
+1. Server Action chama `requirePlatformAdmin()` primeiro — qualquer falha aqui interrompe antes de tocar em qualquer dado ([architecture.md §15.9](architecture.md#159-segurança--requireplatformadmin--requiresuperadmin)); ações exclusivas (§15.1.1) chamam `requireSuperAdmin()` também.
+2. Lê o estado atual da entidade (para o `before` do passo 4).
+3. Aplica a mudança (service role — a maioria das tabelas tocadas não tem policy de escrita para `authenticated`).
+4. Grava uma linha em `admin_audit_logs` — ator, **papel do ator no momento da ação**, ação, entidade, `before`/`after`, IP, User-Agent ([architecture.md §15.6](architecture.md#156-auditoria-administrativa--admin_audit_logs)) — sempre, mesmo quando a mudança é trivial (ex.: `status` de um único campo).
+
 ---
 
 ## Convenções de Status (resumo)
@@ -242,7 +261,8 @@ Sub-fluxo acionado pelo Fluxo 3, §3.2, sempre que uma `content_piece` de format
 | `pipeline_runs` (★ ativada na preparação da Missão 9) | `queued` → `running` → `completed`/`failed` |
 | `content_packages` | `building` → `ready` / `failed` |
 | `learning_insights` | `pending_review` → `applied` / `dismissed` |
-| `provider_configs` | `active` / `inactive` / `error` |
+| `provider_configs` | `active` / `inactive` / `error` / `maintenance` ★ novo (Missão 12) |
+| `user_feedback` ★ novo (Missão 12) | `open` → `resolved` |
 
 ## Decisões em Aberto (fluxos)
 

@@ -1,7 +1,9 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 29 — Missão 11 aprovada, ressalva de composição resolvida)
+> **Status:** v1.0 (revisão 31 — Missão 12 aprovada, ajustes incorporados)
 > **Última atualização:** 2026-08-05
+> **Mudança desta revisão (31 — Missão 12 aprovada, ajustes incorporados):** `platform_admins` ganha `role` (`super_admin`/`support_admin`, §9.4); `admin_audit_logs` ganha `actor_role` (§9.5); `provider_call_logs` ganha `model`/`endpoint`/`tokens_input`/`tokens_output`/`request_id`, `ok` renomeado para `status` (§9.6); `user_feedback` ganha `internal_response`/`status` (CRM interno, §9.3); `provider_configs` ganha `credential_value` e `status` ganha o valor `maintenance` (§5.1); `plans` ganha um conjunto bem maior de colunas — `brands_included`→`max_brands`, `credits_per_month`→`monthly_credits` (renomeações), mais `max_users`/`max_campaigns`/`max_monthly_videos`/`max_monthly_images`/`storage_gb`/`priority_queue`/`allow_ai_video`/`allow_api`/`allow_brand_customization`/`allow_team`/`allow_white_label` (§7.5). Ver [architecture.md §15](architecture.md#15-super-admin--plataforma-administrativa-★-missão-12) e [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (30 — Missão 12 em preparação, Super Admin):** 3 tabelas novas — `platform_admins` (§9.4), `admin_audit_logs` (§9.5), `provider_call_logs` (§9.6). `organizations` ganha `is_platform_account` (§2.1). `plans` ganha 4 colunas de limite, só editáveis, sem bloqueio real ([architecture.md §15.10](architecture.md#1510-limites-de-plano--campos-sem-bloqueio-decisão-do-dono-do-produto)) — chave `business` mantida (decisão do dono do produto). `subscriptions.status` ganha o valor `trialing`; `subscriptions` ganha `trial_ends_at`. `user_feedback` ganha `archived_at` (§9.3). §8 (Multi-tenancy e RLS) ganha a extensão centralizada de `is_org_member`/`is_org_admin`/`is_org_editor` para `super_admin` ([architecture.md §15.2](architecture.md#152-rls--extensão-centralizada-não-checagem-espalhada)). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (29 — Missão 11 aprovada, ressalva de composição resolvida):** `campaigns` ganha `visual_brief` (jsonb, §4.5) — parâmetros de composição resolvidos 1x por campanha para consistência entre peças. `content_pieces` ganha `selected_version_id` (§4.6) — suporta múltiplas opções geradas por rodada, `null` preserva o comportamento atual (versão mais recente vence). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (28 — Missão 11 aprovada, escopo ajustado):** `brands` ganha mais 3 colunas de identidade visual — `secondary_color_hex`/`font_family`/`visual_style` (§2.3) — além das 2 já previstas; `pipeline_runs` ganha `progress_percent`/`estimated_remaining_seconds` além de `stage` (§4.8). Nenhuma mudança em `content_pieces`/`credit_pricing` além do já previsto na revisão anterior. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (27 — preparação Missão 11):** `brands` ganha `logo_storage_path`/`primary_color_hex` (§2.3, identidade visual — [architecture.md §14.1](architecture.md#141-identidade-visual-automática)), reaproveitando o bucket `brand-media` já existente; `content_pieces.production_mode` ganha o valor `licensed_stock_photo` (§4.6); `pipeline_runs` ganha `stage` (§4.8, progresso granular); `credit_pricing` ganha `image_generation` (§7.3). Nenhuma tabela nova — `brand_media_assets` (§5.2) segue documentada mas não migrada, decisão deliberada de não-acoplamento (mesma já tomada na Missão 7). Ver [docs/changelog.md](changelog.md).
@@ -70,10 +72,12 @@ content_pieces N───N publishing_channels via publications (fora do MVP)
 | slug | text (unique) | gerado do `name` no cadastro; usado para URLs/contexto futuro |
 | plan | enum(`starter`,`pro`,`business`) | |
 | provider_tier | enum(`economico`,`balanceado`,`premium`) | tier padrão da organização — único controle de fornecedor exposto ao cliente |
+| status | enum(`active`,`blocked`) | ★ novo (Missão 12) — default `active`; "bloquear"/"desbloquear" na tela Organizações do Super Admin ([architecture.md §15.8](architecture.md#158-telas-administrativas--visão-técnica)) alterna este campo, sem apagar nada — separado de `deleted_at` (bloqueado é reversível e temporário; excluído é a decisão final). `getCurrentSession()` nega acesso normal (não-impersonado) quando `status = blocked`; um `super_admin` impersonando continua acessando mesmo bloqueada, para diagnóstico |
 | created_by | uuid FK → auth.users (nullable) | usuário que criou a organização (cadastro) |
+| is_platform_account | boolean | ★ novo (Missão 12) — default `false`; `true` só para a organização "casa" do(s) `super_admin` ([architecture.md §15.3](architecture.md#153-organização-casa-do-super-admin)), usada para testar o produto sem tocar em dado de cliente real. Excluída das métricas de negócio do Dashboard administrativo (receita, contagem de organizações-cliente) por esta coluna, nunca por heurística |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
-| deleted_at | timestamptz (nullable) | soft delete — ver [CONVENTIONS.md](../CONVENTIONS.md) |
+| deleted_at | timestamptz (nullable) | soft delete — ver [CONVENTIONS.md](../CONVENTIONS.md); ★ Missão 12 — também usada pela tela Organizações do Super Admin para "excluir" (sempre soft delete, decisão do dono do produto) |
 
 ### 2.2 `organization_members`
 
@@ -130,6 +134,7 @@ Perfil de aplicação por usuário, separado de `auth.users` (gerida pelo Supaba
 | full_name | text (nullable) | |
 | avatar_url | text (nullable) | |
 | locale | text | default `pt-BR` |
+| status | enum(`active`,`blocked`) | ★ novo (Missão 12) — default `active`; "bloquear"/"desbloquear" na tela Usuários do Super Admin ([architecture.md §15.8](architecture.md#158-telas-administrativas--visão-técnica)) — global ao usuário (não por organização; diferente de `organizations.status`, que bloqueia a organização inteira). `getCurrentSession()` nega acesso quando `status = blocked`, independentemente de qual organização o usuário tentaria acessar |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 | deleted_at | timestamptz (nullable) | soft delete |
@@ -370,6 +375,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | progress_percent | integer (nullable) | ★ novo (Missão 11, ajuste) — aproximação por peso relativo de cada etapa, calculada no próprio código do pipeline ([architecture.md §14.9](architecture.md#149-progresso-granular-★-percentual--tempo-estimado)) |
 | estimated_remaining_seconds | integer (nullable) | ★ novo (Missão 11, ajuste) — melhor esforço ("quando possível"); `null` é estado esperado quando não há base para estimar (ex. tempo de fila do Shotstack), nunca tratado como erro |
 | error | text (nullable) | |
+| actor_user_id | uuid FK → auth.users (nullable) ★ novo (Missão 12) | achado durante a implementação — o portão de crédito (arch. §15.5) precisa saber quem disparou o pipeline para decidir o bypass de `platform_admin`, mas o webhook de conclusão do n8n roda sem sessão de usuário nenhuma. A Server Action que dispara o pipeline grava aqui; `completeVideoPipelineSuccess`/`completePhotoPipelineSuccess` leem de volta para passar a `recordConsumption` |
 | started_at | timestamptz | |
 | finished_at | timestamptz (nullable) | |
 
@@ -386,13 +392,14 @@ Mapeamento interno **(capability, tier) → fornecedor concreto**. Nunca exposto
 | tier | enum(`economico`,`balanceado`,`premium`) | |
 | specialist_id | uuid FK → specialists (nullable) | **substitui o antigo enum fixo** (revisão 10) — usado só quando `capability = llm` e a resolução precisa variar por especialista dentro do Intelligence Hub (tier Premium — architecture.md §10, item 5) |
 | provider_key | text | ex: `openai-mini`, `openai-gpt5`, `claude-sonnet`, `claude-opus`, `heygen`, `elevenlabs` |
-| credentials_ref | text | referência a segredo — nunca credencial em texto puro |
+| credentials_ref | text (nullable) | referência a variável de ambiente — mecanismo original, mantido para compatibilidade |
+| credential_value | text (nullable) | ★ novo (Missão 12) — credencial de verdade, editável pela tela Providers do Super Admin sem tocar `.env` ([architecture.md §15.11](architecture.md#1511-gestão-de-providers-pelo-admin--credenciais-no-banco-não-em-env-★-novo-round-2-item-8)); quando presente, tem precedência sobre `credentials_ref`. Mesma proteção de RLS de toda a tabela — sem policy para `authenticated`/`anon`, só service role; nunca exibida em texto claro na UI, mesmo para `super_admin` (campo sempre mascarado, com ação de "trocar") |
 | priority | int | |
 | fallback_provider_key | text (nullable) | |
-| status | enum(`active`,`inactive`,`error`) | |
+| status | enum(`active`,`inactive`,`error`,`maintenance` ★ novo, Missão 12) | `maintenance` — Provider Gateway trata como indisponível para chamadas novas, sem apagar a config (arch. §15.11) |
 | updated_at | timestamptz | |
 
-> Trocar de fornecedor dentro de um tier = nova linha + `status = active` na antiga → `inactive`. Redesenhar o que compõe cada tier = mudança de dados aqui, nunca de código.
+> Trocar de fornecedor dentro de um tier = nova linha + `status = active` na antiga → `inactive`. Redesenhar o que compõe cada tier = mudança de dados aqui, nunca de código. A partir da Missão 12, essa mudança de dados tem uma interface administrativa real (arch. §15.11) — antes só era possível via acesso direto ao banco.
 
 ### 5.2 `brand_media_assets`
 
@@ -441,7 +448,8 @@ Uma linha por organização — billing é sempre no nível da organização, nu
 | id | uuid PK | |
 | organization_id | uuid FK → organizations (unique) | |
 | plan | enum(`starter`,`pro`,`business`) | |
-| status | enum(`active`,`past_due`,`canceled`) | sincronizado via webhook do Mercado Pago (Preapproval) |
+| status | enum(`active`,`past_due`,`canceled`,`trialing`) | sincronizado via webhook do Mercado Pago (Preapproval) para `active`/`past_due`/`canceled`; `trialing` é gerido pela tela Trials do Super Admin ([architecture.md §15.8](architecture.md#158-telas-administrativas--visão-técnica)) — o portão de crédito (§12.3) trata `trialing` como assinatura ativa (não bloqueia), mesma checagem `status !== 'active'` passa a aceitar também `trialing` |
+| trial_ends_at | timestamptz (nullable) | ★ novo (Missão 12) — preenchido só quando `status = trialing`; "renovar"/"cancelar"/"alterar dias" a tela Trials edita este campo; "converter assinatura" muda `status` para `active` (fluxo normal de assinatura, sem mudança no webhook do Mercado Pago) |
 | current_period_start | timestamptz | |
 | current_period_end | timestamptz | |
 | billing_provider_ref | text (nullable) | `preapproval_id` do Mercado Pago — nullable até a primeira assinatura ser criada |
@@ -504,17 +512,30 @@ Catálogo de pacotes de créditos avulsos disponíveis para compra via Checkout 
 | status | enum(`active`,`inactive`) | pacotes descontinuados ficam `inactive`, nunca são apagados (histórico de compras referenciando o pacote continua válido) |
 | created_at | timestamptz | |
 
-### 7.5 `plans` ★ novo (Missão 6, achado durante a implementação)
+### 7.5 `plans` ★ novo (Missão 6, achado durante a implementação) — ★ ampliada (Missão 12, round 2)
 
-Números de cada plano — dado, não código. Sem esta tabela, o handler de webhook do Mercado Pago (`packages/core`, nunca importa de `apps/web`) e a tela de Configurações (`apps/web`) precisariam de duas constantes hardcoded separadas para a mesma informação (quantos créditos conceder por plano), arriscando divergir. `plan` é a mesma chave usada em `subscriptions.plan`. Mesmo padrão de RLS de `credit_pricing`/`credit_packages`: leitura liberada a qualquer `authenticated`, escrita só via service role.
+Números de cada plano — dado, não código. Sem esta tabela, o handler de webhook do Mercado Pago (`packages/core`, nunca importa de `apps/web`) e a tela de Configurações (`apps/web`) precisariam de duas constantes hardcoded separadas para a mesma informação (quantos créditos conceder por plano), arriscando divergir. `plan` é a mesma chave usada em `subscriptions.plan`. Mesmo padrão de RLS de `credit_pricing`/`credit_packages`: leitura liberada a qualquer `authenticated`, escrita só via service role (edição, na prática, só por `super_admin` — arch. §15.1.1).
+
+**Conjunto de colunas ampliado (★ ajuste do dono do produto, Missão 12 round 2, item 1):** o modelo de negócio está migrando de "só crédito" para "crédito + limite por recurso" — a tabela ganha os campos abaixo já agora, mesmo que alguns fiquem sem nenhuma validação real ligada nesta missão ([architecture.md §15.10](architecture.md#1510-limites-e-recursos-de-plano--campos-sem-bloqueio-decisão-do-dono-do-produto)), para não exigir migration nova em poucos meses.
 
 | Coluna | Tipo | Notas |
 |---|---|---|
 | plan | text PK | `starter`, `pro`, `business` |
-| brands_included | integer | |
+| max_brands | integer | ★ renomeada (Missão 12, era `brands_included`) — mesmo dado, nome consistente com a família `max_*` nova |
 | tier_included | enum(`economico`,`balanceado`,`premium`) | |
-| credits_per_month | integer | concedido via lançamento `grant_plan` a cada ciclo (Fluxo 6, passo 4) |
+| monthly_credits | integer | ★ renomeada (Missão 12, era `credits_per_month`) — concedido via lançamento `grant_plan` a cada ciclo (Fluxo 6, passo 4) |
 | price_cents | integer | preço mensal em centavos (BRL) — **valor de exemplo, nunca discutido/aprovado explicitamente** (só os números de crédito/marcas/tier foram decisão de produto confirmada); ajustar é um `UPDATE`, sem migration |
+| max_users | integer (nullable) | ★ novo (Missão 12) — `null` = sem limite. Sem nenhum ponto de criação validando este campo nesta missão (arch. §15.10) |
+| max_campaigns | integer (nullable) | ★ novo (Missão 12) — mesmo princípio |
+| max_monthly_videos | integer (nullable) | ★ novo (Missão 12) — mesmo princípio |
+| max_monthly_images | integer (nullable) | ★ novo (Missão 12) — mesmo princípio, para `stories`/`carousel`/`thumbnail` |
+| storage_gb | integer (nullable) | ★ novo (Missão 12) — capacidade de armazenamento; sem nenhuma medição/enforcement de uso de Storage nesta missão, só o campo |
+| priority_queue | boolean | ★ novo (Missão 12) — default `false`; sem nenhuma fila com prioridade real implementada nesta missão, só o campo |
+| allow_ai_video | boolean | ★ novo (Missão 12) — default `true` (todo plano atual já inclui geração automática de vídeo, Missão 9/11 — o campo existe para um plano futuro mais restrito poder desligar) |
+| allow_api | boolean | ★ novo (Missão 12) — default `false` (não existe API pública nesta missão nem antes dela) |
+| allow_brand_customization | boolean | ★ novo (Missão 12) — default `true` (identidade visual, Missão 11, já disponível a todo plano hoje) |
+| allow_team | boolean | ★ novo (Missão 12) — default `false` exceto `business` (reflete o que já existe informalmente — `brand_members`/plano Business, §2.4) |
+| allow_white_label | boolean | ★ novo (Missão 12) — default `false` (não existe white-label em nenhum plano hoje) |
 | status | enum(`active`,`inactive`) | |
 | updated_at | timestamptz | |
 
@@ -533,7 +554,11 @@ Números de cada plano — dado, não código. Sem esta tabela, o handler de web
 - `subscriptions`/`credit_ledger` (Missão 6): select restrito a membros da organização (CFG-2/CFG-4 precisam ler); insert/update **só via service role** — nunca o client grava diretamente (grants/consumo vêm do portão de crédito no Server Action, compras/mudanças de assinatura vêm de webhook do Mercado Pago, ambos rodando com service role). Nenhum usuário, nem admin, altera saldo diretamente pela aplicação.
 - `pipeline_runs` (★ ativada na preparação da Missão 9): select restrito a membros da organização da `brand`/`campaign`/`content_piece` referenciada (join por `entity_id`, mesmo princípio de isolamento por `brand_id` já usado para as demais tabelas de Core Engine); insert/update **só via service role** — a Server Action cria a linha inicial, o webhook autenticado do n8n (`apps/web/app/api/webhooks/n8n/route.ts`, service role, nunca client) atualiza status/erro ao concluir. Nenhum usuário grava nesta tabela diretamente.
 - `credit_pricing`/`credit_packages`/`plans` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço/números devem ser visíveis, ex. CFG-2/CFG-4), insert/update/delete só via service role.
-- `user_feedback` (★ novo, preparação Missão 10): `insert` liberado a membros da organização (`is_org_member`), gravando sempre a própria `organization_id`/`user_id` — nunca em nome de outra organização. **Sem policy de `select`/`update`/`delete` para usuário final** — mesmo padrão de `provider_configs`/`specialists`, leitura só via service role (sem interface administrativa nesta missão, PRD §9.3).
+- `user_feedback` (★ novo, preparação Missão 10): `insert` liberado a membros da organização (`is_org_member`), gravando sempre a própria `organization_id`/`user_id` — nunca em nome de outra organização. **Sem policy de `select`/`update`/`delete` para usuário final** — mesmo padrão de `provider_configs`/`specialists`, leitura/arquivamento/exclusão só via service role (interface administrativa a partir da Missão 12 — §9.3/§15.8 de architecture.md).
+- **`is_org_member`/`is_org_admin`/`is_org_editor` ★ estendidas (Missão 12):** as 3 funções de RLS já usadas por toda policy acima passam a conceder acesso também quando `is_platform_admin(auth.uid())` é verdadeiro (★ ajuste round 2 — os 2 papéis, `super_admin` e `support_admin`, não só o primeiro) — ponto único de extensão ([architecture.md §15.2](architecture.md#152-rls--extensão-centralizada-não-checagem-espalhada)), nenhuma policy individual muda. Cobre automaticamente toda tabela listada acima que usa uma dessas 3 funções (não cobre as que dependem só de service role, ex. `provider_configs`/`plans`/`subscriptions` — essas continuam exigindo o guard de aplicação `requirePlatformAdmin()`/`requireSuperAdmin()`, arch. §15.9, que aí sim distingue os 2 papéis).
+- `platform_admins` (★ novo, Missão 12): sem policy para `authenticated`/`anon` — leitura e escrita só via service role, mesmo padrão de `provider_configs`/`specialists`. `is_platform_admin()`/`is_super_admin()` (funções `security definer`, §9.4) são o único jeito de qualquer policy consultar esta tabela indiretamente.
+- `admin_audit_logs` (★ novo, Missão 12): mesmo padrão — sem policy para `authenticated`/`anon`, leitura/escrita só via service role (a tela Auditoria lê via Server Action, service role, depois de `requirePlatformAdmin()` — disponível aos 2 papéis, arch. §15.1.1).
+- `provider_call_logs` (★ novo, Missão 12): mesmo padrão — sem policy para `authenticated`/`anon`, escrita pelos 4 adapters (service role, mesmo client já usado pelo Provider Gateway), leitura só pela tela Providers do Super Admin (service role).
 
 ## 9. Plataforma — Auditoria e Feature Flags ★ novo (revisão 5)
 
@@ -579,6 +604,67 @@ Captura simples de sugestões/bugs/dificuldades de uso enviadas pelo botão glob
 | pathname | text (nullable) | ★ novo (ajuste pré-implementação) — rota onde o usuário estava, capturada no client (`usePathname()`) |
 | app_version | text (nullable) | ★ novo — lida no servidor a partir de `package.json`, nunca do client (arch. §13.1.1) |
 | user_agent | text (nullable) | ★ novo — lido no servidor via `headers()` (`next/headers`), nunca confiado do client (arch. §13.1.1) |
+| created_at | timestamptz | default `now()` |
+| archived_at | timestamptz (nullable) | ★ novo (Missão 12) — "arquivar" na tela Feedbacks (CRM interno, [architecture.md §15.8](architecture.md#158-telas-administrativas--visão-técnica)); não é soft delete de domínio (não usa o padrão `deleted_at` de CONVENTIONS.md §4) — é um filtro de triagem, a linha nunca deixa de existir para fins de auditoria/exportação CSV. "Excluir" (pedido) usa `deleted_at`, coluna nova separada, seguindo o padrão normal |
+| status | text | ★ novo (Missão 12, round 2 item 5) — `check (status in ('open', 'resolved'))`, default `open`; "marcar como resolvido" na tela Feedbacks |
+| internal_response | text (nullable) | ★ novo (Missão 12, round 2 item 5) — nota/resposta interna do admin, **nunca enviada ao usuário que reportou** (decisão explícita: "é só um CRM interno") — 1 campo, não uma thread de mensagens |
+| deleted_at | timestamptz (nullable) | ★ novo (Missão 12) — soft delete real, distinto de `archived_at` acima |
+
+### 9.4 `platform_admins` ★ novo (Missão 12)
+
+Identidade dos papéis administrativos — tabela dedicada, sem relação com `organization_members`/`user_profiles` ([architecture.md §15.1](architecture.md#151-identidade-e-papéis--platform_admins-is_platform_admin-is_super_admin)). Concessão/revogação do primeiro admin é operação manual (service role); a partir daí, criar/revogar é uma ação exclusiva de `super_admin` dentro do próprio painel (arch. §15.1.1).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| user_id | uuid FK → auth.users (unique) | |
+| role | text | ★ ajuste (Missão 12, round 2 item 2) — `check (role in ('super_admin', 'support_admin'))`; matriz de capacidades completa em [architecture.md §15.1.1](architecture.md#1511-matriz-de-capacidades) |
+| granted_by | uuid FK → auth.users (nullable) | nulo para o primeiro admin (concedido manualmente fora da aplicação) |
+| granted_at | timestamptz | default `now()` |
+| deleted_at | timestamptz (nullable) | soft delete — revoga o acesso; `is_platform_admin()`/`is_super_admin()` (abaixo) filtram por `deleted_at is null` |
+
+**Funções SQL:** `public.is_platform_admin(p_user_id uuid) returns boolean` — verdadeiro para qualquer um dos 2 papéis, usada pela extensão de RLS (§8) e pelo bypass de crédito (arch. §15.5). `public.is_super_admin(p_user_id uuid) returns boolean` — verdadeiro só para `role = 'super_admin'`, usada nas 4 ações administrativas exclusivas (arch. §15.1.1). Ambas `security definer`, mesmo padrão de `is_org_member`/`is_org_admin`/`is_org_editor` ([architecture.md §2.1](architecture.md#21-estrutura-de-projeto-monorepo-e-camada-de-acesso-a-dados-★-novo-revisão-5)).
+
+### 9.5 `admin_audit_logs` ★ novo (Missão 12)
+
+Auditoria dedicada de ações administrativas — `audit_logs` (§9.1) não muda, esta tabela é separada e nova ([architecture.md §15.6](architecture.md#156-auditoria-administrativa--admin_audit_logs)). Append-only.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| actor_user_id | uuid FK → auth.users | sempre o admin real, mesmo durante impersonação (arch. §15.4) |
+| actor_role | text | ★ novo (Missão 12, round 2 item 2) — `super_admin`/`support_admin`, papel do ator **no momento da ação** (não um join a `platform_admins`, que pode ter mudado/sido revogado depois) |
+| organization_id | uuid FK → organizations (nullable) | nulo para ações globais (ex.: editar `plans`, `credit_pricing`) — diferente de `audit_logs.organization_id`, que é `not null` |
+| action | text | ex.: `organization.blocked`, `credit_ledger.adjustment`, `plan.updated` |
+| entity_type | text | |
+| entity_id | uuid (nullable) | |
+| before | jsonb (nullable) | estado antes da mudança |
+| after | jsonb (nullable) | estado depois da mudança |
+| ip_address | text (nullable) | lido no servidor (`request.ip`/cabeçalho de proxy do Next.js), nunca confiado do client |
+| user_agent | text (nullable) | lido no servidor via `headers()`, mesmo princípio de `user_feedback.user_agent` (§9.3) |
+| created_at | timestamptz | default `now()` |
+
+### 9.6 `provider_call_logs` ★ novo (Missão 12)
+
+Instrumentação real de latência/custo/erro por chamada aos 4 providers reais ([architecture.md §15.7](architecture.md#157-observabilidade-de-providers--provider_call_logs)). Append-only, alto volume — uma linha por chamada de rede real a um fornecedor externo. **Campos ampliados (★ ajuste do dono do produto, Missão 12 round 2, item 4)** — "vai ser ouro quando começar a dar problema".
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| provider_key | text | mesmo valor usado em `provider_configs.provider_key` — corresponde a `provider` do pedido |
+| model | text (nullable) | ★ novo — só chamadas de LLM têm modelo distinto do `provider_key` (ex. `claude-opus`/`claude-haiku` sob o mesmo `provider_key`); nulo para os demais |
+| endpoint | text (nullable) | ★ novo — path/URL do endpoint chamado |
+| capability | text | `llm`, `voice`, `media`, `video_render` — mesmo domínio de `provider_configs.capability` |
+| organization_id | uuid FK → organizations (nullable) | nulo quando a chamada não é atribuível a uma organização específica (raro — quase toda chamada real tem organização) |
+| request_id | text (nullable) | ★ novo — id/trace do próprio fornecedor, quando ele retorna um (correlaciona com o painel do fornecedor durante um incidente real) |
+| started_at | timestamptz | |
+| finished_at | timestamptz (nullable) | nulo se a chamada nunca retornou (timeout/crash do processo) |
+| latency_ms | integer (nullable) | `finished_at - started_at`, calculado na gravação — corresponde a `tempo` do pedido |
+| status | text | ★ renomeada (era `ok boolean`) — `check (status in ('success', 'error'))` |
+| error_message | text (nullable) | |
+| tokens_input | integer (nullable) | ★ novo — LLM/voice, quando o fornecedor retorna essa informação |
+| tokens_output | integer (nullable) | ★ novo — idem |
+| cost_estimate_credits | integer (nullable) | proxy usando os mesmos números de `credit_pricing` (§7.3) — não é integração de billing real de cada fornecedor; corresponde a `credits cobrados` do pedido |
 | created_at | timestamptz | default `now()` |
 
 ## 10. Decisões em Aberto (banco de dados)

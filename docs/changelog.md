@@ -4,6 +4,70 @@
 
 ---
 
+## v2.30 — 2026-08-05 — Missão 12 aprovada, 9 ajustes incorporados — implementação autorizada
+
+**Status:** dono do produto aprovou a documentação da v2.29 com 9 ajustes. Documentação atualizada para refletir todos; **nenhuma migration aplicada, nenhum código escrito ainda** — implementação autorizada a partir daqui.
+
+**9 ajustes (todos incorporados):**
+
+1. **Planos preparados para crescer:** em vez do conjunto original de 4 limites, `plans` ganha um conjunto bem maior — `max_brands`/`max_users`/`max_campaigns`/`max_monthly_videos`/`max_monthly_images`/`monthly_credits` (limites), `storage_gb`/`priority_queue` (capacidade), `allow_ai_video`/`allow_api`/`allow_brand_customization`/`allow_team`/`allow_white_label` (flags de recurso) — o modelo de negócio está migrando de "só crédito" para "crédito + limite por recurso", e o schema não deve precisar de migration nova em poucos meses. Renomeia 2 colunas já em produção desde a Missão 6 (`brands_included`→`max_brands`, `credits_per_month`→`monthly_credits`) para manter a família de nomes consistente.
+2. **2 níveis administrativos**, não 1: `platform_admins.role` = `super_admin` (tudo) ou `support_admin` (impersonar, visualizar tudo, responder feedback, ajustar créditos — sem editar planos/providers, excluir organização, criar admins, cancelar assinatura). 2 funções SQL (`is_platform_admin`, ampla; `is_super_admin`, restrita) em vez de 1.
+3. **Banner de impersonação com texto exato:** "Você está visualizando como: [Organização]" + "Sair da impersonação", fixo no topo, sem nenhum botão de fechar/ocultar.
+4. **`provider_call_logs` ganha mais campos:** `model`, `endpoint`, `tokens_input`/`tokens_output`, `request_id`, `status` (renomeado de `ok` boolean) — além de latência/custo/erro já previstos.
+5. **Feedbacks vira CRM interno:** arquivar, resposta interna (nunca enviada ao usuário), marcar como resolvido — `user_feedback` ganha `status`/`internal_response`.
+6. **Dashboard ganha métricas de negócio:** MRR, ARR, trials ativos, conversão trial→pago, créditos consumidos hoje, gasto estimado com IA hoje, margem estimada, providers mais utilizados — todas derivadas de tabelas já existentes/planejadas, nenhuma tabela nova.
+7. **Organizações ganha visão operacional:** plano, créditos, consumo do mês, contagem de campanhas/vídeos/imagens, última atividade (calculada na leitura, não uma coluna a manter sincronizada), data de criação.
+8. **Gestão real de Providers, só `super_admin`:** ativar/desativar, trocar provider padrão, trocar API key **sem alterar `.env`**, colocar em manutenção. Exige que a credencial de verdade passe a viver no banco (`provider_configs.credential_value`, nova coluna) — mesma proteção de RLS já usada para todo segredo deste schema (só service role); sem introduzir criptografia dedicada (pgsodium/Vault) para não expandir o escopo além do pedido.
+9. **Super Admin ilimitado, sem exceção** — decisão técnica necessária durante a incorporação: o bypass de créditos/limites (portão de crédito) e a extensão de RLS passam a valer para **qualquer** `platform_admin` (os 2 papéis do item 2), não só `super_admin` — o pedido original dizia "quando o ator for super_admin", mas isso contradiria a decisão já aprovada na v2.29 de que a organização impersonada nunca é cobrada: uma sessão de suporte de `support_admin` também precisa desse bypass, senão o cliente real seria debitado por engano numa sessão de diagnóstico. As 4 ações administrativas exclusivas (editar planos/providers, excluir organização, criar admins) continuam só para `super_admin`.
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 29) — §9.5 reescrita com os 9 ajustes; item 12 em §13 marcado como resolvido no round 2.
+2. **docs/architecture.md** (revisão 36) — §15.1/§15.1.1 (2 papéis + matriz de capacidades), §15.2/§15.4/§15.5 (bypass estendido aos 2 papéis), §15.6 (`actor_role`), §15.7 (campos ampliados), §15.8 (tabela com coluna de papel exigido), §15.9 (2 guards), §15.10 (campos de plano ampliados), nova §15.11 (gestão de Providers, credencial no banco).
+3. **docs/database.md** (revisão 31) — `platform_admins.role`, `admin_audit_logs.actor_role`, `provider_call_logs` ampliada, `user_feedback` ganha `status`/`internal_response`, `provider_configs` ganha `credential_value`/`maintenance`, `plans` com o conjunto ampliado de colunas (2 renomeações + 9 novas).
+4. **docs/flows.md** (revisão 32) — Fluxo 6/16 atualizados para os 2 papéis; texto exato do banner; `provider_configs`/`user_feedback` na tabela de Convenções de Status.
+5. **docs/ux-design.md** (revisão 30) — §4.13 com texto exato; §3.11 com coluna de papel exigido e campos/métricas ampliados.
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: implementação completa da Missão 12.
+
+---
+
+## v2.29 — 2026-08-05 — Missão 12 em preparação (Super Admin) — auditoria e documentação, aguardando aprovação
+
+**Status:** dono do produto pediu o Super Admin completo (plataforma administrativa por trás de um papel `super_admin`, com acesso ilimitado). Auditoria real do código/schema feita antes de qualquer rascunho de documentação (disciplina padrão do projeto), seguida de 8 decisões de arquitetura levantadas e confirmadas com o dono do produto (todas as recomendações aceitas). Documentação atualizada; **nenhuma migration aplicada, nenhum código escrito** — aguardando aprovação final.
+
+**Achado de auditoria (antes de qualquer decisão):** o pedido presumia que `is_super_admin()` e `has_role()` já existiam no banco — não existem. O que existe: `is_org_member()`/`is_org_admin()`/`is_org_editor()` (RLS, escopo por organização), `hasMinimumRole()` (TS, mesmo escopo). Nenhum conceito de papel de plataforma existe em lugar nenhum do schema. Também: nenhum limite de vídeos/imagens/campanhas/usuários por plano existe hoje (modelo de cobrança 100% por crédito); nenhuma instrumentação de latência/custo/erro por chamada a provider existe hoje; `audit_logs` existente exige `organization_id` e não tem `before`/`after`/IP/User-Agent, incompatível como está com ações administrativas globais; `plans` usa a chave `business`, não `enterprise` como o pedido citava.
+
+**8 decisões de arquitetura (todas as recomendações aceitas):**
+
+1. **Identidade do Super Admin:** tabela dedicada `platform_admins`, não um valor de `organization_members.role` nem coluna em `user_profiles` — desacopla por completo "papel dentro de uma organização" de "acesso à plataforma inteira".
+2. **Organização de testes:** o(s) super admin(s) têm uma organização "casa" própria, ilimitada, para testar qualquer funcionalidade sem tocar em dado de cliente real — separada da impersonação.
+3. **Créditos na impersonação:** nunca consome o saldo da organização visitada, mesmo impersonando — o bypass acompanha o ator (super_admin), não a organização.
+4. **Limites de plano:** só campos editáveis nesta missão (vídeos/imagens/campanhas/usuários) — sem bloqueio real em nenhum fluxo de criação existente, para não expandir o escopo para dentro de Server Actions já em produção. Bloqueio de verdade fica para uma missão futura.
+5. **Observabilidade de providers:** instrumentação real (nova tabela `provider_call_logs`, latência/erro/custo por chamada nos 4 adapters existentes) — não uma versão leve derivada de outras tabelas, para o Dashboard mostrar dado genuíno, nunca mockado.
+6. **Nomenclatura de plano:** chave `business` mantida no banco (`subscriptions`/`credit_pricing`/RLS já usam esse valor em produção) — rótulo na UI é livre.
+7. **Auditoria administrativa:** tabela nova e dedicada `admin_audit_logs` — `audit_logs` existente não muda, zero risco de regressão em uso já existente.
+8. **Exclusão de organização:** sempre soft delete (`deleted_at`, coluna já existente em `organizations`) — nunca hard delete, reversível.
+
+**Modelo técnico central (arquitetura, decidido antes da aprovação para poder ser avaliado junto):**
+
+- **RLS centralizada, não espalhada:** as 3 funções de RLS já usadas por toda policy existente (`is_org_member`/`is_org_admin`/`is_org_editor`) passam a conceder acesso também quando `is_super_admin(auth.uid())` é verdadeiro — 1 mudança, cobre automaticamente toda tabela que já usa essas funções (impersonação e leitura cross-organização dos dashboards resolvidas pela mesma extensão).
+- **Portão de crédito centralizado:** `ensureSufficientCredits`/`recordConsumption` (já o único ponto de checagem de crédito de todo o produto) ganham um parâmetro `actorUserId` e curto-circuitam para `super_admin` — nenhuma outra Server Action ganha lógica de `super_admin` própria.
+- **Impersonação via `getCurrentSession()`:** único ponto de resolução de organização/marca de toda a aplicação: um cookie `httpOnly`, revalidado no servidor a cada leitura, troca qual organização é resolvida — identidade do ator (`auth.uid()`) nunca muda.
+- **Guard único `requireSuperAdmin()`:** primeira linha de toda Server Action/rota administrativa nova, mesmo espírito de `hasMinimumRole()` já existente.
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 28) — novo §9.5 (escopo completo, 13 telas, requisito de ilimitado), item 12 novo em §13 (decisões resolvidas).
+2. **docs/architecture.md** (revisão 35) — nova §15 (11 subseções: identidade, RLS, organização casa, impersonação, portão de crédito, auditoria administrativa, observabilidade de providers, visão técnica das 13 telas, segurança, limites de plano).
+3. **docs/database.md** (revisão 30) — 3 tabelas novas (`platform_admins`, `admin_audit_logs`, `provider_call_logs`); `organizations` ganha `status`/`is_platform_account`; `user_profiles` ganha `status`; `plans` ganha 4 colunas de limite; `subscriptions` ganha `trialing`/`trial_ends_at`; `user_feedback` ganha `archived_at`/`deleted_at`; §8 (RLS) documenta a extensão centralizada.
+4. **docs/flows.md** (revisão 31) — Fluxo 6 ganha o bypass de `super_admin` (mesmo passo existente); novo Fluxo 16 (Impersonação e Ações Administrativas).
+5. **docs/ux-design.md** (revisão 29) — novo §2.5 (navegação administrativa), §3.11 (13 telas), §4.13 (aviso de impersonação).
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: aprovação do dono do produto, depois implementação completa.
+
+---
+
 ## v2.28 — 2026-08-05 — Missão 11 implementada e validada com 5 vídeos reais
 
 **Status:** implementação completa (tasks 1-16), validada com chamadas reais a Anthropic/ElevenLabs/Pexels/Shotstack/n8n em toda a extensão do pipeline — nenhum mock. Fechamento da missão.

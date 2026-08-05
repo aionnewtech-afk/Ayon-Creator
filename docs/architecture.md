@@ -1,6 +1,8 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** v1.0 (revisão 34 — Missão 11 aprovada, ressalva de composição resolvida)
+> **Status:** v1.0 (revisão 36 — Missão 12 aprovada, ajustes incorporados)
+> **Mudança desta revisão (36 — Missão 12 aprovada, ajustes incorporados):** dono do produto aprovou a §15 com 9 ajustes: (1) `plans` ganha um conjunto bem maior de campos (limites + capacidade + flags de recurso), preparando o schema para o modelo de negócio migrar de "só crédito" para "crédito + limite por recurso" sem migration futura — §15.10; (2) `platform_admins` ganha 2 papéis (`super_admin`/`support_admin`), com uma função SQL para cada nível de acesso (`is_platform_admin`/`is_super_admin`) e uma matriz de capacidades explícita — §15.1/§15.1.1; (3) banner de impersonação com texto exato e sem botão de fechar — §15.4; (4) `provider_call_logs` ganha model/endpoint/tokens/request_id/status — §15.7; (5) Feedbacks vira CRM interno (arquivar/responder internamente/marcar resolvido, sem resposta ao usuário) — §15.8; (6) Dashboard ganha MRR/ARR/trials ativos/conversão/gasto estimado/margem/providers mais usados — §15.8; (7) Organizações ganha visão de plano/créditos/consumo do mês/contagens/última atividade — §15.8; (8) nova §15.11 — gestão de Providers pelo admin, incluindo trocar API key sem tocar `.env` (credencial passa a viver no banco, `provider_configs.credential_value`, mesma proteção de RLS já existente) e status `maintenance`; (9) o bypass de créditos/limites (§15.5) e a extensão de RLS (§15.2) passam a valer para **qualquer** `platform_admin` (os 2 papéis), não só `super_admin` — decisão necessária para não contradizer a decisão já aprovada de que a organização impersonada nunca é cobrada, independente de qual papel está de suporte; as 4 ações administrativas exclusivas (editar planos/providers, excluir organização, criar admins) continuam só para `super_admin` (matriz §15.1.1). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (35 — Missão 12 em preparação, Super Admin):** nova §15 — Super Admin, plataforma administrativa completa por trás de um papel novo (`super_admin`), de escopo de plataforma inteira, desacoplado do papel por organização (`owner`/`admin`/`editor`/`viewer`, §2.1). Modelo central: 1 tabela nova (`platform_admins`) + 1 função SQL nova (`is_super_admin`) + extensão das 3 funções de RLS já existentes (`is_org_member`/`is_org_admin`/`is_org_editor`) para conceder acesso automaticamente a qualquer `super_admin`, sem tocar em nenhuma policy individual — mesmo raciocínio de centralização já usado no Provider Gateway (§5) para trocar de fornecedor sem tocar em quem chama. Portão de crédito (§12.3) ganha o único ponto de bypass de "ilimitado". Impersonação reaproveita `getCurrentSession()` (§2.1) como único ponto de resolução de contexto de organização. Achados de auditoria: `is_super_admin()`/`has_role()` citados no pedido não existiam; nenhum limite de vídeos/imagens/campanhas/usuários por plano existe hoje; nenhuma instrumentação de latência/custo/erro por provider existe hoje. Ver [docs/changelog.md](changelog.md) para as 8 decisões de arquitetura confirmadas com o dono do produto.
 > **Mudança desta revisão (34 — Missão 11 aprovada, ressalva de composição resolvida):** dono do produto exigiu análise arquitetural real (não suposição) comparando Shotstack com ferramentas dedicadas de design-automation (Bannerbear/Placid/ApiTemplate.io) antes de qualquer código para §14.4 — nova §14.4.1. Pesquisa real (WebSearch/WebFetch) invalidou a proposta original (asset `html` do Shotstack): está sendo descontinuado e nunca suportou imagem dentro do HTML. **Corrigido:** mecanismo passa a ser timeline em camadas (imagem+shape+texto, `output: jpg/png`) — mesma técnica já validada para o vídeo, capacidade nativa confirmada por documentação oficial, sem fornecedor novo. Nova §14.4.2 — múltiplas opções por peça (quando financeiramente viável), reaproveitando `content_versions`, com `content_pieces.selected_version_id` novo (§4.6 de database.md). Nova §14.4.3 — identidade visual consistente entre peças de uma campanha, via `campaigns.visual_brief` (jsonb, novo) resolvido uma vez por campanha. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (33 — Missão 11 aprovada, escopo ajustado):** dono do produto aprovou e pediu ajustes substanciais em §14: identidade visual vira "ativo permanente" com 5 campos (logo, cor primária, cor secundária, fonte, estilo visual — §14.1), não só logo+cor; **legenda removida do vídeo** (§14.2, simplifica o Voice/Video Render Provider); narração ganha seleção automática de voz por marca, persistida em `default_voice_ref` (§14.3); `stories`/`carousel`/`thumbnail` ganham composição real via Shotstack HTML asset, não só foto+logo (§14.4/§14.5); seleção de cenas passa a ser por trecho do roteiro, não uma busca única (§14.7); nova §14.8 — branding adaptativo (layout muda sem logo, nunca deixa espaço vazio); `pipeline_runs` ganha `progress_percent`/`estimated_remaining_seconds` além de `stage` (§14.9); player ganha copiar link + preparação arquitetural para publicação direta (Instagram/Facebook, reaproveitando `publishing_channels`/`publications` já documentadas, §14.10). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (32 — preparação Missão 11):** nova §14 — refinamento do Asset Engine, sem Core Engine/capability novo. Identidade visual automática reaproveita o bucket `brand-media` e adiciona 2 colunas a `brands` (§14.1) — nenhuma tabela nova, evitando reativar `brand_media_assets`/"Biblioteca de Mídia" (documentada mas nunca migrada, mesma decisão de não-acoplamento já tomada na Missão 7). `stories`/`carousel`/`thumbnail` ganham `production_mode = licensed_stock_photo` (novo valor, §14.4), reaproveitando o mesmo pipeline assíncrono (`pipeline_runs` + n8n) já validado pelo vídeo — `MediaProvider` ganha um método de busca de fotos (Pexels Photos API, mesmo fornecedor). `pipeline_runs` ganha `stage` (§14.8) para progresso granular. Achados da auditoria: `ElevenLabsVoiceProvider` nunca aplica `voice_settings`/`voiceRef` (§14.3); seleção de cenas usa uma única busca genérica e repete deliberadamente o último candidato (§14.7). Ver [docs/changelog.md](changelog.md).
@@ -632,3 +634,162 @@ Regra explícita para todo template de composição (§14.4/§14.5/§14.6): **a 
 - **Compartilhar (nativo):** `navigator.share` (Web Share API) quando disponível no navegador — 100% client-side.
 - **Preparado para publicação direta em Instagram/Facebook (arquitetura, não implementação nesta missão):** o produto já documenta `publishing_channels`/`publications` ([database.md §6](database.md#6-publicação-fora-do-mvp), nunca migradas, "fora do MVP" desde a revisão original) — esta missão não implementa publicação automática, mas o botão **Compartilhar** é desenhado (client-side, sem lógica de servidor acoplada) para que uma ação futura "Publicar direto" possa se encaixar reaproveitando essas tabelas já preparadas, sem redesenho do componente.
 - **Gerar de novo:** já existe (§3.5.1/[ux-design.md §4.6](ux-design.md)) — cobre "regenerar". **"Editar" não vira um editor de timeline** (fora de escopo do MVP, PRD §9.2) — para a peça de vídeo, editar significa editar o roteiro (`content_pieces.script`, mesmo mecanismo já usado pelos formatos textuais) e então gerar de novo.
+
+## 15. Super Admin — Plataforma Administrativa ★ Missão 12
+
+Infraestrutura operacional, não funcionalidade de cliente ([PRD.md §9.5](../PRD.md#95-super-admin--plataforma-administrativa-★-missão-12-em-preparação)). **2 papéis novos**, `super_admin` e `support_admin` (★ ajuste do dono do produto — aprovação round 2), de **escopo de plataforma inteira** — diferentes de `owner`/`admin`/`editor`/`viewer` (§2.1), que são sempre por organização. Uma pessoa pode ter um desses papéis sem ser membro de nenhuma organização específica (ou sendo membro só da organização "casa", §15.3).
+
+### 15.1 Identidade e papéis — `platform_admins`, `is_platform_admin()`, `is_super_admin()`
+
+- Tabela nova, dedicada, sem relação com `organization_members` nem `user_profiles` — decisão do dono do produto para não misturar "papel dentro de uma organização" com "acesso à plataforma inteira" ([database.md §9.4](database.md#94-platform_admins-★-novo-missão-12)).
+- `platform_admins.role` — `super_admin` ou `support_admin` (★ ajuste). Matriz de capacidades exata: §15.1.1.
+- **2 funções SQL**, `security definer`, mesmo padrão de `is_org_member`/`is_org_admin`/`is_org_editor` (§2.1):
+  - `public.is_platform_admin(p_user_id uuid) returns boolean` — verdadeiro para **qualquer** papel (`super_admin` **ou** `support_admin`) com `deleted_at is null`. É esta função, não `is_super_admin()`, que alimenta a extensão de RLS (§15.2) e o bypass de créditos/limites (§15.5) — os dois papéis impersonam e usam a plataforma sem restrição; a diferença entre eles é só nas **ações administrativas exclusivas** (§15.1.1), nunca no acesso de leitura/uso.
+  - `public.is_super_admin(p_user_id uuid) returns boolean` — verdadeiro só quando `role = 'super_admin'`. Usada exclusivamente para as 4 ações que `support_admin` não pode fazer (§15.1.1).
+- Nenhuma função `has_role()` genérica é criada — o pedido original citava essa função, mas a auditoria não encontrou necessidade real dela: as 3 funções de RLS já existentes (`is_org_member`/`is_org_admin`/`is_org_editor`) já cobrem toda checagem de papel por organização; as 2 checagens novas (`is_platform_admin`/`is_super_admin` acima) resolvem sozinhas o que falta.
+- Concessão/revogação é operação manual (insert/soft-delete direto em `platform_admins`, via service role) para o primeiro `super_admin`; **criar novos admins** (de qualquer um dos 2 papéis) é uma ação exclusiva de `super_admin` dentro do próprio painel (§15.1.1) a partir daí.
+
+#### 15.1.1 Matriz de capacidades
+
+| Ação | `super_admin` | `support_admin` |
+|---|---|---|
+| Ver Dashboard/Organizações/Usuários/Logs/Providers/Branding/Auditoria (leitura) | ✅ | ✅ |
+| Impersonar organização (Fluxo 16) | ✅ | ✅ |
+| Responder/arquivar/marcar feedback como resolvido (§15.8, tela Feedbacks) | ✅ | ✅ |
+| Ajustar créditos de uma organização (`credit_ledger`, tipo `adjustment`) | ✅ | ✅ |
+| Bloquear/desbloquear organização ou usuário | ✅ | ✅ |
+| Criar/renovar/cancelar/alterar trial; atribuir um plano existente a uma organização | ✅ | ✅ |
+| Sincronizar/reenviar webhook do Mercado Pago (diagnóstico) | ✅ | ✅ |
+| **Editar o catálogo de Planos** (preço/limites/campos — tela Planos) | ✅ | ❌ |
+| **Editar Providers** (API key, ativar/desativar, provider padrão, manutenção — tela Providers/Configurações) | ✅ | ❌ |
+| **Excluir organização** (soft delete) | ✅ | ❌ |
+| **Cancelar assinatura** de uma organização (ação de billing definitiva, não diagnóstico) | ✅ | ❌ |
+| **Criar/revogar `platform_admins`** (de qualquer papel) | ✅ | ❌ |
+
+Ações marcadas ❌ para `support_admin` lançam o mesmo erro de acesso negado (`PlatformAccessDeniedError`, §15.9) que um usuário comum receberia numa rota administrativa — a UI nem mostra o controle para quem não pode usá-lo.
+
+### 15.2 RLS — extensão centralizada, não checagem espalhada
+
+Ponto central de todo o desenho: em vez de adicionar `or is_platform_admin(auth.uid())` em cada policy de cada tabela (dezenas de policies, alto risco de esquecer uma), as **3 funções de RLS já usadas por toda policy existente** ganham a mesma extensão, uma única vez:
+
+```sql
+create or replace function public.is_org_member(org_id uuid) returns boolean as $$
+  select exists (...) or public.is_platform_admin(auth.uid());
+$$ ...
+
+create or replace function public.is_org_admin(org_id uuid) returns boolean as $$
+  select exists (...) or public.is_platform_admin(auth.uid());
+$$ ...
+
+create or replace function public.is_org_editor(org_id uuid) returns boolean as $$
+  select exists (...) or public.is_platform_admin(auth.uid());
+$$ ...
+```
+
+Toda tabela do produto que já usa uma dessas 3 funções em sua policy (`campaigns`, `brands`, `content_pieces`, `intelligence_hub_sessions`, `knowledge_base_items`, etc. — [database.md §8](database.md#8-multi-tenancy-e-rls)) passa a conceder acesso a **qualquer** `platform_admin` (os 2 papéis, §15.1), automaticamente, sem tocar em nenhuma dessas policies individualmente. Resolve dois problemas com a mesma mudança:
+
+1. **Impersonação** (§15.4) funciona por RLS de verdade — não precisa de client de service role nem de lógica especial por Server Action impersonada.
+2. **Telas administrativas que leem entre organizações** (Dashboard, Organizações, Branding) podem usar o client de sessão normal (RLS-scoped), não service role, para tudo que já passa por essas 3 funções.
+
+Tabelas que **não** usam essas 3 funções (`provider_configs`, `specialists`, `credit_pricing`, `credit_packages`, `plans`, `subscriptions`, `credit_ledger` — sem nenhuma policy de escrita para `authenticated`, só service role) continuam exigindo service role para escrita administrativa — mesmo padrão já estabelecido, gate feito na aplicação (§15.9), não em RLS. É aqui, na aplicação, que a diferença entre `super_admin`/`support_admin` (§15.1.1) é de fato aplicada — RLS sozinha não distingue os 2 papéis.
+
+### 15.3 Organização "casa" do Super Admin
+
+- Organização normal (mesma tabela `organizations`, nenhum schema especial) — o que a distingue é só ter membro(s) com papel em `platform_admins`. Usada exclusivamente para testar qualquer funcionalidade do produto sem tocar em dado de cliente real (decisão do dono do produto, PRD §9.5).
+- Provisionada manualmente (mesmo princípio de `platform_admins`, §15.1) — não faz parte do cadastro público (`ensureInitialProvisioning`, §2.2), que continua criando organizações normais para qualquer novo usuário.
+- Fica de fora de métricas de negócio do Dashboard (receita, MRR, contagem de organizações "clientes") — sinalizada por uma coluna (`organizations.is_platform_account boolean default false`, [database.md §2.1](database.md#21-organizations)) para que o Dashboard (§15.8) possa excluí-la sem heurística frágil (ex.: "a primeira organização criada").
+
+### 15.4 Impersonação ("Entrar como organização")
+
+- Mecanismo separado da organização "casa" (§15.3) — para suporte/diagnóstico **dentro de uma organização de cliente real**, não para testar funcionalidade nova. Disponível para os 2 papéis (§15.1.1).
+- Estado guardado num cookie `httpOnly` (`impersonating_organization_id`) — setado/limpo só por Server Actions dedicadas (`startImpersonationAction`/`stopImpersonationAction`) que **revalidam `is_platform_admin()` no servidor a cada chamada**, nunca confiando no valor do cookie sozinho.
+- `getCurrentSession()` (§2.1) — único ponto de resolução de organização/marca de toda a aplicação — ganha um passo novo: se o usuário autenticado é `platform_admin` **e** o cookie de impersonação está presente, `organization`/`brand`/`membership` resolvem para a organização impersonada em vez de `memberships[0]`. Nenhum outro arquivo da aplicação precisa saber que impersonação existe — Server Actions/páginas continuam só chamando `getCurrentSession()` como sempre chamaram.
+- **Identidade do ator nunca muda:** `auth.uid()` continua sendo o admin de verdade durante toda a impersonação — não existe (nem é possível, dado como o Supabase Auth funciona) "virar" o usuário da organização impersonada. RLS concede acesso via §15.2 (o admin real, não um usuário fake); auditoria e portão de crédito (§15.5) sempre registram/decidem com base nesse ator real.
+- **UI, obrigatória e inescapável (★ ajuste do dono do produto — round 2):** barra fixa no topo, sem botão de fechar/ocultar, texto exato — "Você está visualizando como: [Organização]" seguido do botão "Sair da impersonação". Nunca colapsável, nunca dispensável — [ux-design.md §4.13](ux-design.md#413-aviso-de-impersonação-★-novo-missão-12).
+
+### 15.5 Super Admin ilimitado — portão de crédito e limites de plano centralizados
+
+Requisito obrigatório do pedido: créditos infinitos, nenhuma cobrança/débito, nenhum bloqueio por assinatura inativa/limite de plano/quantidade (campanhas, vídeos, imagens, marcas, usuários) — sempre que o **ator autenticado** for `platform_admin` (★ aplicado aos 2 papéis, §15.1 — uma sessão de suporte de `support_admin` impersonando um cliente real não pode debitar o cliente por engano; isso contradiria a decisão já aprovada de que a organização visitada nunca é cobrada pelo uso do admin, independente de qual dos 2 papéis está agindo).
+
+Único ponto de mudança: `ensureSufficientCredits`/`recordConsumption` (§12.3), o portão de crédito já centralizado que **toda** Server Action de geração já passa. Ambas ganham um parâmetro novo, `actorUserId` (hoje elas só recebem `organizationId` — a organização a debitar — nunca sabem quem é o ator; isso muda em todo call site, mecânico, não lógica duplicada):
+
+```
+ensureSufficientCredits({ serviceRoleDb, organizationId, actorUserId, triggerReason, tier })
+  → se isPlatformAdmin(serviceRoleDb, actorUserId): retorna { costCredits: 0 } imediatamente,
+    sem checar subscription.status nem saldo
+  → senão: comportamento atual, inalterado
+
+recordConsumption({ ..., actorUserId, ... })
+  → se isPlatformAdmin(serviceRoleDb, actorUserId): no-op, nenhuma linha em credit_ledger
+  → senão: comportamento atual, inalterado
+```
+
+`isPlatformAdmin()` (nova função em `packages/core`, TS — não confundir com a função SQL homônima de §15.1, que ela consulta) vive em `platform-admin/is-platform-admin.ts`, **importada** por `billing/credit-gate.ts` e pelos guards de Server Action (§15.9) — a consulta a `platform_admins` existe uma única vez no código-fonte, reutilizada pelos dois, em vez de duplicada num arquivo só (que exigiria os guards importarem de dentro do módulo de billing, acoplamento errado). O portão de crédito continua sendo o **único lugar que decide se uma operação é cobrada** — nenhuma Server Action de geração ganha lógica de admin própria.
+
+**Achado durante a implementação — ator do pipeline assíncrono:** `ensureSufficientCredits` é chamado por uma Server Action com sessão de usuário (sempre sabe o ator), mas `recordConsumption` do pipeline de vídeo/foto (Missão 9/11) é chamado pelo **webhook de conclusão do n8n** (Fluxo 13, passo 6), que não tem sessão nenhuma — sem uma forma de saber quem disparou o pipeline, o bypass não teria como funcionar nesse caminho. `pipeline_runs` nunca teve coluna de autor (achado de auditoria, nunca endereçado desde a Missão 9). Corrigido com `pipeline_runs.actor_user_id` (nova coluna, migration `0021` — [database.md §4.8](database.md#48-pipeline_runs)): a Server Action que dispara o pipeline grava o `actorUserId` na linha; `completeVideoPipelineSuccess`/`completePhotoPipelineSuccess` leem de volta e passam para `recordConsumption`.
+
+**Restrição vinculante para missões futuras (★ ajuste do dono do produto — round 2, item 9):** nenhum limite de plano (§15.10) é aplicado nesta missão (decisão inalterada), mas **qualquer implementação futura desse bloqueio deve obrigatoriamente reutilizar `isPlatformAdmin()`** (`platform-admin/is-platform-admin.ts`) como o único ponto de bypass — nunca reimplementar a checagem em cada Server Action de criação. Documentado aqui para que a missão futura que ligar o bloqueio não precise redescobrir essa exigência.
+
+### 15.6 Auditoria administrativa — `admin_audit_logs`
+
+Tabela nova, dedicada — `audit_logs` existente ([database.md §9.1](database.md#91-audit_logs)) não muda (decisão do dono do produto: zero risco de regressão em uso já existente da tabela, e `audit_logs.organization_id` é `not null`, incompatível com ações administrativas globais como editar `plans`). Toda Server Action administrativa (edição de organização/usuário/plano/crédito/trial, sincronização de Mercado Pago, arquivamento/resposta de feedback) grava, via um helper único (`recordAdminAction`, ao lado de `requirePlatformAdmin`/`requireSuperAdmin`, §15.9): ator, **papel do ator no momento da ação** (`super_admin`/`support_admin` — preservado mesmo que o papel mude/seja revogado depois), timestamp, ação, entidade, estado antes/depois (jsonb), IP e User-Agent — os 2 últimos lidos no servidor (`headers()`/`request.ip` do Next.js, nunca confiados do client, mesmo princípio já usado para `user_feedback.user_agent`, §13.1.1). Detalhe de schema: [database.md §9.5](database.md#95-admin_audit_logs-★-novo-missão-12).
+
+### 15.7 Observabilidade de Providers — `provider_call_logs`
+
+Nenhum dos 4 providers reais (`AnthropicLlmProvider`, `ElevenLabsVoiceProvider`, `PexelsMediaProvider`, `ShotstackVideoRenderProvider`) registra hoje latência, sucesso/erro ou custo de nenhuma chamada — achado de auditoria. Instrumentação real (decisão do dono do produto — nunca uma versão "leve" derivada de outras tabelas, para o Dashboard de Providers mostrar dado genuíno):
+
+- Tabela nova `provider_call_logs` ([database.md §9.6](database.md#96-provider_call_logs-★-novo-missão-12)) — uma linha por chamada real a um fornecedor externo. **Campos ampliados (★ ajuste do dono do produto — round 2, item 4):** além de latência/erro/custo, registra `provider`, `model` (quando aplicável — só chamadas de LLM têm modelo distinto do `provider_key`), `endpoint`, `tokens_input`/`tokens_output` (LLM/voice, quando o fornecedor retorna essa informação), `credits_charged`, `request_id` (id/trace do próprio fornecedor, quando disponível — correlaciona com o painel do fornecedor durante um incidente real) e `status` (`success`/`error`).
+- Helper único `logProviderCall(db, { providerKey, capability, model, endpoint, organizationId, startedAt, finishedAt, status, errorMessage, tokensInput, tokensOutput, costEstimateCredits, requestId })` em `packages/core` (ao lado do Provider Gateway, §5) — a **lógica de gravação** vive num único lugar; o **ponto de chamada** aparece 4 vezes (um por adapter concreto, em torno da chamada de rede real, `try`/`finally`), porque são 4 integrações genuinamente distintas (SDK da Anthropic vs. `fetch` cru nos demais) — não há como unificar o ponto de chamada sem um wrapper de HTTP artificial que os 4 não compartilham hoje. Custo estimado por chamada usa os mesmos números já usados por `credit_pricing` (§12.4) como proxy — não é uma integração de billing real de cada fornecedor.
+- Disponibilidade (%) e latência (Dashboard/Providers, §15.8) são agregações sobre `provider_call_logs`, calculadas na leitura — nenhuma coluna de agregado cacheado.
+
+### 15.8 Telas administrativas — visão técnica
+
+Todas atrás de `requirePlatformAdmin()`/`requireSuperAdmin()` (§15.9, conforme a matriz §15.1.1), menu dedicado ([ux-design.md §2](ux-design.md#2-arquitetura-de-informação-navegação)), mesmo Design System do produto (nenhum componente visual novo fora do sistema já existente, mesmo que o inventário de componentes cresça — [ux-design.md §4](ux-design.md#4-componentes)):
+
+| Tela | Lê de | Escreve em | Papel exigido |
+|---|---|---|---|
+| Dashboard | `organizations`, `organization_members`, `campaigns`, `content_pieces`, `credit_ledger`, `subscriptions`, `plans`, `provider_call_logs` — tudo via client de sessão (RLS já concede acesso total, §15.2). ★ Métricas ampliadas (round 2, item 6): MRR (`SUM(plans.price_cents)` das organizações com `subscriptions.status = active`), ARR (MRR×12), trials ativos (`COUNT` onde `status = trialing`), conversão trial→pago (histórico via `admin_audit_logs`/mudança de `status` em `subscriptions`), créditos consumidos hoje (`SUM(credit_ledger.amount)` do dia, `type = consumption`), gasto estimado com IA hoje (`SUM(provider_call_logs.cost_estimate_credits)` do dia), margem estimada (receita − gasto estimado), providers mais utilizados (`COUNT` por `provider_key` em `provider_call_logs`) | — (só leitura) | qualquer `platform_admin` |
+| Organizações | `organizations` (+ agregados: plano, créditos, consumo do mês, nº de campanhas/vídeos/imagens, última atividade — ★ round 2, item 7 — `última atividade` é `MAX(created_at)` entre `campaigns`/`content_pieces`/`credit_ledger` da organização, calculado na leitura, nunca uma coluna própria a manter sincronizada; data de criação já existe) | `organizations` (editar/bloquear/desbloquear/plano — qualquer `platform_admin`; soft delete — só `super_admin`), `subscriptions` (trial — qualquer `platform_admin`; cancelar assinatura — só `super_admin`), `credit_ledger` (ajuste, sempre com `recordAdminAction` — qualquer `platform_admin`) | misto — ver coluna anterior e §15.1.1 |
+| Usuários | `organization_members`, `user_profiles`, `auth.users` (último login via Admin API do Supabase) | `organization_members` (papel/bloqueio/remoção), reset de senha via Admin API do Supabase (service role) | qualquer `platform_admin` |
+| Planos | `plans` | `plans` (preço/créditos/limites/flags de recurso — §15.10) | só `super_admin` |
+| Trials | `subscriptions` | `subscriptions` (criar/renovar/cancelar/converter) | qualquer `platform_admin` |
+| Créditos | `credit_ledger` | `credit_ledger` (tipo `adjustment`, já suportado — §7.2 de database.md) | qualquer `platform_admin` |
+| Mercado Pago | `subscriptions`, `credit_ledger` (`external_payment_id`) | sincronizar/reenviar webhook (qualquer `platform_admin`, chama o mesmo handler já existente, `mercado-pago-webhook-handler.ts`, nunca duplica lógica) — cancelar assinatura (só `super_admin`, §15.1.1) | misto |
+| Feedbacks | `user_feedback` (§9.3 de database.md — primeira interface de leitura desta tabela) | `user_feedback` (arquivar, resposta interna, marcar como resolvido — ★ round 2, item 5, CRM interno, sem envio de resposta ao usuário) | qualquer `platform_admin` |
+| Providers | `provider_call_logs` (§15.7), `provider_configs` | `provider_configs` (★ round 2, item 8 — ativar/desativar, trocar provider padrão da capability+tier, trocar credencial, colocar em manutenção; §15.11) — só `super_admin` | leitura: qualquer `platform_admin`; escrita: só `super_admin` |
+| Logs | `pipeline_runs`, `admin_audit_logs`, `provider_call_logs`, `credit_ledger` (pagamentos) — visão unificada, filtrada | — (só leitura) | qualquer `platform_admin` |
+| Branding | `brands` (§14.1) | `brands` (mesmos campos do Perfil da Marca, Missão 11, visão cross-organização) | qualquer `platform_admin` |
+| Auditoria | `admin_audit_logs` (§15.6) | — (só leitura) | qualquer `platform_admin` |
+| Configurações | `provider_configs`, `credit_pricing`, `plans`, `feature_flags` | mesmas tabelas — primeira interface administrativa real para `provider_configs` (documentada desde a revisão 21 como "painel administrativo interno, não exposto ao cliente", §5.1, nunca implementada até agora) | só `super_admin` |
+
+### 15.9 Segurança — `requirePlatformAdmin()` / `requireSuperAdmin()`
+
+2 guards, `packages/core`, mesmo espírito de `hasMinimumRole` (§2.1) — chamados como primeira linha de toda Server Action/rota administrativa nova, conforme a matriz §15.1.1:
+
+```
+requirePlatformAdmin(db, userId) → lança PlatformAccessDeniedError se !isPlatformAdmin (nem super_admin, nem support_admin)
+requireSuperAdmin(db, userId)    → lança PlatformAccessDeniedError se role !== 'super_admin' (bloqueia support_admin também)
+```
+
+Rotas/páginas administrativas ficam sob um segmento próprio (`apps/web/app/(admin)/...`) cujo `layout.tsx` já chama `requirePlatformAdmin()` uma vez (via `getCurrentSession()` + checagem) e redireciona para fora se falhar — mesmo princípio de proteção de layout já usado pelo grupo `(platform)` para exigir sessão autenticada. Nenhum usuário comum consegue acessar nenhuma rota administrativa, mesmo por URL direta. Ações exclusivas de `super_admin` (§15.1.1) chamam `requireSuperAdmin()` adicionalmente, dentro da própria Server Action — a UI também esconde o controle correspondente para `support_admin`, mas o guard no servidor é a garantia real, nunca a UI sozinha.
+
+### 15.10 Limites e recursos de plano — campos, sem bloqueio (decisão do dono do produto)
+
+`plans` ganha colunas novas ([database.md §7.5](database.md#75-plans-★-novo-missão-6-achado-durante-a-implementação)) — **conjunto ampliado (★ ajuste do dono do produto — round 2, item 1)**, para o schema já ficar preparado para o modelo de negócio migrar de "só crédito" para "crédito + limite por recurso", sem precisar de migration nova daqui a alguns meses:
+
+- **Limites (nullable = sem limite):** `max_brands` (renomeação de `brands_included`, mesmo dado, nome consistente com a família nova), `max_users`, `max_campaigns`, `max_monthly_videos`, `max_monthly_images`, `monthly_credits` (renomeação de `credits_per_month`).
+- **Capacidade:** `storage_gb` (nullable).
+- **Flags de recurso (boolean, default `false` exceto onde indicado):** `priority_queue`, `allow_ai_video`, `allow_api`, `allow_brand_customization`, `allow_team`, `allow_white_label`.
+
+**Nenhum ponto de criação existente (campanha, vídeo, imagem, usuário) passa a validar nenhum desses campos nesta missão** — decisão explícita do dono do produto para não expandir o escopo para dentro de Server Actions já em produção (PRD §9.5, item 4), mantida no round 2. Ficam editáveis e visíveis desde já (tela Planos, só `super_admin` — §15.1.1); aplicar o bloqueio de verdade é uma missão futura, escopada e aprovada separadamente, que deve reutilizar `isPlatformAdmin()` como bypass (§15.5).
+
+As 2 renomeações (`brands_included`→`max_brands`, `credits_per_month`→`monthly_credits`) tocam colunas já em produção desde a Missão 6 — mudança mecânica (`ALTER TABLE ... RENAME COLUMN`, sem mudança de tipo/semântica), mas os pontos que já leem esses nomes hoje (handler de webhook do Mercado Pago, portão de crédito, tela de Configurações) precisam ser atualizados junto, na mesma migration.
+
+### 15.11 Gestão de Providers pelo Admin — credenciais no banco, não em `.env` ★ novo (round 2, item 8)
+
+Hoje `provider_configs.credentials_ref` é só uma **referência** (nome de variável de ambiente) — a credencial de verdade vive em `.env`/`.env.local`, fora do banco. O pedido explícito é poder trocar a API key **sem alterar `.env`**, o que exige a credencial de verdade passar a viver no banco.
+
+- `provider_configs` ganha `credential_value text` (nullable — nulo enquanto não migrado; quando presente, tem precedência sobre `credentials_ref`) — mesma proteção de RLS já existente para a tabela inteira (sem policy para `authenticated`/`anon`, só service role, [database.md §8](database.md#8-multi-tenancy-e-rls)) — o mesmo nível de proteção que qualquer outro segredo já guardado neste schema (o projeto não usa `pgsodium`/Vault em nenhuma tabela hoje; não é introduzido aqui para não expandir o escopo desta missão além do pedido).
+- `status` ganha o valor `maintenance` (além de `active`/`inactive`/`error` já existentes) — "colocar em manutenção" (pedido) marca este valor; o Provider Gateway (§5) trata `maintenance` como indisponível para novas chamadas, sem apagar a config.
+- "Trocar provider padrão" (pedido) é editar qual `provider_key` está ativo para uma combinação `(capability, tier)` já existente — não é um conceito novo, é a mesma tabela já desenhada para isso desde a revisão 21 (§5.1), agora com interface real.
+- Só `super_admin` escreve nesta tela (§15.1.1) — `support_admin` só visualiza (nunca vê o valor da credencial em texto claro na UI, mesmo `super_admin` — campo sempre mascarado, com opção de "trocar" que substitui o valor sem exibir o atual).

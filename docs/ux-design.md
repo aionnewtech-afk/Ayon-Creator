@@ -1,7 +1,9 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 28 — Missão 11 aprovada, ressalva de composição resolvida)
+> **Status:** v1.3 (revisão 30 — Missão 12 aprovada, ajustes incorporados)
 > **Última atualização:** 2026-08-05
+> **Mudança desta revisão (30 — Missão 12 aprovada, ajustes incorporados):** §4.13 ganha o texto exato aprovado ("Você está visualizando como: [Organização]") e reforça que não há botão de fechar. §3.11 ganha uma coluna de papel exigido por tela (`super_admin` vs. qualquer `platform_admin`) e os campos/métricas ampliados aprovados (Organizações, Planos, Feedbacks, Providers, Dashboard). Ver [architecture.md §15](architecture.md#15-super-admin--plataforma-administrativa-★-missão-12) e [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (29 — Missão 12 em preparação, Super Admin):** novo §2.5 — navegação administrativa (menu dedicado `ADMIN`, fora da navegação de cliente); novo §3.11 — inventário das 13 telas administrativas; novo §4.13 — aviso permanente de impersonação. Design System existente (§4) reutilizado; inventário de componentes cresce com tabela/select/tabs/badge — não existiam antes desta missão (achado de auditoria). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (28 — Missão 11 aprovada, ressalva de composição resolvida):** §4.6 ganha grade de múltiplas opções para `stories`/`carousel`/`thumbnail` quando a rodada gera mais de 1 candidato — usuário escolhe, sem forçar regeneração. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (27 — Missão 11 aprovada, escopo ajustado):** §4.5 ganha barra de progresso aproximada + tempo estimado (além da etapa); §4.6 perde a legenda do vídeo, ganha copiar link (além de baixar/compartilhar) e passa a descrever a composição real (branding+tipografia+título) de `stories`/`carousel`/`thumbnail`, não uma foto crua; §4.12 expandida — Identidade Visual ganha cor secundária, fonte, estilo visual e voz da marca (não só logo + cor). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (26 — preparação Missão 11):** §4.5 ganha progresso granular durante a geração assíncrona (vídeo e, novo, foto); §4.6 ganha player melhor (baixar/compartilhar) e o par "Gerar automaticamente"/"Enviar arquivo" lado a lado para `stories`/`carousel`/`thumbnail`; novo §4.12 — Identidade Visual no Perfil da Marca (logo + cor principal, definidos 1x). Ver [docs/changelog.md](changelog.md).
@@ -102,6 +104,29 @@ Ayon Creator
 - `editor`: cria campanhas, ensina a IA, revisa/aprova peças.
 - `admin`/`owner`: tudo do editor + decide sugestões do Brand Evolution, gerencia plano/créditos/tier, convida time e marcas (Business).
 - Itens "Marcas" e "Time e Permissões" só aparecem no plano Business.
+
+### 2.5 Navegação administrativa (Super Admin) ★ novo (Missão 12)
+
+Menu completamente separado da navegação de cliente (§2.2) — nunca aparece na sidebar do produto, nem para `owner`/`admin` de organização. Só visível/acessível para `super_admin` ([architecture.md §15.9](architecture.md#159-segurança--requiresuperadmin)), sob rota própria (`(admin)`), mesmo Design System (§4), sem componente visual novo fora do sistema já existente.
+
+```
+Super Admin
+├── Dashboard
+├── Organizações
+├── Usuários
+├── Planos
+├── Trials
+├── Créditos
+├── Mercado Pago
+├── Feedbacks
+├── Providers
+├── Logs
+├── Branding
+├── Auditoria
+└── Configurações
+```
+
+Um `super_admin` sem impersonação ativa nunca vê a navegação de cliente — entra direto no Dashboard administrativo após login. Durante impersonação (Fluxo 16), a navegação de cliente volta a aparecer normalmente (o super_admin "está" na organização visitada), com o aviso permanente (§4.13) substituindo o lugar da barra de contexto normal.
 
 ## 3. Inventário de Telas
 
@@ -217,6 +242,26 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 | GLOBAL-2 | Seletor de Marca | Troca de contexto entre marcas (Business) |
 | GLOBAL-3 | Painel (Home) | Atalhos para "Criar Campanha", tendências recentes, sugestões pendentes, status de campanhas em andamento |
 | GLOBAL-4 ★ novo (Missão 10) | Enviar Feedback | Botão + modal para registrar sugestão/bug/dificuldade de uso, sem sair da tela atual |
+
+### 3.11 Super Admin (`ADMIN`) ★ novo (preparação Missão 12, ajustado na aprovação)
+
+Fora da navegação de cliente (§2.5) — restrito a `platform_admin`. 2 papéis, `super_admin` e `support_admin` — coluna "Papel" abaixo, matriz completa em [architecture.md §15.1.1](architecture.md#1511-matriz-de-capacidades). Nenhuma tela desta seção usa dado mockado — tudo lido do banco real ([architecture.md §15](architecture.md#15-super-admin--plataforma-administrativa-★-missão-12)).
+
+| ID | Tela | Objetivo | Estados-chave | Entra a partir de | Sai para | Papel |
+|---|---|---|---|---|---|---|
+| ADMIN-1 | Dashboard | Organizações, usuários, campanhas (criadas/concluídas), vídeos/imagens gerados, créditos (consumidos/disponíveis), planos, trials, uso por provedor, geração de IA por dia, erros recentes — **★ ampliado (round 2):** MRR, ARR, trials ativos, conversão trial→pago, créditos consumidos hoje, gasto estimado com IA hoje, margem estimada, providers mais utilizados | vazio (plataforma nova, sem dado ainda) | Menu ADMIN | Organizações, Providers, Logs (deep link por métrica) | qualquer |
+| ADMIN-2 | Organizações | Listar/filtrar organizações — **★ campos visíveis ampliados (round 2):** plano, créditos, consumo do mês, nº de campanhas/vídeos/imagens, última atividade, data de criação; editar, bloquear/desbloquear, alterar plano/créditos, renovar/cancelar trial, "Entrar como organização" (qualquer papel) — excluir (soft delete) e cancelar assinatura só `super_admin` | bloqueada, excluída (some da lista padrão, filtro "incluir excluídas"), impersonando (banner ativo — §4.13) | Menu ADMIN, Dashboard | Detalhe da organização, produto (via impersonação) | misto |
+| ADMIN-3 | Usuários | Listar/filtrar usuários; editar, bloquear/desbloquear, alterar papel, redefinir senha, remover | bloqueado | Menu ADMIN | Organização do usuário | qualquer |
+| ADMIN-4 | Planos | Editar Starter/Pro/Business — preço, créditos, e o conjunto ampliado de limites/capacidade/flags de recurso (★ round 2, item 1 — [architecture.md §15.10](architecture.md#1510-limites-e-recursos-de-plano--campos-sem-bloqueio-decisão-do-dono-do-produto)): marcas/usuários/campanhas/vídeos por mês/imagens por mês, armazenamento, fila prioritária, vídeo com IA, API, personalização de marca, times, white-label — campos, sem bloqueio real | salvando | Menu ADMIN | — | só `super_admin` |
+| ADMIN-5 | Trials | Criar/renovar/cancelar/alterar dias/converter em assinatura; dias restantes, expiração, status | expirando (aviso), expirado | Menu ADMIN, Organizações | Organização | qualquer |
+| ADMIN-6 | Créditos | Saldo/histórico/compras/consumo/bônus por organização; adicionar/remover/ajustar (sempre com auditoria) | ajuste pendente de confirmação | Menu ADMIN, Organizações | — | qualquer |
+| ADMIN-7 | Mercado Pago | Assinatura/pagamentos/webhooks/status por organização; sincronizar/reenviar webhook (qualquer papel) — cancelar assinatura só `super_admin` | sincronizando, webhook falhou | Menu ADMIN, Organizações | Painel do Mercado Pago (externo, referência) | misto |
+| ADMIN-8 | Feedbacks | Lista de `user_feedback` (Missão 10, primeira interface de leitura) — CRM interno (★ round 2, item 5): filtro por categoria (Bug/Sugestão/Dificuldade/Outro), arquivar, resposta interna (nunca enviada ao usuário), marcar como resolvido, excluir, exportar CSV | vazio | Menu ADMIN, Dashboard | — | qualquer |
+| ADMIN-9 | Providers | Anthropic/ElevenLabs/Pexels/Shotstack — latência, erros, custo estimado, chamadas, disponibilidade, e **★ campos ampliados (round 2, item 4):** modelo, endpoint, tokens de entrada/saída, créditos cobrados, request ID, status (dado real, `provider_call_logs`) — leitura para qualquer papel. **★ Gestão real (round 2, item 8), só `super_admin`:** ativar/desativar, trocar provider padrão da capability+tier, trocar API key (sem tocar `.env`), colocar em manutenção | sem chamadas ainda, provider em manutenção | Menu ADMIN, Dashboard | Logs (filtrado por provider) | misto |
+| ADMIN-10 | Logs | Visão única de erros/pipelines/renderizações/n8n/pagamentos/providers, filtrada por data/organização/usuário/provedor | vazio (filtro sem resultado) | Menu ADMIN, Dashboard, Providers | — | qualquer |
+| ADMIN-11 | Branding | Todas as marcas — trocar logo, editar identidade/fontes/cores, visualizar ativos (mesmos campos do Perfil da Marca, §4.12, visão cross-organização) | salvando | Menu ADMIN, Organizações | — | qualquer |
+| ADMIN-12 | Auditoria | Lista de `admin_audit_logs` — usuário, papel no momento da ação, data, ação, antes/depois, IP, User-Agent | vazio | Menu ADMIN, qualquer tela administrativa (deep link "ver histórico") | — | qualquer |
+| ADMIN-13 | Configurações | Parâmetros globais, valores padrão, `provider_configs` (primeira interface administrativa real — documentada desde a revisão 21, [architecture.md §5.1](architecture.md#51-tier-de-provedor-interface-exposta-ao-cliente--provider-registry-interno), nunca implementada), créditos, planos, flags futuras (`feature_flags`) | salvando | Menu ADMIN | — | só `super_admin` |
 
 ## 4. Componentes
 
@@ -354,6 +399,22 @@ Nova seção dentro do Perfil da Marca (ONB-4, §2 — nav) — mesmo espírito 
 - **Voz da marca:** campo opcional que sobrescreve a seleção automática (arch. §14.3) — lista o catálogo curado de vozes por descrição em linguagem de negócio (ex. "feminina, jovem, animada"), nunca por nome técnico/`voice_id` do fornecedor. Vazio por padrão — a Ayon escolhe automaticamente na primeira geração e mantém a mesma voz depois.
 - **Sem preview de aplicação nesta seção** (ex.: "veja como fica no vídeo") — decisão de manter o MVP simples; o resultado aparece naturalmente na primeira peça gerada depois de configurado.
 - Editável a qualquer momento, mesmo padrão de todo campo do Perfil da Marca — mudança vale só para gerações futuras, nunca reprocessa peças já aprovadas.
+
+### 4.13 Aviso de Impersonação ★ novo (Missão 12) — texto exato aprovado (round 2)
+
+Barra fixa no topo de toda tela do produto (nunca das telas administrativas — lá o admin já sabe onde está), visível **somente** enquanto `impersonating_organization_id` está ativo (Fluxo 16). Substitui o lugar visual da barra de contexto normal (§2.3), nunca empilha com ela. Disponível tanto para `super_admin` quanto `support_admin` (arch. §15.1.1) — o aviso é idêntico para os 2 papéis.
+
+- **Texto fixo, exato, sem variação de copy (★ aprovado pelo dono do produto):**
+  ```
+  Você está visualizando como:
+  [Organização]
+
+  [Sair da impersonação]
+  ```
+  Cor de destaque (nunca a mesma cor neutra do resto da UI, para ser impossível confundir com uso normal).
+- **Sem possibilidade de esconder** — nenhum ícone de fechar/minimizar/ocultar, nunca colapsável, ocupa espaço fixo na tela do início ao fim da sessão de impersonação (decisão explícita do dono do produto).
+- **Botão "Sair da impersonação"** — sempre junto ao aviso, 1 clique, sem confirmação adicional (sair é sempre seguro, nunca perde dado).
+- Nenhuma tela do produto se comporta de forma diferente durante a impersonação além deste aviso — o admin vê e usa exatamente a mesma interface que a organização veria.
 
 ## 5. Estados (Padrões Globais)
 
