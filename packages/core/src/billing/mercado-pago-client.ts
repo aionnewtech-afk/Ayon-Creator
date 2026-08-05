@@ -66,6 +66,12 @@ export async function getMercadoPagoPreapproval(preapprovalId: string): Promise<
   return preApproval.get({ id: preapprovalId });
 }
 
+/** Cancela a assinatura recorrente no Mercado Pago (tela Mercado Pago, admin — só `super_admin`). */
+export async function cancelMercadoPagoPreapproval(preapprovalId: string): Promise<void> {
+  const preApproval = new PreApproval(getConfig());
+  await preApproval.update({ id: preapprovalId, body: { status: "cancelled" } });
+}
+
 export interface CreateCreditPurchasePreferenceParams {
   organizationId: string;
   creditPackageId: string;
