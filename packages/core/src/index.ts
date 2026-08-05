@@ -36,6 +36,7 @@ export * from "./platform-admin/get-dashboard-metrics";
 export * from "./platform-admin/get-organizations-overview";
 export * from "./platform-admin/get-users-overview";
 export * from "./platform-admin/get-trials-overview";
+export * from "./platform-admin/get-credits-overview";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
