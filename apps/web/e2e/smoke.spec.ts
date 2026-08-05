@@ -93,7 +93,6 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
 
     // ★ Missão 11 — upload manual continua disponível como alternativa nas 3
     // peças de foto (arch. §14.4), mesmo agora sendo `licensed_stock_photo`.
-    const photoFormats = ["Thumbnail", "Carrossel", "Stories"];
     const fixtureImage = path.join(__dirname, "fixtures", "test-image.png");
     const fileInputs = page.locator('input[type="file"]');
     const uploadCount = await fileInputs.count();
@@ -101,14 +100,16 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
     for (let i = 0; i < uploadCount; i++) {
       await fileInputs.nth(i).setInputFiles(fixtureImage);
     }
-    for (const format of photoFormats) {
-      const section = page.locator("section, div").filter({ hasText: format }).first();
-      await expect(section.getByText("Pronta para revisão").first()).toBeVisible({ timeout: 15_000 });
-    }
 
+    // ★ Achado real (CI) — um locator amplo (`section, div` + `hasText`)
+    // casa primeiro com um ancestral que já contém "Pronta para revisão" de
+    // uma peça de texto qualquer, passando cedo demais e deixando os 3
+    // uploads em voo quando a contagem abaixo era lida de uma vez só.
+    // `toHaveCount` reavalia até o timeout, esperando de verdade os 3
+    // uploads terminarem (cada um vira uma Server Action assíncrona).
     const approveButtons = page.getByRole("button", { name: "Aprovar", exact: true });
+    await expect(approveButtons).toHaveCount(8, { timeout: 20_000 }); // 5 peças de texto + 3 fotos enviadas manualmente (Vídeo fica de fora — ver docstring acima)
     const approveCount = await approveButtons.count();
-    expect(approveCount).toBe(8); // 5 peças de texto + 3 fotos enviadas manualmente (Vídeo fica de fora — ver docstring acima)
 
     // Locators são consultas vivas — reavaliar "primeiro habilitado" em duas
     // etapas (checar .isEnabled() e só depois clicar num índice separado)
