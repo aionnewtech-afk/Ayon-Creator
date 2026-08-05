@@ -146,3 +146,7 @@ export type PipelineRunEngine = (typeof PIPELINE_RUN_ENGINES)[number];
 
 export const PIPELINE_RUN_STATUSES = ["queued", "running", "completed", "failed"] as const;
 export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
+
+/** ★ novo (Missão 10) — categorias do botão global "Enviar feedback" (arch. §13). `other` incluído a pedido do dono do produto: nem todo feedback se encaixa nas 3 primeiras. */
+export const USER_FEEDBACK_CATEGORIES = ["suggestion", "bug", "difficulty", "other"] as const;
+export type UserFeedbackCategory = (typeof USER_FEEDBACK_CATEGORIES)[number];

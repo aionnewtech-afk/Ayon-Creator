@@ -4,6 +4,22 @@
 
 ---
 
+## v2.24 (revisão 41) — 2026-08-05 — Missão 10 implementada e validada (botão global "Enviar feedback")
+
+**Status:** implementação completa, validada com Supabase real e encerrada — sem próxima missão até novo direcionamento do dono do produto.
+
+**Implementado:** migration `0018_user_feedback.sql` (aplicada ao projeto remoto), `UserFeedbackRepository`, Server Action `sendFeedbackAction` (`feedback-actions.ts`), componente `Dialog` novo em `@ayon/ui` (primeiro modal do produto, sobre o elemento nativo `<dialog>`, sem dependência nova), `FeedbackButton` (client component) integrado à `Topbar` (GLOBAL-4). `package.json` (raiz, `apps/web`, `packages/core`) bumpado para `0.10.2`, fechando o achado registrado na revisão anterior (§13.1.2).
+
+**Achado real durante a validação no navegador (RLS):** o primeiro envio real falhou com `42501` ("new row violates row-level security policy"), mesmo com a policy de `insert` correta e o usuário sendo membro da organização. Causa raiz: `UserFeedbackRepository.create` encadeava `.insert(input).select().single()` — mas `user_feedback` deliberadamente não tem policy de `select` para `authenticated` (decisão da revisão 39, leitura só via service role). O Postgres recusa o `RETURNING` implícito do PostgREST com o mesmo erro 42501 do `WITH CHECK`, mesmo o `INSERT` em si sendo permitido. Corrigido removendo o `.select()` — `create` agora retorna `void`. Revalidado com um envio real (categoria "Outro", `pathname`/`app_version`/`user_agent` corretos na linha), depois removido (limpeza de dados de teste).
+
+**Testes:** `apps/web/e2e/smoke.spec.ts` ganha uma asserção de regressão (botão "Enviar feedback" visível após login) — não exercita o envio real (Server Action + RLS), validado manualmente com Supabase real, mesmo princípio já documentado para vídeo/LLM. `pnpm typecheck`/`lint`/`build` limpos; `vitest` (packages/core) sem regressão.
+
+**Documentos:** nenhuma mudança adicional de arquitetura/produto nesta entrada — a implementação seguiu exatamente o escopo aprovado na revisão 40, sem decisão nova a registrar.
+
+**Encerramento:** conforme instrução explícita do dono do produto, nenhuma nova funcionalidade inicia até ele usar o produto por alguns dias registrando feedbacks reais.
+
+---
+
 ## v2.23 (revisão 40) — 2026-08-04 — Missão 10 aprovada, escopo ajustado (categoria "Outro" + contexto automático)
 
 **Status:** documentação aprovada pelo dono do produto, com 2 ajustes pedidos antes do código:

@@ -2,6 +2,21 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.11.0] — 2026-08-05
+
+### Adicionado
+
+- **Missão 10 — botão global "Enviar feedback"**: modal simples (categoria Sugestão/Bug/Dificuldade de uso/Outro + descrição) acessível em qualquer tela autenticada, grava direto em `user_feedback` (sem interface administrativa nesta missão).
+  - **Migration `0018_user_feedback.sql`**: tabela `user_feedback` (`organization_id`, `user_id`, `category`, `description`, `pathname`, `app_version`, `user_agent`, `created_at`), RLS de `insert` restrita ao próprio usuário membro da organização, sem `select`/`update`/`delete` para `authenticated`/`anon` (leitura só via service role).
+  - **Contexto automático**: `pathname` capturado no client (`usePathname()`); `app_version` (a partir de `package.json`) e `user_agent` (`headers()`) sempre lidos no servidor, nunca confiados a um valor enviado pelo client.
+  - `Dialog` (novo, `@ayon/ui`) — primeiro modal do produto, sobre o elemento `<dialog>` nativo, sem dependência nova (sem Radix/shadcn no pacote).
+  - `UserFeedbackRepository`, `sendFeedbackAction` (`apps/web/app/(platform)/feedback-actions.ts`), `FeedbackButton` integrado à `Topbar`.
+  - `package.json` (raiz, `apps/web`, `packages/core`) sincronizado com a tag de release (`0.10.2` → refletido aqui) — corrige o achado registrado em `docs/architecture.md` §13.1.2 (versão nunca era bumpada desde o início do projeto).
+
+### Corrigido durante a implementação (achado real)
+
+- **RLS bloqueava o próprio insert que deveria ser permitido**: `UserFeedbackRepository.create` encadeava `.insert(input).select().single()`, mas `user_feedback` não tem policy de `select` para `authenticated` (decisão deliberada, leitura só via service role). O PostgREST tenta ler a linha recém-criada para montar a resposta (`RETURNING`), e o Postgres recusa isso com o mesmo erro `42501` do `WITH CHECK` — mesmo o `INSERT` em si sendo permitido pela policy de `insert`. Encontrado ao enviar um feedback real pelo navegador; corrigido removendo o `.select()` (`create` passa a retornar `void`).
+
 ## [0.10.1] — 2026-08-04
 
 ### Adicionado

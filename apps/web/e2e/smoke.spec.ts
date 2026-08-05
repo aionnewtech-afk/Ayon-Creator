@@ -45,6 +45,13 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
 
     await page.waitForURL("**/painel");
 
+    // ★ Missão 10 — botão global "Enviar feedback" (topbar, todas as telas
+    // autenticadas). Só confirma que o botão de abrir o modal renderiza
+    // (regressão de wiring); o envio real (Server Action + RLS) é validado
+    // manualmente com Supabase real a cada missão (mesmo princípio já
+    // documentado acima para vídeo/LLM).
+    await expect(page.getByRole("button", { name: "Enviar feedback" })).toBeVisible();
+
     await page.getByRole("navigation").getByRole("link", { name: "Criar Campanha" }).click();
     await page.waitForURL("**/criar-campanha");
 

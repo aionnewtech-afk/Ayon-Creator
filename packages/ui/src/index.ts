@@ -4,6 +4,7 @@ export * from "./components/input";
 export * from "./components/textarea";
 export * from "./components/label";
 export * from "./components/card";
+export * from "./components/dialog";
 export * from "./components/empty-state";
 export * from "./components/error-fallback";
 export * from "./theme/theme-provider";

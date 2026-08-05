@@ -34,6 +34,7 @@ import type {
   SubscriptionPlan,
   SubscriptionStatus,
   TrendResearchStatus,
+  UserFeedbackCategory,
 } from "./domain";
 
 export interface Database {
@@ -604,6 +605,31 @@ export interface Database {
           finished_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["pipeline_runs"]["Insert"]>;
+        Relationships: [];
+      };
+      user_feedback: {
+        Row: {
+          id: string;
+          organization_id: string;
+          user_id: string;
+          category: UserFeedbackCategory;
+          description: string;
+          pathname: string | null;
+          app_version: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          user_id: string;
+          category: UserFeedbackCategory;
+          description: string;
+          pathname?: string | null;
+          app_version?: string | null;
+          user_agent?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_feedback"]["Insert"]>;
         Relationships: [];
       };
       content_packages: {

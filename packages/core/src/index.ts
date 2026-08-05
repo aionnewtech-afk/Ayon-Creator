@@ -25,6 +25,7 @@ export * from "./repositories/content-package.repository";
 export * from "./repositories/learning-signal.repository";
 export * from "./repositories/learning-insight.repository";
 export * from "./repositories/pipeline-run.repository";
+export * from "./repositories/user-feedback.repository";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
