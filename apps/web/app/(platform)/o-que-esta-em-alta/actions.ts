@@ -65,6 +65,7 @@ export async function runTrendDiscoveryAction(): Promise<RunTrendDiscoveryResult
     const { costCredits } = await ensureSufficientCredits({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       triggerReason: TREND_RANKING_TRIGGER_REASON,
       tier,
     });
@@ -82,6 +83,7 @@ export async function runTrendDiscoveryAction(): Promise<RunTrendDiscoveryResult
     await recordConsumption({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       costCredits,
       intelligenceHubSessionId: result.sessionId,
       description: `Busca de tendências — ${session.brand.name}`,

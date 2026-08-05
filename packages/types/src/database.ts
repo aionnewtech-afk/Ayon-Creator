@@ -21,11 +21,14 @@ import type {
   CreditPackageStatus,
   CreditPricingStatus,
   OrganizationMemberRole,
+  OrganizationStatus,
   PipelineRunEngine,
   PipelineRunEntityType,
   PipelineRunStatus,
   PlanStatus,
+  PlatformAdminRole,
   ProductionMode,
+  ProviderCallLogStatus,
   ProviderCapability,
   ProviderConfigStatus,
   ProviderTier,
@@ -35,6 +38,8 @@ import type {
   SubscriptionStatus,
   TrendResearchStatus,
   UserFeedbackCategory,
+  UserFeedbackStatus,
+  UserProfileStatus,
 } from "./domain";
 
 export interface Database {
@@ -46,6 +51,8 @@ export interface Database {
           name: string;
           slug: string;
           provider_tier: ProviderTier;
+          status: OrganizationStatus;
+          is_platform_account: boolean;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -56,9 +63,11 @@ export interface Database {
           name: string;
           slug: string;
           provider_tier?: ProviderTier;
+          status?: OrganizationStatus;
+          is_platform_account?: boolean;
           created_by?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["organizations"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["organizations"]["Insert"]> & { deleted_at?: string | null };
         Relationships: [];
       };
       organization_members: {
@@ -124,6 +133,7 @@ export interface Database {
           full_name: string | null;
           avatar_url: string | null;
           locale: string;
+          status: UserProfileStatus;
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
@@ -134,6 +144,7 @@ export interface Database {
           full_name?: string | null;
           avatar_url?: string | null;
           locale?: string;
+          status?: UserProfileStatus;
         };
         Update: Partial<Database["public"]["Tables"]["user_profiles"]["Insert"]>;
         Relationships: [];
@@ -254,6 +265,7 @@ export interface Database {
           specialist_id: string | null;
           provider_key: string;
           credentials_ref: string | null;
+          credential_value: string | null;
           priority: number;
           fallback_provider_key: string | null;
           status: ProviderConfigStatus;
@@ -266,6 +278,7 @@ export interface Database {
           specialist_id?: string | null;
           provider_key: string;
           credentials_ref?: string | null;
+          credential_value?: string | null;
           priority?: number;
           fallback_provider_key?: string | null;
           status?: ProviderConfigStatus;
@@ -438,6 +451,7 @@ export interface Database {
           organization_id: string;
           plan: SubscriptionPlan;
           status: SubscriptionStatus;
+          trial_ends_at: string | null;
           current_period_start: string | null;
           current_period_end: string | null;
           billing_provider_ref: string | null;
@@ -449,6 +463,7 @@ export interface Database {
           organization_id: string;
           plan: SubscriptionPlan;
           status?: SubscriptionStatus;
+          trial_ends_at?: string | null;
           current_period_start?: string | null;
           current_period_end?: string | null;
           billing_provider_ref?: string | null;
@@ -526,19 +541,41 @@ export interface Database {
       plans: {
         Row: {
           plan: SubscriptionPlan;
-          brands_included: number;
+          max_brands: number;
           tier_included: ProviderTier;
-          credits_per_month: number;
+          monthly_credits: number;
           price_cents: number;
+          max_users: number | null;
+          max_campaigns: number | null;
+          max_monthly_videos: number | null;
+          max_monthly_images: number | null;
+          storage_gb: number | null;
+          priority_queue: boolean;
+          allow_ai_video: boolean;
+          allow_api: boolean;
+          allow_brand_customization: boolean;
+          allow_team: boolean;
+          allow_white_label: boolean;
           status: PlanStatus;
           updated_at: string;
         };
         Insert: {
           plan: SubscriptionPlan;
-          brands_included: number;
+          max_brands: number;
           tier_included: ProviderTier;
-          credits_per_month: number;
+          monthly_credits: number;
           price_cents: number;
+          max_users?: number | null;
+          max_campaigns?: number | null;
+          max_monthly_videos?: number | null;
+          max_monthly_images?: number | null;
+          storage_gb?: number | null;
+          priority_queue?: boolean;
+          allow_ai_video?: boolean;
+          allow_api?: boolean;
+          allow_brand_customization?: boolean;
+          allow_team?: boolean;
+          allow_white_label?: boolean;
           status?: PlanStatus;
         };
         Update: Partial<Database["public"]["Tables"]["plans"]["Insert"]>;
@@ -608,6 +645,7 @@ export interface Database {
           progress_percent: number | null;
           estimated_remaining_seconds: number | null;
           error: string | null;
+          actor_user_id: string | null;
           started_at: string;
           finished_at: string | null;
         };
@@ -622,6 +660,7 @@ export interface Database {
           progress_percent?: number | null;
           estimated_remaining_seconds?: number | null;
           error?: string | null;
+          actor_user_id?: string | null;
           finished_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["pipeline_runs"]["Insert"]>;
@@ -637,6 +676,10 @@ export interface Database {
           pathname: string | null;
           app_version: string | null;
           user_agent: string | null;
+          status: UserFeedbackStatus;
+          internal_response: string | null;
+          archived_at: string | null;
+          deleted_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -648,8 +691,100 @@ export interface Database {
           pathname?: string | null;
           app_version?: string | null;
           user_agent?: string | null;
+          status?: UserFeedbackStatus;
+          internal_response?: string | null;
+          archived_at?: string | null;
+          deleted_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["user_feedback"]["Insert"]>;
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: {
+          id: string;
+          user_id: string;
+          role: PlatformAdminRole;
+          granted_by: string | null;
+          granted_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role: PlatformAdminRole;
+          granted_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["platform_admins"]["Insert"]> & { deleted_at?: string | null };
+        Relationships: [];
+      };
+      admin_audit_logs: {
+        Row: {
+          id: string;
+          actor_user_id: string;
+          actor_role: PlatformAdminRole;
+          organization_id: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          before: Record<string, unknown> | null;
+          after: Record<string, unknown> | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_user_id: string;
+          actor_role: PlatformAdminRole;
+          organization_id?: string | null;
+          action: string;
+          entity_type: string;
+          entity_id?: string | null;
+          before?: Record<string, unknown> | null;
+          after?: Record<string, unknown> | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["admin_audit_logs"]["Insert"]>;
+        Relationships: [];
+      };
+      provider_call_logs: {
+        Row: {
+          id: string;
+          provider_key: string;
+          model: string | null;
+          endpoint: string | null;
+          capability: ProviderCapability;
+          organization_id: string | null;
+          request_id: string | null;
+          started_at: string;
+          finished_at: string | null;
+          latency_ms: number | null;
+          status: ProviderCallLogStatus;
+          error_message: string | null;
+          tokens_input: number | null;
+          tokens_output: number | null;
+          cost_estimate_credits: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider_key: string;
+          model?: string | null;
+          endpoint?: string | null;
+          capability: ProviderCapability;
+          organization_id?: string | null;
+          request_id?: string | null;
+          started_at: string;
+          finished_at?: string | null;
+          latency_ms?: number | null;
+          status: ProviderCallLogStatus;
+          error_message?: string | null;
+          tokens_input?: number | null;
+          tokens_output?: number | null;
+          cost_estimate_credits?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["provider_call_logs"]["Insert"]>;
         Relationships: [];
       };
       content_packages: {

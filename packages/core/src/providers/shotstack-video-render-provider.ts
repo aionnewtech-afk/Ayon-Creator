@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@ayon/types";
 import type {
   ImageCompositionRequest,
   ImageCompositionResult,
@@ -6,6 +8,7 @@ import type {
   VideoRenderRequest,
   VideoRenderResult,
 } from "./video-render-provider";
+import { logProviderCall } from "./log-provider-call";
 
 /**
  * Adapter concreto do Video Render Provider (architecture.md §5, §3.5.1,
@@ -26,6 +29,8 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
     private readonly providerKey: string,
     private readonly apiKey: string,
     host: string,
+    /** ★ Missão 12 (architecture.md §15.7) — mesmo client de service role já usado para resolver este adapter; instrumentação real via `logProviderCall`, nunca bloqueia a chamada real se falhar. */
+    private readonly serviceRoleDb?: SupabaseClient<Database>,
   ) {
     // Defensivo: aceita tanto a base documentada (`.../edit/stage`) quanto
     // uma variante com `/render` já incluído — nunca falha silenciosamente
@@ -67,23 +72,55 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
     return { imageUrl, providerKey: this.providerKey };
   }
 
+  /**
+   * ★ Missão 12 (architecture.md §15.7) — 1 linha de log por ciclo completo
+   * submit→poll→done (nunca 1 por poll individual, que rodaria a cada 3s por
+   * até ~5min e afogaria a tabela em ruído sem valor de observabilidade —
+   * o que importa é quanto tempo o render levou e se terminou bem).
+   */
   private async submitAndPoll(body: Record<string, unknown>): Promise<string> {
-    const submitResponse = await fetch(`${this.host}/render`, {
-      method: "POST",
-      headers: {
-        "x-api-key": this.apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const startedAt = new Date();
+    const endpoint = `${this.host}/render`;
+    let errorMessage: string | undefined;
+    let renderId: string | undefined;
 
-    if (!submitResponse.ok) {
-      const errorBody = await submitResponse.text().catch(() => "");
-      throw new Error(`Shotstack render (submit) falhou (${submitResponse.status}): ${errorBody}`);
+    try {
+      const submitResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "x-api-key": this.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!submitResponse.ok) {
+        const errorBody = await submitResponse.text().catch(() => "");
+        errorMessage = `Shotstack render (submit) falhou (${submitResponse.status}): ${errorBody}`;
+        throw new Error(errorMessage);
+      }
+
+      const submitPayload = (await submitResponse.json()) as ShotstackEnvelope<{ id: string }>;
+      renderId = submitPayload.response.id;
+      return await this.pollUntilDone(renderId);
+    } catch (error) {
+      errorMessage ??= error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      if (this.serviceRoleDb) {
+        await logProviderCall({
+          serviceRoleDb: this.serviceRoleDb,
+          providerKey: this.providerKey,
+          capability: "video_render",
+          endpoint,
+          requestId: renderId,
+          startedAt,
+          finishedAt: new Date(),
+          ok: !errorMessage,
+          errorMessage,
+        });
+      }
     }
-
-    const submitPayload = (await submitResponse.json()) as ShotstackEnvelope<{ id: string }>;
-    return this.pollUntilDone(submitPayload.response.id);
   }
 
   private async pollUntilDone(renderId: string): Promise<string> {

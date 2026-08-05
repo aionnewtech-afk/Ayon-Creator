@@ -8,9 +8,9 @@ import { buyCreditsAction, subscribeToPlanAction } from "./actions";
 
 interface PlanRow {
   plan: SubscriptionPlan;
-  brands_included: number;
+  max_brands: number;
   tier_included: string;
-  credits_per_month: number;
+  monthly_credits: number;
   price_cents: number;
 }
 
@@ -43,6 +43,7 @@ const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   active: "Ativa",
   past_due: "Pagamento pendente",
   canceled: "Cancelada",
+  trialing: "Em teste (trial)",
 };
 
 const LEDGER_TYPE_LABELS: Record<CreditLedgerEntryType, string> = {
@@ -132,9 +133,9 @@ export function BillingDashboard({
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p className="text-lg font-semibold text-foreground">{formatBRL(plan.price_cents)}/mês</p>
-                  <p className="text-muted-foreground">{plan.credits_per_month} créditos/mês</p>
+                  <p className="text-muted-foreground">{plan.monthly_credits} créditos/mês</p>
                   <p className="text-muted-foreground">
-                    {plan.brands_included} marca{plan.brands_included > 1 ? "s" : ""} · tier {plan.tier_included}
+                    {plan.max_brands} marca{plan.max_brands > 1 ? "s" : ""} · tier {plan.tier_included}
                   </p>
                   <Button
                     className="w-full"

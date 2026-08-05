@@ -218,6 +218,7 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
     const { costCredits } = await ensureSufficientCredits({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       triggerReason: ASSET_GENERATION_TRIGGER_REASON,
       tier,
     });
@@ -243,6 +244,7 @@ export async function regenerateContentPieceAction(contentPieceId: string): Prom
     await recordConsumption({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       costCredits,
       contentPieceId,
       description: `Peça de conteúdo (${piece.format}) — regenerada — ${session.brand.name}`,
@@ -310,6 +312,7 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
       db,
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       campaignId: piece.campaign_id,
       tier,
       contentPieceId,
@@ -375,6 +378,7 @@ export async function generatePhotoContentPieceAction(contentPieceId: string): P
       db,
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       campaignId: piece.campaign_id,
       tier,
       contentPieceId,

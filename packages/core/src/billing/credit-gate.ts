@@ -3,6 +3,7 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { SubscriptionRepository } from "../repositories/subscription.repository";
 import { CreditPricingRepository } from "../repositories/credit-pricing.repository";
 import { CreditLedgerRepository } from "../repositories/credit-ledger.repository";
+import { isPlatformAdmin } from "../platform-admin/is-platform-admin";
 
 export class InactiveSubscriptionError extends Error {
   constructor() {
@@ -25,6 +26,8 @@ export interface EnsureSufficientCreditsParams {
   /** Client de service role — subscriptions/credit_ledger/credit_pricing não têm policy de escrita/leitura ampla para o usuário final. */
   serviceRoleDb: SupabaseClient<Database>;
   organizationId: string;
+  /** ★ Missão 12 — ator autenticado que está disparando a operação; `platform_admin` (super_admin/support_admin) libera imediatamente, sem checar assinatura/saldo (architecture.md §15.5). */
+  actorUserId: string;
   triggerReason: string;
   tier: ProviderTier;
 }
@@ -40,16 +43,25 @@ export interface EnsureSufficientCreditsResult {
  * quando bloqueado; nunca deduz nada aqui — só confirma que dá pra prosseguir.
  * O débito de verdade só acontece em `recordConsumption`, após a sessão
  * concluir com sucesso.
+ *
+ * ★ Missão 12 (architecture.md §15.5) — único ponto de bypass de
+ * `platform_admin`: ilimitado mesmo impersonando uma organização real (a
+ * organização visitada nunca é debitada, independente de qual dos 2 papéis
+ * está agindo).
  */
 export async function ensureSufficientCredits(
   params: EnsureSufficientCreditsParams,
 ): Promise<EnsureSufficientCreditsResult> {
+  if (await isPlatformAdmin(params.serviceRoleDb, params.actorUserId)) {
+    return { costCredits: 0 };
+  }
+
   const subscriptionRepository = new SubscriptionRepository(params.serviceRoleDb);
   const creditPricingRepository = new CreditPricingRepository(params.serviceRoleDb);
   const creditLedgerRepository = new CreditLedgerRepository(params.serviceRoleDb);
 
   const subscription = await subscriptionRepository.findByOrganizationId(params.organizationId);
-  if (!subscription || subscription.status !== "active") {
+  if (!subscription || (subscription.status !== "active" && subscription.status !== "trialing")) {
     throw new InactiveSubscriptionError();
   }
 
@@ -69,6 +81,8 @@ export async function ensureSufficientCredits(
 export interface RecordConsumptionParams {
   serviceRoleDb: SupabaseClient<Database>;
   organizationId: string;
+  /** ★ Missão 12 — mesmo ator passado a `ensureSufficientCredits`; `platform_admin` pula a gravação por completo (nenhuma linha em `credit_ledger`, nenhum rastro de consumo na organização usada). */
+  actorUserId: string;
   costCredits: number;
   /** Sessão do Intelligence Hub que gerou o consumo (`campaign_strategy`/`trend_ranking`). */
   intelligenceHubSessionId?: string;
@@ -96,8 +110,18 @@ export interface RecordConsumptionParams {
  * corrida genuína entre duas requisições da mesma organização, o trigger
  * rejeita a segunda gravação — capturado aqui e traduzido para o mesmo
  * `InsufficientCreditsError` que todo Server Action já sabe tratar.
+ *
+ * ★ Missão 12 (architecture.md §15.5) — `platform_admin` nunca grava em
+ * `credit_ledger`, mesmo que `costCredits` já venha `0` de
+ * `ensureSufficientCredits` (uma linha com `amount: 0` ainda seria um
+ * rastro de "consumo" na organização usada, o que a decisão do dono do
+ * produto proíbe explicitamente).
  */
 export async function recordConsumption(params: RecordConsumptionParams): Promise<void> {
+  if (await isPlatformAdmin(params.serviceRoleDb, params.actorUserId)) {
+    return;
+  }
+
   const creditLedgerRepository = new CreditLedgerRepository(params.serviceRoleDb);
 
   try {

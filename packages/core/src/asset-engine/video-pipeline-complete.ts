@@ -54,11 +54,18 @@ export async function completeVideoPipelineSuccess(params: CompleteVideoPipeline
 
   await contentPieceRepository.update(params.contentPieceId, { status: "ready_for_review" });
 
-  await pipelineRunRepository.update(params.pipelineRunId, { status: "completed", finished_at: new Date().toISOString() });
+  const pipelineRun = await pipelineRunRepository.update(params.pipelineRunId, {
+    status: "completed",
+    finished_at: new Date().toISOString(),
+  });
 
   await recordConsumption({
     serviceRoleDb: params.serviceRoleDb,
     organizationId: params.organizationId,
+    // ★ Missão 12 — o webhook do n8n não tem sessão de usuário; o ator é lido
+    // de volta de `pipeline_runs.actor_user_id`, gravado pela Server Action
+    // que disparou o pipeline (architecture.md §15.5, achado de auditoria).
+    actorUserId: pipelineRun.actor_user_id ?? "",
     costCredits: pricing.credits,
     pipelineRunId: params.pipelineRunId,
     description: "Geração automática de vídeo (licensed_stock_video)",

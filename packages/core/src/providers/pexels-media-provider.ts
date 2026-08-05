@@ -1,4 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@ayon/types";
 import type { MediaCandidate, MediaProvider, MediaSearchRequest, MediaSearchResult } from "./media-provider";
+import { logProviderCall } from "./log-provider-call";
 
 /**
  * Adapter concreto do Media Provider (architecture.md §5, §3.5.1) para o
@@ -15,6 +18,8 @@ export class PexelsMediaProvider implements MediaProvider {
   constructor(
     private readonly providerKey: string,
     private readonly apiKey: string,
+    /** ★ Missão 12 (architecture.md §15.7) — mesmo client de service role já usado para resolver este adapter; instrumentação real via `logProviderCall`, nunca bloqueia a chamada real se falhar. */
+    private readonly serviceRoleDb?: SupabaseClient<Database>,
   ) {}
 
   async searchMedia(request: MediaSearchRequest): Promise<MediaSearchResult> {
@@ -23,17 +28,9 @@ export class PexelsMediaProvider implements MediaProvider {
       orientation: request.orientation ?? "portrait",
       per_page: String(request.perPage ?? 5),
     });
+    const endpoint = `${PEXELS_VIDEO_API_BASE}/search`;
 
-    const response = await fetch(`${PEXELS_VIDEO_API_BASE}/search?${params.toString()}`, {
-      headers: { Authorization: this.apiKey },
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
-      throw new Error(`Pexels searchMedia falhou (${response.status}): ${errorBody}`);
-    }
-
-    const payload = (await response.json()) as PexelsVideoSearchResponse;
+    const payload = await this.fetchJson<PexelsVideoSearchResponse>(`${endpoint}?${params.toString()}`, endpoint, "searchMedia");
 
     return {
       candidates: payload.videos.map((video) => toVideoCandidate(video, this.providerKey)),
@@ -42,16 +39,8 @@ export class PexelsMediaProvider implements MediaProvider {
   }
 
   async fetchMedia(id: string): Promise<MediaCandidate> {
-    const response = await fetch(`${PEXELS_VIDEO_API_BASE}/videos/${id}`, {
-      headers: { Authorization: this.apiKey },
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
-      throw new Error(`Pexels fetchMedia falhou (${response.status}): ${errorBody}`);
-    }
-
-    const video = (await response.json()) as PexelsVideo;
+    const endpoint = `${PEXELS_VIDEO_API_BASE}/videos/${id}`;
+    const video = await this.fetchJson<PexelsVideo>(endpoint, endpoint, "fetchMedia");
     return toVideoCandidate(video, this.providerKey);
   }
 
@@ -61,22 +50,48 @@ export class PexelsMediaProvider implements MediaProvider {
       orientation: request.orientation ?? "portrait",
       per_page: String(request.perPage ?? 5),
     });
+    const endpoint = `${PEXELS_PHOTO_API_BASE}/search`;
 
-    const response = await fetch(`${PEXELS_PHOTO_API_BASE}/search?${params.toString()}`, {
-      headers: { Authorization: this.apiKey },
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
-      throw new Error(`Pexels searchPhotos falhou (${response.status}): ${errorBody}`);
-    }
-
-    const payload = (await response.json()) as PexelsPhotoSearchResponse;
+    const payload = await this.fetchJson<PexelsPhotoSearchResponse>(`${endpoint}?${params.toString()}`, endpoint, "searchPhotos");
 
     return {
       candidates: payload.photos.map((photo) => toPhotoCandidate(photo, this.providerKey)),
       providerKey: this.providerKey,
     };
+  }
+
+  /** ★ Missão 12 — ponto único de fetch+instrumentação para os 3 métodos acima (busca de vídeo/foto e fetch por id são chamadas de rede genuinamente distintas, mas a lógica de log é a mesma). */
+  private async fetchJson<T>(url: string, endpoint: string, operation: string): Promise<T> {
+    const startedAt = new Date();
+    let errorMessage: string | undefined;
+
+    try {
+      const response = await fetch(url, { headers: { Authorization: this.apiKey } });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        errorMessage = `Pexels ${operation} falhou (${response.status}): ${errorBody}`;
+        throw new Error(errorMessage);
+      }
+
+      return (await response.json()) as T;
+    } catch (error) {
+      errorMessage ??= error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      if (this.serviceRoleDb) {
+        await logProviderCall({
+          serviceRoleDb: this.serviceRoleDb,
+          providerKey: this.providerKey,
+          capability: "media",
+          endpoint,
+          startedAt,
+          finishedAt: new Date(),
+          ok: !errorMessage,
+          errorMessage,
+        });
+      }
+    }
   }
 }
 

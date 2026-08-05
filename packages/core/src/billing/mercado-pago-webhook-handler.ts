@@ -140,7 +140,7 @@ async function activatePlan(db: SupabaseClient<Database>, organizationId: string
   await creditLedgerRepository.create({
     organization_id: organizationId,
     type: "grant_plan",
-    amount: planRow.credits_per_month,
+    amount: planRow.monthly_credits,
     description: `Créditos do ciclo — plano ${plan}`,
   });
 }

@@ -58,11 +58,16 @@ export async function completePhotoPipelineSuccess(params: CompletePhotoPipeline
 
   await contentPieceRepository.update(params.contentPieceId, { status: "ready_for_review" });
 
-  await pipelineRunRepository.update(params.pipelineRunId, { status: "completed", finished_at: new Date().toISOString() });
+  const pipelineRun = await pipelineRunRepository.update(params.pipelineRunId, {
+    status: "completed",
+    finished_at: new Date().toISOString(),
+  });
 
   await recordConsumption({
     serviceRoleDb: params.serviceRoleDb,
     organizationId: params.organizationId,
+    // ★ Missão 12 — ver mesmo comentário em video-pipeline-complete.ts.
+    actorUserId: pipelineRun.actor_user_id ?? "",
     costCredits: pricing.credits,
     pipelineRunId: params.pipelineRunId,
     description: `Geração automática de imagem (licensed_stock_photo, ${params.options.length} opção(ões))`,

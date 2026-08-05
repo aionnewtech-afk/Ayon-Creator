@@ -47,7 +47,7 @@ export async function resolveLlmProvider(
     );
   }
 
-  return new AnthropicLlmProvider(config.provider_key, apiKey);
+  return new AnthropicLlmProvider(config.provider_key, apiKey, db);
 }
 
 /**
@@ -94,7 +94,7 @@ export async function resolveVoiceProvider(db: SupabaseClient<Database>, tier: P
     throw new Error("ELEVENLABS_API_KEY não configurada — necessária para sintetizar narração (ver `.env.local.example`).");
   }
 
-  return new ElevenLabsVoiceProvider(config.provider_key, apiKey);
+  return new ElevenLabsVoiceProvider(config.provider_key, apiKey, db);
 }
 
 /**
@@ -115,7 +115,7 @@ export async function resolveMediaProvider(db: SupabaseClient<Database>, tier: P
     throw new Error("PEXELS_API_KEY não configurada — necessária para buscar cenas (ver `.env.local.example`).");
   }
 
-  return new PexelsMediaProvider(config.provider_key, apiKey);
+  return new PexelsMediaProvider(config.provider_key, apiKey, db);
 }
 
 /**
@@ -143,5 +143,5 @@ export async function resolveVideoRenderProvider(
     );
   }
 
-  return new ShotstackVideoRenderProvider(config.provider_key, apiKey, host);
+  return new ShotstackVideoRenderProvider(config.provider_key, apiKey, host, db);
 }

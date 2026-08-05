@@ -27,6 +27,9 @@ describe.skipIf(!hasAllEnv)("Fluxo 15 via n8n real — trigger → workflow → 
   let brandId: string;
   let campaignId: string;
   let contentPieceId: string;
+  // ★ Missão 12 — pipeline_runs.actor_user_id referencia auth.users; precisa
+  // de um usuário real (não um uuid arbitrário) para satisfazer a FK.
+  let actorUserId: string;
 
   beforeAll(async () => {
     db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -34,6 +37,14 @@ describe.skipIf(!hasAllEnv)("Fluxo 15 via n8n real — trigger → workflow → 
     });
 
     const suffix = Date.now();
+
+    const { data: user, error: userError } = await db.auth.admin.createUser({
+      email: `photo-pipeline-trigger-test-${suffix}@ayoncreator.test`,
+      password: "PhotoPipelineTriggerTest!2026",
+      email_confirm: true,
+    });
+    if (userError || !user.user) throw userError ?? new Error("usuário de teste não criado");
+    actorUserId = user.user.id;
 
     const { data: org, error: orgError } = await db
       .from("organizations")
@@ -115,6 +126,7 @@ describe.skipIf(!hasAllEnv)("Fluxo 15 via n8n real — trigger → workflow → 
     await db.from("subscriptions").delete().eq("organization_id", organizationId);
     if (brandId) await db.from("brands").delete().eq("id", brandId);
     await db.from("organizations").delete().eq("id", organizationId);
+    if (actorUserId) await db.auth.admin.deleteUser(actorUserId);
   }, 30_000);
 
   it(
@@ -124,6 +136,7 @@ describe.skipIf(!hasAllEnv)("Fluxo 15 via n8n real — trigger → workflow → 
         db,
         serviceRoleDb: db,
         organizationId,
+        actorUserId,
         campaignId,
         tier: "economico",
         contentPieceId,

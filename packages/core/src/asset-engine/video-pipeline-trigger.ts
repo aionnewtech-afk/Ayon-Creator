@@ -19,6 +19,8 @@ export interface TriggerVideoGenerationParams {
   /** Client de service role — checa o portão de crédito. */
   serviceRoleDb: SupabaseClient<Database>;
   organizationId: string;
+  /** ★ Missão 12 — ator autenticado disparando a geração; gravado em `pipeline_runs.actor_user_id` para o webhook de conclusão poder decidir o bypass de `platform_admin` (architecture.md §15.5). */
+  actorUserId: string;
   campaignId: string;
   tier: ProviderTier;
   contentPieceId: string;
@@ -45,6 +47,7 @@ export async function triggerVideoGeneration(
   await ensureSufficientCredits({
     serviceRoleDb: params.serviceRoleDb,
     organizationId: params.organizationId,
+    actorUserId: params.actorUserId,
     triggerReason: VIDEO_GENERATION_TRIGGER_REASON,
     tier: params.tier,
   });
@@ -56,6 +59,7 @@ export async function triggerVideoGeneration(
     entity_id: params.contentPieceId,
     engine: "asset_engine",
     status: "queued",
+    actor_user_id: params.actorUserId,
   });
 
   const webhookUrl = process.env.N8N_WEBHOOK_URL;

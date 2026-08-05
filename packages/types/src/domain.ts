@@ -33,7 +33,8 @@ export type KnowledgeBaseSourceType = (typeof KNOWLEDGE_BASE_SOURCE_TYPES)[numbe
 export const PROVIDER_CAPABILITIES = ["llm", "avatar", "voice", "media", "trend_source", "video_render"] as const;
 export type ProviderCapability = (typeof PROVIDER_CAPABILITIES)[number];
 
-export const PROVIDER_CONFIG_STATUSES = ["active", "inactive", "error"] as const;
+/** `maintenance` ★ novo (Missão 12) — Provider Gateway trata como indisponível para chamadas novas, sem apagar a config (architecture.md §15.11). */
+export const PROVIDER_CONFIG_STATUSES = ["active", "inactive", "error", "maintenance"] as const;
 export type ProviderConfigStatus = (typeof PROVIDER_CONFIG_STATUSES)[number];
 
 /**
@@ -71,7 +72,8 @@ export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 export const SUBSCRIPTION_PLANS = ["starter", "pro", "business"] as const;
 export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 
-export const SUBSCRIPTION_STATUSES = ["active", "past_due", "canceled"] as const;
+/** `trialing` ★ novo (Missão 12) — tratado como assinatura ativa pelo portão de crédito (Fluxo 6, passo 1); gerido pela tela Trials do Super Admin. */
+export const SUBSCRIPTION_STATUSES = ["active", "past_due", "canceled", "trialing"] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
 export const CREDIT_LEDGER_ENTRY_TYPES = ["grant_plan", "purchase", "consumption", "adjustment"] as const;
@@ -151,3 +153,27 @@ export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
 /** ★ novo (Missão 10) — categorias do botão global "Enviar feedback" (arch. §13). `other` incluído a pedido do dono do produto: nem todo feedback se encaixa nas 3 primeiras. */
 export const USER_FEEDBACK_CATEGORIES = ["suggestion", "bug", "difficulty", "other"] as const;
 export type UserFeedbackCategory = (typeof USER_FEEDBACK_CATEGORIES)[number];
+
+/** ★ novo (Missão 12) — CRM interno da tela Feedbacks (architecture.md §15.8) — "resolvido" não envia nada ao usuário, é só triagem interna. */
+export const USER_FEEDBACK_STATUSES = ["open", "resolved"] as const;
+export type UserFeedbackStatus = (typeof USER_FEEDBACK_STATUSES)[number];
+
+/**
+ * ★ novo (Missão 12) — papéis administrativos de escopo de plataforma
+ * inteira (architecture.md §15.1), desacoplados de `OrganizationMemberRole`
+ * (por organização). Matriz de capacidades: architecture.md §15.1.1.
+ */
+export const PLATFORM_ADMIN_ROLES = ["super_admin", "support_admin"] as const;
+export type PlatformAdminRole = (typeof PLATFORM_ADMIN_ROLES)[number];
+
+/** ★ novo (Missão 12) — bloqueio reversível, distinto de `deleted_at` (architecture.md §15.8). */
+export const ORGANIZATION_STATUSES = ["active", "blocked"] as const;
+export type OrganizationStatus = (typeof ORGANIZATION_STATUSES)[number];
+
+/** ★ novo (Missão 12) — bloqueio de usuário, global (não por organização), tela Usuários. */
+export const USER_PROFILE_STATUSES = ["active", "blocked"] as const;
+export type UserProfileStatus = (typeof USER_PROFILE_STATUSES)[number];
+
+/** ★ novo (Missão 12) — `provider_call_logs.status`, instrumentação real dos 4 providers (architecture.md §15.7). */
+export const PROVIDER_CALL_LOG_STATUSES = ["success", "error"] as const;
+export type ProviderCallLogStatus = (typeof PROVIDER_CALL_LOG_STATUSES)[number];

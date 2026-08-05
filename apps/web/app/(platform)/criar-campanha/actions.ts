@@ -76,6 +76,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
     const { costCredits } = await ensureSufficientCredits({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       triggerReason: CAMPAIGN_STRATEGY_TRIGGER_REASON,
       tier,
     });
@@ -93,6 +94,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
     await recordConsumption({
       serviceRoleDb,
       organizationId: session.organization.id,
+      actorUserId: session.user.id,
       costCredits,
       intelligenceHubSessionId: result.sessionId,
       description: `Estratégia de campanha — ${session.brand.name}`,
@@ -200,6 +202,7 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
       const { costCredits } = await ensureSufficientCredits({
         serviceRoleDb,
         organizationId: session.organization.id,
+        actorUserId: session.user.id,
         triggerReason: ASSET_GENERATION_TRIGGER_REASON,
         tier,
       });
@@ -220,6 +223,7 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
       await recordConsumption({
         serviceRoleDb,
         organizationId: session.organization.id,
+        actorUserId: session.user.id,
         costCredits,
         contentPieceId: piece.id,
         description: `Peça de conteúdo (${piece.format}) — ${session.brand.name}`,
