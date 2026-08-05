@@ -29,6 +29,7 @@ export * from "./repositories/user-feedback.repository";
 export * from "./repositories/platform-admin.repository";
 export * from "./repositories/admin-audit-log.repository";
 export * from "./repositories/provider-call-log.repository";
+export * from "./repositories/feature-flag.repository";
 export * from "./platform-admin/is-platform-admin";
 export * from "./platform-admin/require-platform-admin";
 export * from "./platform-admin/record-admin-action";
