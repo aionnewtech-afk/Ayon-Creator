@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
 
+type UserFeedbackRow = Database["public"]["Tables"]["user_feedback"]["Row"];
 type UserFeedbackInsert = Database["public"]["Tables"]["user_feedback"]["Insert"];
+type UserFeedbackUpdate = Database["public"]["Tables"]["user_feedback"]["Update"];
 
 /**
  * Único ponto de código que fala com a tabela `user_feedback`
@@ -19,6 +21,32 @@ export class UserFeedbackRepository {
 
   async create(input: UserFeedbackInsert): Promise<void> {
     const { error } = await this.db.from("user_feedback").insert(input);
+
+    if (error) throw error;
+  }
+
+  /** CRM interno (tela Feedbacks, admin) — sempre via service role, mesma tabela sem policy de select para o usuário final. */
+  async findAll(): Promise<UserFeedbackRow[]> {
+    const { data, error } = await this.db
+      .from("user_feedback")
+      .select("*")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async update(id: string, patch: UserFeedbackUpdate): Promise<UserFeedbackRow> {
+    const { data, error } = await this.db.from("user_feedback").update(patch).eq("id", id).select().single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /** Soft delete — nunca hard delete, mesmo padrão do resto do schema. */
+  async softDelete(id: string): Promise<void> {
+    const { error } = await this.db.from("user_feedback").update({ deleted_at: new Date().toISOString() }).eq("id", id);
 
     if (error) throw error;
   }
