@@ -37,6 +37,14 @@ export class BrandRepository {
     return data;
   }
 
+  /** Todas as marcas, qualquer organização — uso administrativo (tela Branding, §15.8). */
+  async findAll(): Promise<BrandRow[]> {
+    const { data, error } = await this.db.from("brands").select("*").is("deleted_at", null).order("name", { ascending: true });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async findByOrganizationId(organizationId: string): Promise<BrandRow[]> {
     const { data, error } = await this.db
       .from("brands")
