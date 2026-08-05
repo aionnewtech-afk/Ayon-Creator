@@ -27,6 +27,14 @@ export class SubscriptionRepository {
     return data;
   }
 
+  /** Todas as assinaturas — uso administrativo (telas Trials/Organizações, §15.8). */
+  async findAll(): Promise<SubscriptionRow[]> {
+    const { data, error } = await this.db.from("subscriptions").select("*").order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async findByBillingProviderRef(billingProviderRef: string): Promise<SubscriptionRow | null> {
     const { data, error } = await this.db
       .from("subscriptions")
