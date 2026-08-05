@@ -47,7 +47,6 @@ describe("Provider Gateway — voice/media/video_render (chamada real via DB)", 
       const renderResult = await renderProvider.composeVideo({
         audioUrl: "https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/lit.mp3",
         videoSources: [{ url: mediaResult.candidates[0]!.downloadUrl, startSeconds: 0, lengthSeconds: 5 }],
-        captionCues: [{ text: "Provider Gateway OK", startSeconds: 0, lengthSeconds: 5 }],
         aspectRatio: "9:16",
       });
       expect(renderResult.providerKey).toBe("shotstack");

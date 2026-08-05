@@ -3,17 +3,11 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ensureSufficientCredits } from "../billing/credit-gate";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
+import { N8nDispatchError } from "./video-pipeline-trigger";
 
-const VIDEO_GENERATION_TRIGGER_REASON = "video_generation";
+const IMAGE_GENERATION_TRIGGER_REASON = "image_generation";
 
-export class N8nDispatchError extends Error {
-  constructor(cause: unknown) {
-    super(`Falha ao disparar o workflow do n8n: ${cause instanceof Error ? cause.message : String(cause)}`);
-    this.name = "N8nDispatchError";
-  }
-}
-
-export interface TriggerVideoGenerationParams {
+export interface TriggerPhotoGenerationParams {
   /** Client de sessão (RLS) — grava content_pieces/pipeline_runs. */
   db: SupabaseClient<Database>;
   /** Client de service role — checa o portão de crédito. */
@@ -24,28 +18,27 @@ export interface TriggerVideoGenerationParams {
   contentPieceId: string;
 }
 
-export interface TriggerVideoGenerationResult {
+export interface TriggerPhotoGenerationResult {
   pipelineRunId: string;
 }
 
 /**
- * Dispara o pipeline assíncrono de geração de vídeo (Fluxo 13, passo 1) —
- * checa o portão de crédito, marca a peça como `generating`, cria a linha de
- * `pipeline_runs` (`queued`) e aciona o n8n via webhook autenticado.
- * Cobrança real só acontece no webhook de conclusão
- * (`completeVideoPipelineSuccess`), nunca aqui — mesmo princípio de sempre
- * (Fluxo 6): nunca cobrar antes do trabalho estar de fato feito.
+ * Dispara o pipeline assíncrono de geração de foto (Fluxo 15, passo 1) —
+ * mesmo desenho do Fluxo 13 (vídeo, `video-pipeline-trigger.ts`), reaproveitado
+ * para `stories`/`carousel`/`thumbnail`. Cobrança em créditos por rodada
+ * (não por candidato) — `related_pipeline_run_id` (idempotente) já garante
+ * 1 cobrança por rodada, mesmo padrão do vídeo.
  */
-export async function triggerVideoGeneration(
-  params: TriggerVideoGenerationParams,
-): Promise<TriggerVideoGenerationResult> {
+export async function triggerPhotoGeneration(
+  params: TriggerPhotoGenerationParams,
+): Promise<TriggerPhotoGenerationResult> {
   const contentPieceRepository = new ContentPieceRepository(params.db);
   const pipelineRunRepository = new PipelineRunRepository(params.db);
 
   await ensureSufficientCredits({
     serviceRoleDb: params.serviceRoleDb,
     organizationId: params.organizationId,
-    triggerReason: VIDEO_GENERATION_TRIGGER_REASON,
+    triggerReason: IMAGE_GENERATION_TRIGGER_REASON,
     tier: params.tier,
   });
 
@@ -73,6 +66,7 @@ export async function triggerVideoGeneration(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-ayon-webhook-secret": webhookSecret },
       body: JSON.stringify({
+        kind: "photo",
         contentPieceId: params.contentPieceId,
         campaignId: params.campaignId,
         pipelineRunId: pipelineRun.id,

@@ -90,6 +90,11 @@ export interface Database {
           niche: string | null;
           provider_tier: ProviderTier | null;
           status: BrandStatus;
+          logo_storage_path: string | null;
+          primary_color_hex: string | null;
+          secondary_color_hex: string | null;
+          font_family: string | null;
+          visual_style: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -102,6 +107,11 @@ export interface Database {
           niche?: string | null;
           provider_tier?: ProviderTier | null;
           status?: BrandStatus;
+          logo_storage_path?: string | null;
+          primary_color_hex?: string | null;
+          secondary_color_hex?: string | null;
+          font_family?: string | null;
+          visual_style?: string | null;
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["brands"]["Insert"]>;
@@ -381,6 +391,7 @@ export interface Database {
           title: string;
           strategy_summary: Record<string, unknown> | null;
           status: CampaignStatus;
+          visual_brief: Record<string, unknown> | null;
           created_by: string | null;
           created_at: string;
         };
@@ -392,6 +403,7 @@ export interface Database {
           title: string;
           strategy_summary?: Record<string, unknown> | null;
           status?: CampaignStatus;
+          visual_brief?: Record<string, unknown> | null;
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["campaigns"]["Insert"]>;
@@ -543,6 +555,7 @@ export interface Database {
           script: string | null;
           brand_rationale: string | null;
           status: ContentPieceStatus;
+          selected_version_id: string | null;
           approved_by: string | null;
           approved_at: string | null;
           created_at: string;
@@ -557,6 +570,7 @@ export interface Database {
           script?: string | null;
           brand_rationale?: string | null;
           status?: ContentPieceStatus;
+          selected_version_id?: string | null;
           approved_by?: string | null;
           approved_at?: string | null;
         };
@@ -590,6 +604,9 @@ export interface Database {
           engine: PipelineRunEngine;
           n8n_execution_id: string | null;
           status: PipelineRunStatus;
+          stage: string | null;
+          progress_percent: number | null;
+          estimated_remaining_seconds: number | null;
           error: string | null;
           started_at: string;
           finished_at: string | null;
@@ -601,6 +618,9 @@ export interface Database {
           engine: PipelineRunEngine;
           n8n_execution_id?: string | null;
           status?: PipelineRunStatus;
+          stage?: string | null;
+          progress_percent?: number | null;
+          estimated_remaining_seconds?: number | null;
           error?: string | null;
           finished_at?: string | null;
         };

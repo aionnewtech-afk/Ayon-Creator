@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProviderTier } from "@ayon/types";
-import { resolveVoiceProvider } from "../providers/provider-gateway";
-import type { CaptionCue } from "../providers/voice-provider";
+import { resolveLlmProvider, resolveVoiceProvider } from "../providers/provider-gateway";
+import { BrandBrainRepository } from "../repositories/brand-brain.repository";
+import { BrandRepository } from "../repositories/brand.repository";
+import { CampaignRepository } from "../repositories/campaign.repository";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
+import { selectBrandVoice } from "./select-brand-voice";
 
 const CONTENT_OUTPUT_BUCKET = "content-output";
 /** Tempo suficiente para as etapas seguintes (cenas + composição) ainda buscarem o áudio pela URL. */
@@ -22,7 +25,6 @@ export interface NarrateVideoContentPieceParams {
 export interface NarrateVideoContentPieceResult {
   audioUrl: string;
   durationMs: number;
-  captionCues: CaptionCue[];
   voiceProviderKey: string;
 }
 
@@ -33,6 +35,13 @@ export interface NarrateVideoContentPieceResult {
  * o áudio no bucket `content-output` e devolve uma signed URL, porque o
  * bucket é privado e o Video Render Provider precisa buscar o arquivo por
  * URL (architecture.md §3.5.1).
+ *
+ * ★ Missão 11 (arch. §14.3) — a voz não é mais sempre a padrão do
+ * fornecedor: `brand_brain_profiles.default_voice_ref` é lido e repassado
+ * como `voiceRef`; quando ainda não existe (1ª geração da marca), o Asset
+ * Engine escolhe uma voz do catálogo curado via LLM Provider e persiste a
+ * escolha para as gerações seguintes reaproveitarem — nunca chama o LLM de
+ * novo depois disso, a não ser que o usuário sobrescreva manualmente.
  */
 export async function narrateVideoContentPiece(
   params: NarrateVideoContentPieceParams,
@@ -43,8 +52,10 @@ export async function narrateVideoContentPiece(
     throw new Error(`content_piece ${params.contentPieceId} não tem script para narrar.`);
   }
 
+  const voiceRef = await resolveVoiceRef(params);
+
   const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
-  const result = await voiceProvider.synthesizeVoice({ script: piece.script });
+  const result = await voiceProvider.synthesizeVoice({ script: piece.script, voiceRef });
 
   const audioBuffer = Buffer.from(result.audioBase64, "base64");
   const storagePath = `${params.organizationId}/${params.campaignId}/${params.contentPieceId}-narration.mp3`;
@@ -62,7 +73,41 @@ export async function narrateVideoContentPiece(
   return {
     audioUrl: signed.signedUrl,
     durationMs: result.durationMs,
-    captionCues: result.captionCues,
     voiceProviderKey: result.providerKey,
   };
 }
+
+/**
+ * `default_voice_ref` sempre vence quando já definido — seja porque o
+ * usuário sobrescreveu manualmente (ux-design.md §4.12), seja porque uma
+ * geração anterior da marca já escolheu e persistiu. Só cai na seleção
+ * automática (LLM Provider + catálogo curado) na 1ª geração de vídeo/foto
+ * da marca.
+ */
+async function resolveVoiceRef(params: NarrateVideoContentPieceParams): Promise<string> {
+  const campaignRepository = new CampaignRepository(params.db);
+  const campaign = await campaignRepository.findById(params.campaignId);
+  if (!campaign) return DEFAULT_VOICE_FALLBACK;
+
+  const brandBrainRepository = new BrandBrainRepository(params.db);
+  const brandBrain = await brandBrainRepository.findByBrandId(campaign.brand_id);
+  if (brandBrain?.default_voice_ref) return brandBrain.default_voice_ref;
+
+  const brandRepository = new BrandRepository(params.db);
+  const brand = await brandRepository.findById(campaign.brand_id);
+
+  const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier);
+  const selectedVoiceId = await selectBrandVoice({
+    llmProvider,
+    niche: brand?.niche ?? null,
+    toneOfVoice: brandBrain?.tone_of_voice ?? null,
+    targetAudience: brandBrain?.target_audience ?? null,
+    visualStyle: brand?.visual_style ?? null,
+  });
+
+  await brandBrainRepository.upsertByBrandId(campaign.brand_id, { default_voice_ref: selectedVoiceId });
+
+  return selectedVoiceId;
+}
+
+const DEFAULT_VOICE_FALLBACK = "21m00Tcm4TlvDq8ikWAM";

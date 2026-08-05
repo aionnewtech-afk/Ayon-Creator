@@ -2,6 +2,27 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.12.0] — 2026-08-05
+
+### Adicionado
+
+- **Missão 11 — Refinamento da experiência de geração de conteúdo**: sem novos formatos, o pipeline existente (vídeo, e agora também stories/thumbnail/carrossel) passa a produzir conteúdo com qualidade de agência antes de investir em avatar (HeyGen).
+  - **Identidade visual como ativo permanente**: `brands` ganha `logo_storage_path`, `primary_color_hex`, `secondary_color_hex`, `font_family`, `visual_style` — configurados uma vez em Perfil da Marca, aplicados automaticamente a todo conteúdo visual gerado depois. Sem logo cadastrada, o layout se adapta sozinho (nunca deixa espaço vazio reservado).
+  - **Legenda removida do vídeo** (decisão explícita do dono do produto): `VoiceProvider`/`VideoRenderProvider` perdem o contrato de `captionCues`; a legenda textual do pacote (formato "Legenda", texto gerado por LLM) não é afetada.
+  - **Seleção automática de voz por marca**: o Asset Engine escolhe a voz mais adequada (catálogo curado, 7 vozes) considerando nicho/público/tom da marca, persistida em `brand_brain_profiles.default_voice_ref`, que continua servindo de override manual.
+  - **Seleção de cena por trecho do roteiro**: o roteiro é segmentado (LLM) em trechos com termo de busca próprio — cada trecho busca sua cena específica no banco de vídeo, com deduplicação entre trechos, em vez de uma única busca genérica repetida.
+  - **Stories/thumbnail/carrossel ganham geração automática** (`production_mode: "licensed_stock_photo"`): foto de banco licenciado (Pexels) composta com identidade visual da marca via Shotstack (timeline em camadas — não o asset `html`, descontinuado e nunca capaz de imagem). Múltiplas opções por rodada quando o tier permite (1/2/3 conforme econômico/balanceado/premium), usuário escolhe; identidade visual consistente entre todas as peças de uma campanha (`campaigns.visual_brief`, resolvido uma vez, reaproveitado pelas demais peças). Upload manual continua disponível como alternativa, sempre visível.
+  - **Progresso granular**: `pipeline_runs` ganha `stage`/`progress_percent`/`estimated_remaining_seconds`; a UI mostra etapa atual ("Gerando narração...", "Buscando cenas...", "Renderizando...") com barra aproximada e ETA.
+  - **Player melhor**: baixar, copiar link, compartilhar (Web Share API com fallback de copiar link) — para vídeo e para foto.
+  - **Migration `0019_asset_engine_refinement.sql`**: campos acima + `content_pieces.selected_version_id` (seleção de versão) + `production_mode` aceitando `licensed_stock_photo` + `credit_pricing` seedado para `image_generation`.
+
+### Corrigido durante a implementação (achados reais)
+
+- **`stories`/`carousel`/`thumbnail` continuavam com `production_mode: "own_media"`** em campanhas novas — `initialize-campaign-content-pieces.ts` nunca foi atualizado para a Missão 11, resquício da Missão 9. O botão "Gerar automaticamente" nunca aparecia. Encontrado ao validar a UI com uma campanha real; corrigido.
+- **Seleção de cena sem contexto de destino gerava clipes de estoque desalinhados**: um trecho de fechamento do roteiro sem menção a lugar concreto ("a gente cuida de cada detalhe") produzia buscas genéricas ("planejamento de viagem"), trazendo um clipe com um cartão escrito "USA" numa campanha brasileira. Corrigido injetando destino/nicho da campanha no prompt de segmentação.
+- **Vídeo podia exceder o limite de tamanho do Supabase Storage**: cenas de água/cachoeira produziram um MP4 acima do limite do projeto (variável, dependente do bitrate dos clipes sorteados a cada tentativa — `quality: "medium"` sozinho não foi suficiente nem confiável). Corrigido com `resolution: "sd"` no Shotstack, com folga para qualquer combinação de cenas.
+- Ver [docs/changelog.md](docs/changelog.md) (entrada v2.28) para o relato completo da validação com 5 vídeos reais.
+
 ## [0.11.0] — 2026-08-05
 
 ### Adicionado

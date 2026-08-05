@@ -2,9 +2,14 @@ import type { MediaCandidate, MediaProvider, MediaSearchRequest, MediaSearchResu
 
 /**
  * Adapter concreto do Media Provider (architecture.md §5, §3.5.1) para o
- * Pexels — Missão 9, Etapa 1. Único arquivo do monorepo que importa a API do
- * Pexels; trocar de fornecedor (ex.: Storyblocks) nunca exige mudar quem
- * chama `MediaProvider`, só o resultado da resolução em provider-gateway.ts.
+ * Pexels — Missão 9, Etapa 1 (vídeo) e Missão 11 (foto, arch. §14.4). Único
+ * arquivo do monorepo que importa a API do Pexels; trocar de fornecedor
+ * (ex.: Storyblocks) nunca exige mudar quem chama `MediaProvider`, só o
+ * resultado da resolução em provider-gateway.ts.
+ *
+ * ★ Missão 11 — a API de fotos do Pexels vive numa base de host diferente
+ * da de vídeos (`api.pexels.com/v1` vs. `api.pexels.com/videos`), mesma
+ * credencial (`PEXELS_API_KEY`).
  */
 export class PexelsMediaProvider implements MediaProvider {
   constructor(
@@ -19,7 +24,7 @@ export class PexelsMediaProvider implements MediaProvider {
       per_page: String(request.perPage ?? 5),
     });
 
-    const response = await fetch(`${PEXELS_API_BASE}/search?${params.toString()}`, {
+    const response = await fetch(`${PEXELS_VIDEO_API_BASE}/search?${params.toString()}`, {
       headers: { Authorization: this.apiKey },
     });
 
@@ -28,16 +33,16 @@ export class PexelsMediaProvider implements MediaProvider {
       throw new Error(`Pexels searchMedia falhou (${response.status}): ${errorBody}`);
     }
 
-    const payload = (await response.json()) as PexelsSearchResponse;
+    const payload = (await response.json()) as PexelsVideoSearchResponse;
 
     return {
-      candidates: payload.videos.map((video) => toMediaCandidate(video, this.providerKey)),
+      candidates: payload.videos.map((video) => toVideoCandidate(video, this.providerKey)),
       providerKey: this.providerKey,
     };
   }
 
   async fetchMedia(id: string): Promise<MediaCandidate> {
-    const response = await fetch(`${PEXELS_API_BASE}/videos/${id}`, {
+    const response = await fetch(`${PEXELS_VIDEO_API_BASE}/videos/${id}`, {
       headers: { Authorization: this.apiKey },
     });
 
@@ -47,11 +52,36 @@ export class PexelsMediaProvider implements MediaProvider {
     }
 
     const video = (await response.json()) as PexelsVideo;
-    return toMediaCandidate(video, this.providerKey);
+    return toVideoCandidate(video, this.providerKey);
+  }
+
+  async searchPhotos(request: MediaSearchRequest): Promise<MediaSearchResult> {
+    const params = new URLSearchParams({
+      query: request.query,
+      orientation: request.orientation ?? "portrait",
+      per_page: String(request.perPage ?? 5),
+    });
+
+    const response = await fetch(`${PEXELS_PHOTO_API_BASE}/search?${params.toString()}`, {
+      headers: { Authorization: this.apiKey },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(`Pexels searchPhotos falhou (${response.status}): ${errorBody}`);
+    }
+
+    const payload = (await response.json()) as PexelsPhotoSearchResponse;
+
+    return {
+      candidates: payload.photos.map((photo) => toPhotoCandidate(photo, this.providerKey)),
+      providerKey: this.providerKey,
+    };
   }
 }
 
-const PEXELS_API_BASE = "https://api.pexels.com/videos";
+const PEXELS_VIDEO_API_BASE = "https://api.pexels.com/videos";
+const PEXELS_PHOTO_API_BASE = "https://api.pexels.com/v1";
 
 interface PexelsVideoFile {
   link: string;
@@ -68,8 +98,19 @@ interface PexelsVideo {
   video_files: PexelsVideoFile[];
 }
 
-interface PexelsSearchResponse {
+interface PexelsVideoSearchResponse {
   videos: PexelsVideo[];
+}
+
+interface PexelsPhoto {
+  id: number;
+  width: number;
+  height: number;
+  src: { original: string; large2x: string; large: string; medium: string; portrait: string; landscape: string };
+}
+
+interface PexelsPhotoSearchResponse {
+  photos: PexelsPhoto[];
 }
 
 /** Prioriza HD mp4; cai para o primeiro mp4 disponível, depois para qualquer arquivo. */
@@ -81,7 +122,7 @@ function pickBestVideoFile(files: PexelsVideoFile[]): PexelsVideoFile {
   return chosen;
 }
 
-function toMediaCandidate(video: PexelsVideo, providerKey: string): MediaCandidate {
+function toVideoCandidate(video: PexelsVideo, providerKey: string): MediaCandidate {
   const file = pickBestVideoFile(video.video_files);
   return {
     id: String(video.id),
@@ -90,6 +131,17 @@ function toMediaCandidate(video: PexelsVideo, providerKey: string): MediaCandida
     width: file.width,
     height: file.height,
     durationSeconds: video.duration,
+    providerKey,
+  };
+}
+
+function toPhotoCandidate(photo: PexelsPhoto, providerKey: string): MediaCandidate {
+  return {
+    id: String(photo.id),
+    previewUrl: photo.src.medium,
+    downloadUrl: photo.src.large2x,
+    width: photo.width,
+    height: photo.height,
     providerKey,
   };
 }

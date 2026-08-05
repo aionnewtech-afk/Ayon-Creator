@@ -11,6 +11,7 @@ import {
   InsufficientCreditsError,
   LearningSignalRepository,
   N8nDispatchError,
+  PipelineRunRepository,
   ensureSufficientCredits,
   generateTextPiece,
   hasMinimumRole,
@@ -18,6 +19,7 @@ import {
   learnedPreferencesTextFromProfile,
   logger,
   recordConsumption,
+  triggerPhotoGeneration,
   triggerVideoGeneration,
 } from "@ayon/core";
 import { buildContentPackage, PackageNotReadyError } from "@ayon/core/src/asset-engine/build-content-package";
@@ -44,6 +46,14 @@ export interface ContentPieceView {
   status: ContentPieceStatus;
   /** Signed URL da última content_version, quando existir (own_media enviado ou vídeo já gerado — Missão 9). */
   mediaUrl?: string;
+  /** ★ Missão 11 (arch. §14.4.2) — todas as opções da rodada mais recente, quando `licensed_stock_photo` gerou mais de 1 candidato. Vazio/ausente para todo outro caso (comportamento de sempre, um preview único). */
+  mediaOptions?: { versionId: string; mediaUrl: string }[];
+  /** ★ Missão 11 — versão escolhida pelo usuário entre várias opções (`content_pieces.selected_version_id`). */
+  selectedVersionId?: string | null;
+  /** ★ Missão 11 (arch. §14.9) — progresso granular do pipeline assíncrono, só presente enquanto `status === "generating"`. */
+  pipelineStage?: string | null;
+  pipelineProgressPercent?: number | null;
+  pipelineEstimatedRemainingSeconds?: number | null;
 }
 
 export interface ContentPieceActionResult {
@@ -64,13 +74,20 @@ function toView(piece: Database["public"]["Tables"]["content_pieces"]["Row"]): C
     script: piece.script,
     brandRationale: piece.brand_rationale,
     status: piece.status,
+    selectedVersionId: piece.selected_version_id,
   };
 }
 
 /**
- * Mesmo que `toView`, mas também assina a URL da última `content_version`
- * quando existir — usado onde a UI precisa mostrar o preview (upload manual
- * já enviado, ou vídeo gerado automaticamente, Missão 9).
+ * Mesmo que `toView`, mas também assina a URL da mídia — usado onde a UI
+ * precisa mostrar o preview (upload manual já enviado, vídeo gerado
+ * automaticamente — Missão 9, ou foto gerada automaticamente — Missão 11).
+ *
+ * ★ Missão 11 (arch. §14.4.2): quando existe mais de 1 `content_versions` e
+ * nenhuma ainda foi escolhida (`selected_version_id` nulo), assina a URL de
+ * **todas** as opções (`mediaOptions`) para a grade de escolha — `mediaUrl`
+ * continua refletendo só a versão escolhida (ou a mais recente, comportamento
+ * de sempre) quando há apenas 1 opção ou já houve escolha.
  */
 async function toViewWithMedia(
   db: Awaited<ReturnType<typeof createClient>>,
@@ -79,12 +96,40 @@ async function toViewWithMedia(
   const view = toView(piece);
   if (piece.production_mode === "text_only") return view;
 
-  const contentVersionRepository = new ContentVersionRepository(db);
-  const latest = await contentVersionRepository.findLatestByContentPieceId(piece.id);
-  if (!latest?.output_storage_path) return view;
+  if (piece.status === "generating") {
+    const pipelineRunRepository = new PipelineRunRepository(db);
+    const run = await pipelineRunRepository.findLatestByEntity("content_piece", piece.id);
+    if (run) {
+      view.pipelineStage = run.stage;
+      view.pipelineProgressPercent = run.progress_percent;
+      view.pipelineEstimatedRemainingSeconds = run.estimated_remaining_seconds;
+    }
+  }
 
-  const { data: signed } = await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(latest.output_storage_path, 3600);
-  return { ...view, mediaUrl: signed?.signedUrl };
+  const contentVersionRepository = new ContentVersionRepository(db);
+  const versions = await contentVersionRepository.findByContentPieceId(piece.id);
+  if (versions.length === 0) return view;
+
+  const selected = piece.selected_version_id ? versions.find((v) => v.id === piece.selected_version_id) : undefined;
+  const primary = selected ?? versions[0]!; // versions já vem ordenado por version_number desc (mais recente primeiro)
+
+  const primaryUrl = primary.output_storage_path
+    ? (await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(primary.output_storage_path, 3600)).data?.signedUrl
+    : undefined;
+
+  if (versions.length <= 1 || piece.selected_version_id) {
+    return { ...view, mediaUrl: primaryUrl };
+  }
+
+  const mediaOptions = await Promise.all(
+    versions.map(async (v) => {
+      if (!v.output_storage_path) return null;
+      const { data: signed } = await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(v.output_storage_path, 3600);
+      return signed?.signedUrl ? { versionId: v.id, mediaUrl: signed.signedUrl } : null;
+    }),
+  );
+
+  return { ...view, mediaUrl: primaryUrl, mediaOptions: mediaOptions.filter((o) => o !== null) };
 }
 
 /**
@@ -268,7 +313,6 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
       campaignId: piece.campaign_id,
       tier,
       contentPieceId,
-      searchQuery: campaign.title,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);
@@ -299,6 +343,103 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
     });
     return { ok: false, error: FRIENDLY_ERROR };
   }
+}
+
+/**
+ * Dispara a geração automática de foto (`licensed_stock_photo`, Missão 11,
+ * Fluxo 15) para `stories`/`carousel`/`thumbnail` — mesmo padrão assíncrono
+ * de `generateVideoContentPieceAction`. Pode ser chamada a qualquer momento,
+ * mesmo com uma versão (upload manual ou geração anterior) já aprovada —
+ * upload manual continua disponível como alternativa (arch. §14.4).
+ */
+export async function generatePhotoContentPieceAction(contentPieceId: string): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode gerar imagens." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.production_mode !== "licensed_stock_photo") {
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+
+    await triggerPhotoGeneration({
+      db,
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      campaignId: piece.campaign_id,
+      tier,
+      contentPieceId,
+    });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para gerar essa imagem. Compre mais créditos em Configurações.",
+      };
+    }
+    if (error instanceof N8nDispatchError) {
+      logger.error("asset_engine.photo_dispatch_failed", { contentPieceId, reason: error.message });
+      return { ok: false, error: "Não consegui iniciar a geração da imagem agora. Tenta de novo em instantes?" };
+    }
+    logger.error("asset_engine.photo_generate_failed", {
+      contentPieceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+/**
+ * Escolhe uma opção entre as várias candidatas geradas na mesma rodada
+ * (Missão 11, arch. §14.4.2) — grava `content_pieces.selected_version_id`,
+ * essa é a versão usada no pacote final. Nunca gera nova cobrança (as
+ * opções já foram cobradas 1x por rodada, não por candidato).
+ */
+export async function selectContentPieceVersionAction(
+  contentPieceId: string,
+  versionId: string,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode escolher a versão." };
+  }
+
+  const db = await createClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+  const contentVersionRepository = new ContentVersionRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece) return { ok: false, error: FRIENDLY_ERROR };
+
+  const versions = await contentVersionRepository.findByContentPieceId(contentPieceId);
+  if (!versions.some((v) => v.id === versionId)) return { ok: false, error: FRIENDLY_ERROR };
+
+  const updated = await contentPieceRepository.update(contentPieceId, { selected_version_id: versionId });
+
+  revalidatePath("/criar-campanha");
+  return { ok: true, contentPiece: await toViewWithMedia(db, updated) };
 }
 
 /**

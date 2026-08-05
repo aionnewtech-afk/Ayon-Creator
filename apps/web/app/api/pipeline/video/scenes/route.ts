@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { logger, selectVideoScenes } from "@ayon/core";
+import { logger, markPipelineStage, selectVideoScenes } from "@ayon/core";
 import { InvalidN8nWebhookSecretError, verifyN8nWebhookSecret } from "@ayon/core/src/shared/verify-n8n-webhook-secret";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -19,17 +19,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const body = await request.json().catch(() => null);
-  if (!body?.contentPieceId || !body?.tier || !body?.totalDurationMs || !body?.searchQuery) {
+  if (!body?.contentPieceId || !body?.campaignId || !body?.tier || !body?.totalDurationMs || !body?.pipelineRunId) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
 
   try {
     const serviceRoleDb = createServiceRoleClient();
+    await markPipelineStage(serviceRoleDb, body.pipelineRunId, "video", "selecting_scenes");
     const result = await selectVideoScenes({
+      db: serviceRoleDb,
       serviceRoleDb,
       tier: body.tier,
       totalDurationMs: body.totalDurationMs,
-      searchQuery: body.searchQuery,
+      campaignId: body.campaignId,
+      contentPieceId: body.contentPieceId,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

@@ -1,31 +1,27 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@ayon/types";
-import { triggerVideoGeneration } from "./video-pipeline-trigger";
+import { triggerPhotoGeneration } from "./photo-pipeline-trigger";
 
 /**
- * Validação real de ponta a ponta do Fluxo 13 **via n8n de verdade**
- * (não chamando as funções internas diretamente, como em
- * `video-pipeline-real.test.ts`) — dispara `triggerVideoGeneration`, que
- * chama o webhook do n8n; o workflow "Ayon Creator - Fluxo 13 (Pipeline de
- * Video)" processa narrate → scenes → render → completion de forma
- * assíncrona; este teste faz polling em `pipeline_runs`/`content_pieces`
- * até ver o resultado final. Requer o container `ayon-creator-n8n` rodando
- * (`docker compose --env-file n8n/.env.local -f n8n/docker-compose.yml up -d`)
- * e o servidor Next.js local (`pnpm dev`) — ambos alcançáveis a partir do
- * container via `host.docker.internal`.
+ * Validação real de ponta a ponta do Fluxo 15 **via n8n de verdade** (mesmo
+ * padrão de `video-pipeline-trigger-real.test.ts`) — dispara
+ * `triggerPhotoGeneration`, que chama o webhook do n8n com `kind: "photo"`;
+ * o nó "É pipeline de foto?" roteia para Photo Select → Photo Compose →
+ * webhook de conclusão. Requer o container `ayon-creator-n8n` e o servidor
+ * Next.js local rodando.
  */
 const hasAllEnv =
-  process.env.ELEVENLABS_API_KEY &&
   process.env.PEXELS_API_KEY &&
   process.env.SHOTSTACK_API_KEY &&
   process.env.SHOTSTACK_HOST &&
+  process.env.ANTHROPIC_API_KEY &&
   process.env.N8N_WEBHOOK_URL &&
   process.env.N8N_WEBHOOK_SECRET &&
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → completion", () => {
+describe.skipIf(!hasAllEnv)("Fluxo 15 via n8n real — trigger → workflow → completion", () => {
   let db: SupabaseClient<Database>;
   let organizationId: string;
   let brandId: string;
@@ -41,7 +37,7 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
 
     const { data: org, error: orgError } = await db
       .from("organizations")
-      .insert({ name: "Missão 9 n8n Test", slug: `missao-9-n8n-test-${suffix}` })
+      .insert({ name: "Missão 11 n8n Photo Test", slug: `missao-11-n8n-photo-test-${suffix}` })
       .select()
       .single();
     if (orgError || !org) throw orgError ?? new Error("organização de teste não criada");
@@ -49,7 +45,7 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
 
     const { data: brand, error: brandError } = await db
       .from("brands")
-      .insert({ organization_id: organizationId, name: "Marca de Teste — n8n" })
+      .insert({ organization_id: organizationId, name: "Marca de Teste — n8n Foto", niche: "turismo de serra" })
       .select()
       .single();
     if (brandError || !brand) throw brandError ?? new Error("marca de teste não criada");
@@ -79,7 +75,7 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
       .insert({
         brand_id: brandId,
         intelligence_hub_session_id: session.id,
-        title: "cidade à noite",
+        title: "Conheça Gramado na Serra Gaúcha",
         status: "generating",
       })
       .select()
@@ -91,10 +87,9 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
       .from("content_pieces")
       .insert({
         campaign_id: campaignId,
-        format: "video",
-        production_mode: "licensed_stock_video",
-        is_primary: true,
-        script: "A cidade nunca dorme. Descubra como a Ayon Creator transforma sua marca em movimento.",
+        format: "thumbnail",
+        production_mode: "licensed_stock_photo",
+        is_primary: false,
       })
       .select()
       .single();
@@ -123,9 +118,9 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
   }, 30_000);
 
   it(
-    "dispara via n8n real e chega a ready_for_review com vídeo + crédito debitado",
+    "dispara via n8n real e chega a ready_for_review com foto + crédito debitado",
     async () => {
-      const { pipelineRunId } = await triggerVideoGeneration({
+      const { pipelineRunId } = await triggerPhotoGeneration({
         db,
         serviceRoleDb: db,
         organizationId,
@@ -135,31 +130,28 @@ describe.skipIf(!hasAllEnv)("Fluxo 13 via n8n real — trigger → workflow → 
       });
       expect(pipelineRunId).toBeTruthy();
 
-      const finalRun = await pollUntilTerminal(db, pipelineRunId, 4 * 60_000);
+      const finalRun = await pollUntilTerminal(db, pipelineRunId, 3 * 60_000);
       expect(finalRun.status).toBe("completed");
       expect(finalRun.error).toBeNull();
 
       const { data: piece } = await db.from("content_pieces").select("*").eq("id", contentPieceId).single();
       expect(piece?.status).toBe("ready_for_review");
 
-      const { data: version } = await db
+      const { data: versions } = await db
         .from("content_versions")
         .select("*")
-        .eq("content_piece_id", contentPieceId)
-        .single();
-      expect(version?.output_storage_path).toBe(`${organizationId}/${campaignId}/${contentPieceId}-video.mp4`);
-      expect((version?.generation_metadata as Record<string, unknown> | null)?.video_render_provider_key).toBe(
-        "shotstack",
-      );
+        .eq("content_piece_id", contentPieceId);
+      expect(versions?.length).toBeGreaterThan(0);
+      expect(versions?.[0]?.output_storage_path).toMatch(new RegExp(`^${organizationId}/${campaignId}/${contentPieceId}-option-\\d+\\.jpg$`));
 
       const { data: ledgerRows } = await db
         .from("credit_ledger")
         .select("*")
         .eq("related_pipeline_run_id", pipelineRunId);
       expect(ledgerRows).toHaveLength(1);
-      expect(ledgerRows?.[0]?.amount).toBe(-15);
+      expect(ledgerRows?.[0]?.amount).toBe(-5); // credit_pricing.image_generation, tier economico
     },
-    5 * 60_000,
+    4 * 60_000,
   );
 });
 

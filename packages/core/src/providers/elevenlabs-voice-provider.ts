@@ -1,15 +1,18 @@
-import type { CaptionCue, VoiceProvider, VoiceSynthesisRequest, VoiceSynthesisResult } from "./voice-provider";
+import type { VoiceProvider, VoiceSettings, VoiceSynthesisRequest, VoiceSynthesisResult } from "./voice-provider";
 
 /**
  * Adapter concreto do Voice Provider (architecture.md §5, §3.5.1) para o
- * ElevenLabs — Missão 9, Etapa 1. Único arquivo do monorepo que importa a
- * API do ElevenLabs; trocar de fornecedor nunca exige mudar quem chama
- * `VoiceProvider`, só o resultado da resolução em provider-gateway.ts.
+ * ElevenLabs — Missão 9, Etapa 1, revisado na Missão 11 (arch. §14.2/§14.3).
+ * Único arquivo do monorepo que importa a API do ElevenLabs; trocar de
+ * fornecedor nunca exige mudar quem chama `VoiceProvider`, só o resultado da
+ * resolução em provider-gateway.ts.
  *
- * Usa o endpoint `/with-timestamps`, não o endpoint simples de
- * text-to-speech — a marcação de tempo por caractere que ele devolve é o
- * mecanismo de legenda já resolvido em architecture.md §3.5.1 (revisão 26):
- * nenhuma capacidade de transcrição separada é necessária.
+ * ★ Missão 11 — continua usando o endpoint `/with-timestamps` (não o
+ * text-to-speech simples), mas só pela duração total exata que ele devolve
+ * (`character_end_times_seconds.at(-1)`) — a marcação por caractere em si é
+ * descartada, porque a legenda que a consumia foi removida (arch. §14.2). É
+ * a forma mais simples de continuar tendo uma duração confiável sem somar
+ * uma dependência nova de parsing de áudio só para trocar de endpoint.
  */
 export class ElevenLabsVoiceProvider implements VoiceProvider {
   constructor(
@@ -29,6 +32,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       body: JSON.stringify({
         text: request.script,
         model_id: DEFAULT_MODEL_ID,
+        voice_settings: toElevenLabsVoiceSettings(request.voiceSettings),
       }),
     });
 
@@ -38,15 +42,11 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     }
 
     const payload = (await response.json()) as ElevenLabsTimestampResponse;
-    const { alignment } = payload;
-
-    const lastEndSeconds = alignment.character_end_times_seconds.at(-1) ?? 0;
-    const durationMs = Math.round(lastEndSeconds * 1000);
+    const lastEndSeconds = payload.alignment.character_end_times_seconds.at(-1) ?? 0;
 
     return {
       audioBase64: payload.audio_base64,
-      durationMs,
-      captionCues: buildCaptionCues(alignment),
+      durationMs: Math.round(lastEndSeconds * 1000),
       providerKey: this.providerKey,
     };
   }
@@ -54,62 +54,32 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
 
 const ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
-/** Voz pré-fabricada "Rachel" — usada quando a marca ainda não definiu `default_voice_ref`. */
+/** Voz pré-fabricada "Rachel" — usada só se a resolução de voz da marca (arch. §14.3) falhar por algum motivo; nunca o caminho esperado em produção. */
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
-/** Tamanho aproximado (chars) de cada cue de legenda — nunca 1 cue por palavra/caractere. */
-const MAX_CUE_CHARACTERS = 40;
+
+/** Defaults do próprio ElevenLabs quando a marca não tem `voiceSettings` explícito — nunca omitir o campo, o fornecedor exige a estrutura completa. */
+const DEFAULT_VOICE_SETTINGS: Required<VoiceSettings> = {
+  stability: 0.5,
+  similarityBoost: 0.75,
+  style: 0,
+  useSpeakerBoost: true,
+  speed: 1,
+};
+
+function toElevenLabsVoiceSettings(settings: VoiceSettings | undefined) {
+  const resolved = { ...DEFAULT_VOICE_SETTINGS, ...settings };
+  return {
+    stability: resolved.stability,
+    similarity_boost: resolved.similarityBoost,
+    style: resolved.style,
+    use_speaker_boost: resolved.useSpeakerBoost,
+    speed: resolved.speed,
+  };
+}
 
 interface ElevenLabsTimestampResponse {
   audio_base64: string;
   alignment: {
-    characters: string[];
-    character_start_times_seconds: number[];
     character_end_times_seconds: number[];
   };
-}
-
-/**
- * Agrupa a marcação de tempo por caractere em cues de legenda legíveis
- * (architecture.md §3.5.1) — quebra um novo cue no primeiro espaço depois de
- * `MAX_CUE_CHARACTERS`, para nunca cortar uma palavra no meio.
- */
-function buildCaptionCues(alignment: ElevenLabsTimestampResponse["alignment"]): CaptionCue[] {
-  const cues: CaptionCue[] = [];
-  let currentText = "";
-  let cueStartSeconds: number | null = null;
-  let cueEndSeconds = 0;
-
-  for (let i = 0; i < alignment.characters.length; i++) {
-    const char = alignment.characters[i];
-    const startSeconds = alignment.character_start_times_seconds[i];
-    const endSeconds = alignment.character_end_times_seconds[i];
-    if (char === undefined || startSeconds === undefined || endSeconds === undefined) continue;
-
-    if (cueStartSeconds === null) cueStartSeconds = startSeconds;
-    currentText += char;
-    cueEndSeconds = endSeconds;
-
-    const isLastCharacter = i === alignment.characters.length - 1;
-    const atWordBoundary = char === " " || isLastCharacter;
-
-    if (atWordBoundary && currentText.trim().length >= MAX_CUE_CHARACTERS) {
-      cues.push({
-        text: currentText.trim(),
-        startMs: Math.round(cueStartSeconds * 1000),
-        endMs: Math.round(cueEndSeconds * 1000),
-      });
-      currentText = "";
-      cueStartSeconds = null;
-    }
-  }
-
-  if (currentText.trim().length > 0 && cueStartSeconds !== null) {
-    cues.push({
-      text: currentText.trim(),
-      startMs: Math.round(cueStartSeconds * 1000),
-      endMs: Math.round(cueEndSeconds * 1000),
-    });
-  }
-
-  return cues;
 }

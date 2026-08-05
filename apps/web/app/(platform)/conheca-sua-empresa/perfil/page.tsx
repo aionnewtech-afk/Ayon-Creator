@@ -8,6 +8,9 @@ import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { SynthesisFieldCard } from "../conversa/synthesis-field-card";
 import { updateBrandBrainFieldAction } from "../actions";
+import { IdentityForm } from "./identity-form";
+
+const BRAND_MEDIA_BUCKET = "brand-media";
 
 /**
  * ONB-4 — Perfil da Marca (ux-design.md §3.2): visão persistente e editável
@@ -34,6 +37,11 @@ export default async function PerfilDaMarcaPage() {
   const answers = await answersRepository.findByBrandId(session.brand.id);
   const synthesis = buildOnboardingSynthesis(profile, answers);
 
+  const logoUrl = session.brand.logo_storage_path
+    ? (await db.storage.from(BRAND_MEDIA_BUCKET).createSignedUrl(session.brand.logo_storage_path, 3600)).data
+        ?.signedUrl ?? null
+    : null;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 py-8">
       <div className="space-y-1">
@@ -42,6 +50,15 @@ export default async function PerfilDaMarcaPage() {
           O que a Ayon sabe sobre a empresa até agora — editável a qualquer momento.
         </p>
       </div>
+
+      <IdentityForm
+        logoUrl={logoUrl}
+        primaryColorHex={session.brand.primary_color_hex}
+        secondaryColorHex={session.brand.secondary_color_hex}
+        fontFamily={session.brand.font_family}
+        visualStyle={session.brand.visual_style}
+        voiceId={profile.default_voice_ref}
+      />
 
       <div className="space-y-3">
         {synthesis.map((field) => (

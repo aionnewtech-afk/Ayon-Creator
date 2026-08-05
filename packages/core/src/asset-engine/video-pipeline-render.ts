@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProviderTier } from "@ayon/types";
 import { resolveVideoRenderProvider } from "../providers/provider-gateway";
-import type { VideoRenderCaptionCue, VideoRenderSceneSource } from "../providers/video-render-provider";
+import type { VideoRenderSceneSource } from "../providers/video-render-provider";
+import { BrandRepository } from "../repositories/brand.repository";
+import { CampaignRepository } from "../repositories/campaign.repository";
+import { resolveBrandBranding } from "./resolve-brand-branding";
 
 const CONTENT_OUTPUT_BUCKET = "content-output";
 
@@ -16,7 +19,6 @@ export interface RenderVideoContentPieceParams {
   contentPieceId: string;
   audioUrl: string;
   videoSources: VideoRenderSceneSource[];
-  captionCues: VideoRenderCaptionCue[];
 }
 
 export interface RenderVideoContentPieceResult {
@@ -30,17 +32,26 @@ export interface RenderVideoContentPieceResult {
  * regrava no bucket `content-output` — o pacote de conteúdo nunca depende
  * de uma URL temporária de terceiro (mesmo princípio de `own_media`,
  * Missão 7: tudo que entra no pacote vive no nosso Storage).
+ *
+ * ★ Missão 11 (arch. §14.1/§14.6) — resolve a identidade visual da marca
+ * internamente (nunca recebida de fora, ex. do n8n) e repassa como
+ * `branding` ao provider — mantém o princípio de que só o Asset Engine
+ * conhece `brands`, nunca o Video Render Provider nem o orquestrador.
  */
 export async function renderVideoContentPiece(
   params: RenderVideoContentPieceParams,
 ): Promise<RenderVideoContentPieceResult> {
+  const campaign = await new CampaignRepository(params.db).findById(params.campaignId);
+  const brand = campaign ? await new BrandRepository(params.db).findById(campaign.brand_id) : null;
+  const branding = await resolveBrandBranding(params.db, brand);
+
   const renderProvider = await resolveVideoRenderProvider(params.serviceRoleDb, params.tier);
 
   const result = await renderProvider.composeVideo({
     audioUrl: params.audioUrl,
     videoSources: params.videoSources,
-    captionCues: params.captionCues,
     aspectRatio: "9:16",
+    branding,
   });
 
   const videoResponse = await fetch(result.videoUrl);

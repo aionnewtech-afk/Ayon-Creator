@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { logger, markPipelineStage, renderVideoContentPiece } from "@ayon/core";
+import { logger, markPipelineStage, selectPhotoCandidates } from "@ayon/core";
 import { InvalidN8nWebhookSecretError, verifyN8nWebhookSecret } from "@ayon/core/src/shared/verify-n8n-webhook-secret";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
- * Rota interna acionada pelo n8n (Fluxo 13, passos 3-4) — composição final
- * via Video Render Provider. Mesmo princípio de autenticação/service role de
- * `pipeline/video/narrate`.
+ * Rota interna acionada pelo n8n (Fluxo 15, passo 3) — busca de candidatos
+ * via Media Provider (Pexels Photos). Mesmo princípio de autenticação/
+ * service role de `pipeline/video/narrate`.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -19,34 +19,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const body = await request.json().catch(() => null);
-  if (
-    !body?.contentPieceId ||
-    !body?.organizationId ||
-    !body?.campaignId ||
-    !body?.tier ||
-    !body?.audioUrl ||
-    !Array.isArray(body?.videoSources) ||
-    !body?.pipelineRunId
-  ) {
+  if (!body?.contentPieceId || !body?.campaignId || !body?.tier || !body?.pipelineRunId) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
 
   try {
     const serviceRoleDb = createServiceRoleClient();
-    await markPipelineStage(serviceRoleDb, body.pipelineRunId, "video", "rendering");
-    const result = await renderVideoContentPiece({
+    await markPipelineStage(serviceRoleDb, body.pipelineRunId, "photo", "selecting_photos");
+    const result = await selectPhotoCandidates({
       db: serviceRoleDb,
       serviceRoleDb,
       tier: body.tier,
-      organizationId: body.organizationId,
       campaignId: body.campaignId,
       contentPieceId: body.contentPieceId,
-      audioUrl: body.audioUrl,
-      videoSources: body.videoSources,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    logger.error("pipeline.video.render_failed", {
+    logger.error("pipeline.photo.select_failed", {
       contentPieceId: body.contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

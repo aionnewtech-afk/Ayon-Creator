@@ -1,14 +1,18 @@
 import type {
+  ImageCompositionRequest,
+  ImageCompositionResult,
+  VideoBranding,
   VideoRenderProvider,
   VideoRenderRequest,
   VideoRenderResult,
 } from "./video-render-provider";
 
 /**
- * Adapter concreto do Video Render Provider (architecture.md §5, §3.5.1)
- * para o Shotstack — Missão 9, Etapa 1. Único arquivo do monorepo que
- * importa a API do Shotstack; trocar de fornecedor nunca exige mudar quem
- * chama `VideoRenderProvider`, só o resultado da resolução em
+ * Adapter concreto do Video Render Provider (architecture.md §5, §3.5.1,
+ * §14) para o Shotstack — Missão 9, Etapa 1 (vídeo) + Missão 11 (branding,
+ * sem legenda, composição de imagem — arch. §14.4.1). Único arquivo do
+ * monorepo que importa a API do Shotstack; trocar de fornecedor nunca exige
+ * mudar quem chama `VideoRenderProvider`, só o resultado da resolução em
  * provider-gateway.ts.
  *
  * `host` é a base URL completa, incluindo o estágio (`SHOTSTACK_HOST`, ex.:
@@ -30,29 +34,56 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
   }
 
   async composeVideo(request: VideoRenderRequest): Promise<VideoRenderResult> {
-    const timeline = buildTimeline(request);
+    const timeline = buildVideoTimeline(request);
 
+    const videoUrl = await this.submitAndPoll({
+      timeline,
+      // resolution "sd" + quality "medium" (★ achado real da validação da
+      // Missão 11, task 15): um vídeo de 60s com cenas de água/cachoeira
+      // ultrapassou o limite de tamanho de objeto do Storage do Supabase
+      // (abaixo dos 50MB padrão do plano gratuito — o valor exato não é
+      // exposto pela API). "hd" + quality "medium" sozinho não é confiável:
+      // como cada tentativa reseleciona cenas (segmentScript busca de novo),
+      // o mesmo par de parâmetros produziu ~41MB numa tentativa (sucesso) e
+      // estourou o limite em outra (falha) — o tamanho final depende do
+      // bitrate nativo dos clipes sorteados, não é determinístico. "sd" corta
+      // a contagem de pixels em ~4x, dando folga suficiente para qualquer
+      // combinação de cenas, em vez de depender de acertar um limite exato
+      // que a API do Supabase não expõe.
+      output: { format: "mp4", resolution: "sd", aspectRatio: request.aspectRatio, quality: "medium" },
+    });
+
+    return { videoUrl, providerKey: this.providerKey };
+  }
+
+  async composeImage(request: ImageCompositionRequest): Promise<ImageCompositionResult> {
+    const timeline = buildImageTimeline(request);
+
+    const imageUrl = await this.submitAndPoll({
+      timeline,
+      output: { format: "jpg", size: { width: request.width, height: request.height } },
+    });
+
+    return { imageUrl, providerKey: this.providerKey };
+  }
+
+  private async submitAndPoll(body: Record<string, unknown>): Promise<string> {
     const submitResponse = await fetch(`${this.host}/render`, {
       method: "POST",
       headers: {
         "x-api-key": this.apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        timeline,
-        output: { format: "mp4", resolution: "hd", aspectRatio: request.aspectRatio },
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!submitResponse.ok) {
       const errorBody = await submitResponse.text().catch(() => "");
-      throw new Error(`Shotstack composeVideo (submit) falhou (${submitResponse.status}): ${errorBody}`);
+      throw new Error(`Shotstack render (submit) falhou (${submitResponse.status}): ${errorBody}`);
     }
 
     const submitPayload = (await submitResponse.json()) as ShotstackEnvelope<{ id: string }>;
-    const videoUrl = await this.pollUntilDone(submitPayload.response.id);
-
-    return { videoUrl, providerKey: this.providerKey };
+    return this.pollUntilDone(submitPayload.response.id);
   }
 
   private async pollUntilDone(renderId: string): Promise<string> {
@@ -63,7 +94,7 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
 
       if (!statusResponse.ok) {
         const errorBody = await statusResponse.text().catch(() => "");
-        throw new Error(`Shotstack composeVideo (status) falhou (${statusResponse.status}): ${errorBody}`);
+        throw new Error(`Shotstack render (status) falhou (${statusResponse.status}): ${errorBody}`);
       }
 
       const statusPayload = (await statusResponse.json()) as ShotstackEnvelope<ShotstackRenderStatus>;
@@ -88,6 +119,9 @@ const POLL_INTERVAL_MS = 3000;
 /** ~5 minutos de polling — suficiente para um vídeo curto (peça de campanha), nunca indefinido. */
 const MAX_POLL_ATTEMPTS = 100;
 
+/** Posição/tamanho discretos do clip de logo (arch. §14.1) — canto inferior direito, pequeno, com uma margem da borda. */
+const LOGO_CLIP = { position: "bottomRight", offset: { x: -0.04, y: -0.04 }, scale: 0.12 };
+
 interface ShotstackEnvelope<T> {
   success: boolean;
   message: string;
@@ -101,41 +135,132 @@ interface ShotstackRenderStatus {
   error?: string | null;
 }
 
+/** Fonte customizada (arch. §14.1) declarada 1x no nível da timeline — Shotstack não usa @font-face/webfont, só TTF pré-hospedado. */
+function toFonts(branding: VideoBranding | undefined) {
+  return branding?.fontUrl ? [{ src: branding.fontUrl }] : undefined;
+}
+
+/**
+ * Clip de logo opcional (arch. §14.8, branding adaptativo) — layout nunca
+ * reserva um espaço vazio: o clip simplesmente não existe quando não há
+ * logo, em vez de um placeholder.
+ */
+function buildLogoClip(branding: VideoBranding | undefined, length: number) {
+  if (!branding?.logoUrl) return null;
+  return {
+    asset: { type: "image", src: branding.logoUrl },
+    start: 0,
+    length,
+    ...LOGO_CLIP,
+  };
+}
+
 /**
  * Monta a timeline do Shotstack a partir do contrato de capacidade
- * (architecture.md §3.5.1): 1 track de legenda (um clip `title` por cue) +
- * 1 track de vídeo (cenas em sequência, sem áudio próprio) + 1 soundtrack
- * (narração).
+ * (architecture.md §14.6) — 1 track de branding (logo, quando existir) + 1
+ * track de vídeo (cenas em sequência, sem áudio próprio) + 1 soundtrack
+ * (narração). ★ Missão 11 — sem track de legenda (removida, arch. §14.2).
  */
-function buildTimeline(request: VideoRenderRequest) {
+function buildVideoTimeline(request: VideoRenderRequest) {
+  const totalLength = request.videoSources.reduce((sum, source) => sum + source.lengthSeconds, 0);
+  const logoClip = buildLogoClip(request.branding, totalLength);
+
+  const tracks = [
+    ...(logoClip ? [{ clips: [logoClip] }] : []),
+    {
+      clips: request.videoSources.map((source) => ({
+        asset: { type: "video", src: source.url, volume: 0 },
+        start: source.startSeconds,
+        length: source.lengthSeconds,
+        fit: "cover",
+      })),
+    },
+  ];
+
   return {
     soundtrack: { src: request.audioUrl, effect: "fadeOut" },
     background: "#000000",
-    tracks: [
-      {
-        clips: request.captionCues.map((cue) => ({
-          asset: {
-            type: "title",
-            text: cue.text,
-            style: "subtitle",
-            color: "#ffffff",
-            size: "small",
-            background: "#000000",
-            position: "bottom",
-          },
-          start: cue.startSeconds,
-          length: cue.lengthSeconds,
-        })),
-      },
-      {
-        clips: request.videoSources.map((source) => ({
-          asset: { type: "video", src: source.url, volume: 0 },
-          start: source.startSeconds,
-          length: source.lengthSeconds,
+    fonts: toFonts(request.branding),
+    tracks,
+  };
+}
+
+/**
+ * Timeline de 1 frame (composição de imagem, arch. §14.4.1) — foto de fundo
+ * + título (tipografia/contraste via `title` asset, mesmo mecanismo já
+ * usado e validado no vídeo) + logo opcional. Sem asset `html` (descontinuado
+ * pelo Shotstack, nunca suportou imagem dentro do HTML).
+ */
+const TITLE_SINGLE_LINE_MAX_CHARS = 14;
+
+/**
+ * Achado real de validação: o asset `title` do Shotstack não quebra linha
+ * sozinho (a propriedade `width` do clip não tem efeito sobre ele — só é
+ * respeitada por assets `html`) — títulos maiores que uma linha eram
+ * cortados nas bordas do frame. Corrigido inserindo a quebra manualmente
+ * (`\n`, que o `title` asset respeita), no ponto mais próximo do meio do
+ * texto que caia num espaço entre palavras — nunca no meio de uma palavra.
+ */
+function wrapTitleForShotstack(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length <= TITLE_SINGLE_LINE_MAX_CHARS) return trimmed;
+
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 1) return trimmed;
+
+  let firstLine = words[0]!;
+  let index = 1;
+  while (index < words.length) {
+    const candidate = `${firstLine} ${words[index]}`;
+    if (candidate.length > trimmed.length / 2 + 3) break;
+    firstLine = candidate;
+    index += 1;
+  }
+  const secondLine = words.slice(index).join(" ");
+
+  return secondLine ? `${firstLine}\n${secondLine}` : firstLine;
+}
+
+function buildImageTimeline(request: ImageCompositionRequest) {
+  const length = 1;
+
+  const titleClip = request.title
+    ? {
+        asset: {
+          type: "title",
+          text: wrapTitleForShotstack(request.title),
+          style: "minimal",
+          color: request.branding?.primaryColorHex ?? "#ffffff",
+          background: request.branding?.secondaryColorHex ?? "#000000",
+          size: "small",
+          position: "center",
+        },
+        start: 0,
+        length,
+      }
+    : null;
+
+  const logoClip = buildLogoClip(request.branding, length);
+
+  const tracks = [
+    ...(logoClip ? [{ clips: [logoClip] }] : []),
+    ...(titleClip ? [{ clips: [titleClip] }] : []),
+    {
+      clips: [
+        {
+          asset: { type: "image", src: request.backgroundImageUrl },
+          start: 0,
+          length,
           fit: "cover",
-        })),
-      },
-    ],
+        },
+      ],
+    },
+  ];
+
+  return {
+    background: "#000000",
+    fonts: toFonts(request.branding),
+    tracks,
   };
 }
 

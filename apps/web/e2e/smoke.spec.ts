@@ -11,9 +11,17 @@ import { cleanupSmokeBrand, seedSmokeBrand, type SeededSmokeBrand } from "./supp
  *
  * Fluxo: login → objetivo de campanha → aprovar estratégia → 5 peças de
  * texto geradas → upload de mídia própria nas 3 peças visuais restantes
- * (Thumbnail/Carrossel/Stories, `own_media`) → aprovar as 8 → confirma que
- * a peça de vídeo (`licensed_stock_video`, Missão 9) mostra corretamente o
- * botão "Gerar vídeo automaticamente", sem clicar nele.
+ * (Thumbnail/Carrossel/Stories) → aprovar as 8 → confirma que a peça de
+ * vídeo (`licensed_stock_video`, Missão 9) mostra corretamente o botão
+ * "Gerar vídeo automaticamente", sem clicar nele.
+ *
+ * ★ Missão 11 — Thumbnail/Carrossel/Stories saíram de `own_media` para
+ * `licensed_stock_photo` (geração automática via Fluxo 15, arch. §14.4).
+ * O upload manual continua disponível como alternativa (arch. §14.4) — é
+ * esse caminho, determinístico, que este smoke test continua exercitando;
+ * a geração automática de foto depende de fornecedores externos reais
+ * (Pexels/Shotstack), mesmo motivo pelo qual o vídeo é validado manualmente
+ * (ver parágrafo abaixo).
  *
  * ★ Missão 9 — o pacote final (`content_packages`) exige TODAS as peças
  * aprovadas, inclusive a de vídeo (Fluxo 4: aprovação humana obrigatória
@@ -83,18 +91,24 @@ test.describe("smoke: login → campanha → aprovação → pacote", () => {
       timeout: 15_000,
     });
 
+    // ★ Missão 11 — upload manual continua disponível como alternativa nas 3
+    // peças de foto (arch. §14.4), mesmo agora sendo `licensed_stock_photo`.
+    const photoFormats = ["Thumbnail", "Carrossel", "Stories"];
     const fixtureImage = path.join(__dirname, "fixtures", "test-image.png");
     const fileInputs = page.locator('input[type="file"]');
     const uploadCount = await fileInputs.count();
-    expect(uploadCount).toBe(3); // Thumbnail, Carrossel, Stories (own_media) — Vídeo não usa mais upload manual
+    expect(uploadCount).toBe(3); // Thumbnail, Carrossel, Stories — Vídeo não usa mais upload manual
     for (let i = 0; i < uploadCount; i++) {
       await fileInputs.nth(i).setInputFiles(fixtureImage);
     }
-    await expect(page.getByText("Arquivo enviado — pronto para revisão.")).toHaveCount(3);
+    for (const format of photoFormats) {
+      const section = page.locator("section, div").filter({ hasText: format }).first();
+      await expect(section.getByText("Pronta para revisão").first()).toBeVisible({ timeout: 15_000 });
+    }
 
     const approveButtons = page.getByRole("button", { name: "Aprovar", exact: true });
     const approveCount = await approveButtons.count();
-    expect(approveCount).toBe(8); // 5 peças de texto + 3 own_media (Vídeo fica de fora — ver docstring acima)
+    expect(approveCount).toBe(8); // 5 peças de texto + 3 fotos enviadas manualmente (Vídeo fica de fora — ver docstring acima)
 
     // Locators são consultas vivas — reavaliar "primeiro habilitado" em duas
     // etapas (checar .isEnabled() e só depois clicar num índice separado)

@@ -102,7 +102,8 @@ export type ContentPieceFormat = (typeof CONTENT_PIECE_FORMATS)[number];
 /** Formatos gerados por IA (LLM Provider) no MVP da Missão 7 — os demais exigem upload manual (`own_media`). */
 export const TEXT_ONLY_CONTENT_PIECE_FORMATS = ["caption", "blog_post", "email", "script", "teleprompter"] as const;
 
-export const PRODUCTION_MODES = ["ai_avatar", "licensed_stock_video", "own_media", "hybrid", "text_only"] as const;
+/** `licensed_stock_photo` ★ novo (Missão 11) — stories/carousel/thumbnail gerados automaticamente via banco de fotos licenciadas + composição (arch. §14.4); upload manual (`own_media`) continua disponível como alternativa por peça. */
+export const PRODUCTION_MODES = ["ai_avatar", "licensed_stock_video", "licensed_stock_photo", "own_media", "hybrid", "text_only"] as const;
 export type ProductionMode = (typeof PRODUCTION_MODES)[number];
 
 export const CONTENT_PIECE_STATUSES = [

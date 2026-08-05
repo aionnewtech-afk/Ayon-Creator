@@ -3,6 +3,7 @@ import type { Database } from "@ayon/types";
 
 type BrandRow = Database["public"]["Tables"]["brands"]["Row"];
 type BrandInsert = Database["public"]["Tables"]["brands"]["Insert"];
+type BrandUpdate = Database["public"]["Tables"]["brands"]["Update"];
 
 /**
  * Único ponto de código que fala com a tabela `brands`
@@ -17,6 +18,20 @@ export class BrandRepository {
       .insert(input)
       .select()
       .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async findById(id: string): Promise<BrandRow | null> {
+    const { data, error } = await this.db.from("brands").select("*").eq("id", id).maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async update(id: string, patch: BrandUpdate): Promise<BrandRow> {
+    const { data, error } = await this.db.from("brands").update(patch).eq("id", id).select().single();
 
     if (error) throw error;
     return data;

@@ -4,22 +4,20 @@ import { PexelsMediaProvider } from "./pexels-media-provider";
 import { ShotstackVideoRenderProvider } from "./shotstack-video-render-provider";
 
 /**
- * Validação com chamadas reais dos 3 adapters da Missão 9, Etapa 1 — pedido
- * explícito do dono do produto: "valide cada um com chamadas reais antes de
- * montar o pipeline completo" (docs/changelog.md).
+ * Validação com chamadas reais dos adapters do Asset Engine — pedido
+ * explícito do dono do produto desde a Missão 9: "valide cada um com
+ * chamadas reais antes de montar o pipeline completo" (docs/changelog.md).
+ * Missão 11 (arch. §14) acrescenta a busca de fotos (Pexels) e a composição
+ * de imagem (Shotstack, timeline em camadas — sem asset `html`).
  *
- * NUNCA roda em CI nem no `pnpm test` de qualquer dev sem as 3 chaves reais
+ * NUNCA roda em CI nem no `pnpm test` de qualquer dev sem as chaves reais
  * configuradas — cada teste usa `it.skipIf` para pular (não falhar) quando a
- * env var correspondente está ausente, mesmo espírito de isolamento já usado
- * para `LLM_PROVIDER_MODE=fake` (CONVENTIONS.md §10), mas invertido: aqui
- * queremos o oposto de um fake, então o teste só roda quando a chave real
- * está presente. Rodar manualmente: `pnpm --filter core exec vitest run
- * src/providers/video-providers-real.test.ts`.
+ * env var correspondente está ausente. Rodar manualmente: `pnpm --filter
+ * core exec vitest run src/providers/video-providers-real.test.ts`.
  *
  * O teste do Shotstack usa uma URL de áudio pública de exemplo como
  * substituta da narração real do ElevenLabs — subir o áudio sintetizado para
- * o Storage e gerar a URL final é responsabilidade do pipeline (Fluxo 13),
- * ainda não montado nesta etapa da implementação.
+ * o Storage e gerar a URL final é responsabilidade do pipeline (Fluxo 13).
  */
 const SAMPLE_PUBLIC_AUDIO_URL = "https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/lit.mp3";
 
@@ -28,26 +26,25 @@ const SAMPLE_SCRIPT =
 
 describe("ElevenLabsVoiceProvider (chamada real)", () => {
   it.skipIf(!process.env.ELEVENLABS_API_KEY)(
-    "sintetiza um roteiro curto e devolve áudio + captionCues com timing",
+    "sintetiza um roteiro curto e devolve áudio + duração, com voice_settings customizado",
     async () => {
       const provider = new ElevenLabsVoiceProvider("eleven_multilingual_v2", requireEnv("ELEVENLABS_API_KEY"));
 
       const startedAt = Date.now();
-      const result = await provider.synthesizeVoice({ script: SAMPLE_SCRIPT });
+      const result = await provider.synthesizeVoice({
+        script: SAMPLE_SCRIPT,
+        voiceSettings: { stability: 0.45, similarityBoost: 0.8, style: 0.2, speed: 1.05 },
+      });
       const elapsedMs = Date.now() - startedAt;
 
       expect(result.audioBase64.length).toBeGreaterThan(0);
       expect(result.durationMs).toBeGreaterThan(0);
-      expect(result.captionCues.length).toBeGreaterThan(0);
-      expect(result.captionCues[0]?.text.length).toBeGreaterThan(0);
-      expect(result.captionCues.at(-1)?.endMs).toBeLessThanOrEqual(result.durationMs + 500);
 
       logMetric("ElevenLabs.synthesizeVoice", {
         elapsedMs,
         inputCharacters: SAMPLE_SCRIPT.length,
         outputAudioDurationMs: result.durationMs,
         audioBase64Bytes: Math.round((result.audioBase64.length * 3) / 4),
-        captionCueCount: result.captionCues.length,
         note: "Billing do ElevenLabs é por caractere de entrada (inputCharacters), não por tempo de resposta.",
       });
     },
@@ -85,11 +82,30 @@ describe("PexelsMediaProvider (chamada real)", () => {
     },
     30_000,
   );
+
+  it.skipIf(!process.env.PEXELS_API_KEY)(
+    "★ Missão 11 — busca fotos verticais (searchPhotos)",
+    async () => {
+      const provider = new PexelsMediaProvider("pexels", requireEnv("PEXELS_API_KEY"));
+
+      const startedAt = Date.now();
+      const result = await provider.searchPhotos({ query: "Gramado serra gaúcha", orientation: "portrait", perPage: 3 });
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(result.candidates.length).toBeGreaterThan(0);
+      const first = result.candidates[0];
+      expect(first?.downloadUrl).toMatch(/^https:\/\//);
+      expect(first?.durationSeconds).toBeUndefined();
+
+      logMetric("Pexels.searchPhotos", { elapsedMs, candidateCount: result.candidates.length });
+    },
+    30_000,
+  );
 });
 
 describe("ShotstackVideoRenderProvider (chamada real)", () => {
   it.skipIf(!process.env.SHOTSTACK_API_KEY || !process.env.PEXELS_API_KEY)(
-    "compõe um vídeo curto (cena do Pexels + áudio de exemplo + legenda) e devolve a URL final",
+    "compõe um vídeo curto (cena do Pexels + áudio de exemplo) e devolve a URL final",
     async () => {
       const mediaProvider = new PexelsMediaProvider("pexels", requireEnv("PEXELS_API_KEY"));
       const searchResult = await mediaProvider.searchMedia({ query: "praia pôr do sol", orientation: "portrait", perPage: 1 });
@@ -107,7 +123,6 @@ describe("ShotstackVideoRenderProvider (chamada real)", () => {
       const result = await renderProvider.composeVideo({
         audioUrl: SAMPLE_PUBLIC_AUDIO_URL,
         videoSources: [{ url: scene!.downloadUrl, startSeconds: 0, lengthSeconds: renderedSeconds }],
-        captionCues: [{ text: "Validação Missão 9 — Etapa 1", startSeconds: 0, lengthSeconds: renderedSeconds }],
         aspectRatio: "9:16",
       });
       const elapsedMs = Date.now() - startedAt;
@@ -118,8 +133,39 @@ describe("ShotstackVideoRenderProvider (chamada real)", () => {
       logMetric("Shotstack.composeVideo", {
         elapsedMsSubmitToDone: elapsedMs,
         renderedSeconds,
-        note: "Sandbox (stage): renders com marca d'água, sem custo. Custo de produção é por segundo renderizado, conforme plano contratado — confirmar valor exato no dashboard do Shotstack.",
+        note: "Sandbox (stage): renders com marca d'água, sem custo. Sem legenda embutida (Missão 11) — só cenas + narração.",
       });
+    },
+    5 * 60_000,
+  );
+
+  it.skipIf(!process.env.SHOTSTACK_API_KEY || !process.env.PEXELS_API_KEY)(
+    "★ Missão 11 — compõe uma imagem (foto + título) sem branding, valida o mecanismo de timeline em camadas",
+    async () => {
+      const mediaProvider = new PexelsMediaProvider("pexels", requireEnv("PEXELS_API_KEY"));
+      const searchResult = await mediaProvider.searchPhotos({ query: "Gramado serra gaúcha", orientation: "portrait", perPage: 1 });
+      const photo = searchResult.candidates[0];
+      expect(photo).toBeDefined();
+
+      const renderProvider = new ShotstackVideoRenderProvider(
+        "shotstack",
+        requireEnv("SHOTSTACK_API_KEY"),
+        requireEnv("SHOTSTACK_HOST"),
+      );
+
+      const startedAt = Date.now();
+      const result = await renderProvider.composeImage({
+        backgroundImageUrl: photo!.downloadUrl,
+        title: "Validação Missão 11",
+        width: 1080,
+        height: 1920,
+      });
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(result.imageUrl).toMatch(/^https:\/\//);
+      expect(result.providerKey).toBe("shotstack");
+
+      logMetric("Shotstack.composeImage (sem branding)", { elapsedMs });
     },
     5 * 60_000,
   );

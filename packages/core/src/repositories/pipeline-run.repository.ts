@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@ayon/types";
+import type { Database, PipelineRunEntityType } from "@ayon/types";
 
 type PipelineRunRow = Database["public"]["Tables"]["pipeline_runs"]["Row"];
 type PipelineRunInsert = Database["public"]["Tables"]["pipeline_runs"]["Insert"];
@@ -30,6 +30,21 @@ export class PipelineRunRepository {
 
   async findById(id: string): Promise<PipelineRunRow | null> {
     const { data, error } = await this.db.from("pipeline_runs").select("*").eq("id", id).maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /** ★ novo (Missão 11) — usado pela UI para ler `stage`/`progress_percent`/`estimated_remaining_seconds` durante o polling (arch. §14.9), sem precisar do `pipelineRunId` explícito. */
+  async findLatestByEntity(entityType: PipelineRunEntityType, entityId: string): Promise<PipelineRunRow | null> {
+    const { data, error } = await this.db
+      .from("pipeline_runs")
+      .select("*")
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error) throw error;
     return data;

@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { logger, markPipelineStage, renderVideoContentPiece } from "@ayon/core";
+import { composePhotoContentPiece, logger, markPipelineStage } from "@ayon/core";
 import { InvalidN8nWebhookSecretError, verifyN8nWebhookSecret } from "@ayon/core/src/shared/verify-n8n-webhook-secret";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
- * Rota interna acionada pelo n8n (Fluxo 13, passos 3-4) — composição final
- * via Video Render Provider. Mesmo princípio de autenticação/service role de
- * `pipeline/video/narrate`.
+ * Rota interna acionada pelo n8n (Fluxo 15, passo 3) — composição de cada
+ * candidato em uma opção completa (foto + branding + título), via Video
+ * Render Provider. Mesmo princípio de autenticação/service role de
+ * `pipeline/video/render`.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -24,8 +25,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     !body?.organizationId ||
     !body?.campaignId ||
     !body?.tier ||
-    !body?.audioUrl ||
-    !Array.isArray(body?.videoSources) ||
+    !body?.format ||
+    !Array.isArray(body?.candidates) ||
     !body?.pipelineRunId
   ) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
@@ -33,20 +34,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const serviceRoleDb = createServiceRoleClient();
-    await markPipelineStage(serviceRoleDb, body.pipelineRunId, "video", "rendering");
-    const result = await renderVideoContentPiece({
+    await markPipelineStage(serviceRoleDb, body.pipelineRunId, "photo", "rendering");
+    const options = await composePhotoContentPiece({
       db: serviceRoleDb,
       serviceRoleDb,
       tier: body.tier,
       organizationId: body.organizationId,
       campaignId: body.campaignId,
       contentPieceId: body.contentPieceId,
-      audioUrl: body.audioUrl,
-      videoSources: body.videoSources,
+      format: body.format,
+      candidates: body.candidates,
     });
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, options });
   } catch (error) {
-    logger.error("pipeline.video.render_failed", {
+    logger.error("pipeline.photo.compose_failed", {
       contentPieceId: body.contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

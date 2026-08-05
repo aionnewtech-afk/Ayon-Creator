@@ -1,29 +1,25 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@ayon/types";
-import { completeVideoPipelineSuccess } from "./video-pipeline-complete";
-import { narrateVideoContentPiece } from "./video-pipeline-narrate";
-import { renderVideoContentPiece } from "./video-pipeline-render";
-import { selectVideoScenes } from "./video-pipeline-scenes";
+import { completePhotoPipelineSuccess } from "./photo-pipeline-complete";
+import { composePhotoContentPiece } from "./photo-pipeline-compose";
+import { selectPhotoCandidates } from "./photo-pipeline-select";
 
 /**
- * Validação real de ponta a ponta do pipeline de vídeo (Fluxo 13, passos
- * 3-6) — exatamente a sequência que o n8n vai orquestrar via as rotas
- * `/api/pipeline/video/*`, só que chamando as funções diretamente em vez de
- * via HTTP (n8n ainda não está provisionado — ver docs/changelog.md).
- * Contra o projeto Supabase remoto real (mesmo padrão de
- * `provider-gateway-video-real.test.ts`), com fixture própria criada e
- * removida a cada execução — nunca contra dados de produção de verdade.
+ * Validação real de ponta a ponta do pipeline de foto (Fluxo 15, arch.
+ * §14.4) — mesma disciplina do pipeline de vídeo
+ * (`video-pipeline-real.test.ts`): fixture própria, contra o projeto
+ * Supabase remoto real, nunca dados de produção.
  */
 const hasAllEnv =
-  process.env.ELEVENLABS_API_KEY &&
   process.env.PEXELS_API_KEY &&
   process.env.SHOTSTACK_API_KEY &&
   process.env.SHOTSTACK_HOST &&
+  process.env.ANTHROPIC_API_KEY &&
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → render → complete (chamada real)", () => {
+describe.skipIf(!hasAllEnv)("Pipeline de foto — select → compose → complete (chamada real)", () => {
   let db: SupabaseClient<Database>;
   let organizationId: string;
   let brandId: string;
@@ -40,7 +36,7 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
 
     const { data: org, error: orgError } = await db
       .from("organizations")
-      .insert({ name: "Missão 9 Pipeline Test", slug: `missao-9-pipeline-test-${suffix}` })
+      .insert({ name: "Missão 11 Photo Pipeline Test", slug: `missao-11-photo-test-${suffix}` })
       .select()
       .single();
     if (orgError || !org) throw orgError ?? new Error("organização de teste não criada");
@@ -48,7 +44,7 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
 
     const { data: brand, error: brandError } = await db
       .from("brands")
-      .insert({ organization_id: organizationId, name: "Marca de Teste — Missão 9" })
+      .insert({ organization_id: organizationId, name: "Marca de Teste — Missão 11", niche: "turismo de serra" })
       .select()
       .single();
     if (brandError || !brand) throw brandError ?? new Error("marca de teste não criada");
@@ -78,7 +74,7 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
       .insert({
         brand_id: brandId,
         intelligence_hub_session_id: session.id,
-        title: "Campanha de Teste — Pipeline de Vídeo",
+        title: "Conheça Gramado na Serra Gaúcha",
         status: "generating",
       })
       .select()
@@ -90,10 +86,9 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
       .from("content_pieces")
       .insert({
         campaign_id: campaignId,
-        format: "video",
-        production_mode: "licensed_stock_video",
-        is_primary: true,
-        script: "Descubra o pôr do sol perfeito. A Ayon Creator te ajuda a contar essa história em vídeo, automaticamente.",
+        format: "thumbnail",
+        production_mode: "licensed_stock_photo",
+        is_primary: false,
       })
       .select()
       .single();
@@ -130,87 +125,62 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
   }, 30_000);
 
   it(
-    "roda o pipeline completo e deixa a peça pronta para revisão, com crédito debitado",
+    "roda o pipeline completo (economico, 1 opção) e deixa a peça pronta para revisão, com crédito debitado",
     async () => {
-      const narrateResult = await narrateVideoContentPiece({
+      const selectResult = await selectPhotoCandidates({
+        db,
+        serviceRoleDb: db,
+        tier: "economico",
+        campaignId,
+        contentPieceId,
+      });
+      expect(selectResult.candidates.length).toBe(1); // economico = 1 opção (OPTIONS_PER_TIER)
+      expect(selectResult.format).toBe("thumbnail");
+
+      const options = await composePhotoContentPiece({
         db,
         serviceRoleDb: db,
         tier: "economico",
         organizationId,
         campaignId,
         contentPieceId,
+        format: selectResult.format,
+        candidates: selectResult.candidates,
       });
-      expect(narrateResult.audioUrl).toMatch(/^https:\/\//);
-      expect(narrateResult.durationMs).toBeGreaterThan(0);
-
-      const scenesResult = await selectVideoScenes({
-        db,
-        serviceRoleDb: db,
-        tier: "economico",
-        totalDurationMs: narrateResult.durationMs,
-        campaignId,
-        contentPieceId,
-      });
-      expect(scenesResult.videoSources.length).toBeGreaterThan(0);
-
-      const renderResult = await renderVideoContentPiece({
-        db,
-        serviceRoleDb: db,
-        tier: "economico",
-        organizationId,
-        campaignId,
-        contentPieceId,
-        audioUrl: narrateResult.audioUrl,
-        videoSources: scenesResult.videoSources,
-      });
-      expect(renderResult.videoStoragePath).toBe(`${organizationId}/${campaignId}/${contentPieceId}-video.mp4`);
+      expect(options).toHaveLength(1);
+      expect(options[0]?.storagePath).toBe(`${organizationId}/${campaignId}/${contentPieceId}-option-1.jpg`);
 
       const balanceBefore = await getBalance(db, organizationId);
 
-      await completeVideoPipelineSuccess({
+      await completePhotoPipelineSuccess({
         serviceRoleDb: db,
         organizationId,
         contentPieceId,
         pipelineRunId,
         tier: "economico",
-        videoStoragePath: renderResult.videoStoragePath,
-        voiceProviderKey: narrateResult.voiceProviderKey,
-        mediaProviderKey: scenesResult.mediaProviderKey,
-        videoRenderProviderKey: renderResult.videoRenderProviderKey,
+        options,
       });
 
       const { data: piece } = await db.from("content_pieces").select("*").eq("id", contentPieceId).single();
       expect(piece?.status).toBe("ready_for_review");
 
-      const { data: version } = await db
+      const { data: versions } = await db
         .from("content_versions")
         .select("*")
-        .eq("content_piece_id", contentPieceId)
-        .single();
-      expect(version?.output_storage_path).toBe(renderResult.videoStoragePath);
+        .eq("content_piece_id", contentPieceId);
+      expect(versions).toHaveLength(1);
+      expect(versions?.[0]?.output_storage_path).toBe(options[0]?.storagePath);
 
       const { data: run } = await db.from("pipeline_runs").select("*").eq("id", pipelineRunId).single();
       expect(run?.status).toBe("completed");
 
-      const balanceAfter = await getBalance(db, organizationId);
-      expect(balanceBefore - balanceAfter).toBe(15); // credit_pricing.video_generation, tier economico (migration 0017)
+      const { data: campaignAfter } = await db.from("campaigns").select("visual_brief").eq("id", campaignId).single();
+      expect((campaignAfter?.visual_brief as { shortTitle?: string } | null)?.shortTitle).toBeTruthy();
 
-      // Idempotência do webhook (Fluxo 13, passo 6) — reentrega não deve debitar de novo.
-      await completeVideoPipelineSuccess({
-        serviceRoleDb: db,
-        organizationId,
-        contentPieceId,
-        pipelineRunId,
-        tier: "economico",
-        videoStoragePath: renderResult.videoStoragePath,
-        voiceProviderKey: narrateResult.voiceProviderKey,
-        mediaProviderKey: scenesResult.mediaProviderKey,
-        videoRenderProviderKey: renderResult.videoRenderProviderKey,
-      });
-      const balanceAfterRetry = await getBalance(db, organizationId);
-      expect(balanceAfterRetry).toBe(balanceAfter);
+      const balanceAfter = await getBalance(db, organizationId);
+      expect(balanceBefore - balanceAfter).toBe(5); // credit_pricing.image_generation, tier economico (migration 0019)
     },
-    5 * 60_000,
+    3 * 60_000,
   );
 });
 
