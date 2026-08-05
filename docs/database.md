@@ -1,7 +1,10 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 26 — Missão 10 aprovada, escopo ajustado)
-> **Última atualização:** 2026-08-04
+> **Status:** v1.0 (revisão 29 — Missão 11 aprovada, ressalva de composição resolvida)
+> **Última atualização:** 2026-08-05
+> **Mudança desta revisão (29 — Missão 11 aprovada, ressalva de composição resolvida):** `campaigns` ganha `visual_brief` (jsonb, §4.5) — parâmetros de composição resolvidos 1x por campanha para consistência entre peças. `content_pieces` ganha `selected_version_id` (§4.6) — suporta múltiplas opções geradas por rodada, `null` preserva o comportamento atual (versão mais recente vence). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (28 — Missão 11 aprovada, escopo ajustado):** `brands` ganha mais 3 colunas de identidade visual — `secondary_color_hex`/`font_family`/`visual_style` (§2.3) — além das 2 já previstas; `pipeline_runs` ganha `progress_percent`/`estimated_remaining_seconds` além de `stage` (§4.8). Nenhuma mudança em `content_pieces`/`credit_pricing` além do já previsto na revisão anterior. Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (27 — preparação Missão 11):** `brands` ganha `logo_storage_path`/`primary_color_hex` (§2.3, identidade visual — [architecture.md §14.1](architecture.md#141-identidade-visual-automática)), reaproveitando o bucket `brand-media` já existente; `content_pieces.production_mode` ganha o valor `licensed_stock_photo` (§4.6); `pipeline_runs` ganha `stage` (§4.8, progresso granular); `credit_pricing` ganha `image_generation` (§7.3). Nenhuma tabela nova — `brand_media_assets` (§5.2) segue documentada mas não migrada, decisão deliberada de não-acoplamento (mesma já tomada na Missão 7). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (26 — Missão 10 aprovada, escopo ajustado):** `user_feedback.category` ganha `other`; 3 colunas novas de contexto automático (`pathname`, `app_version`, `user_agent`), todas nullable — capturadas pela aplicação, nunca preenchidas manualmente. Ver [architecture.md §13.1.1](architecture.md#1311-contexto-automático-★-novo-ajuste-pré-implementação) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (25 — preparação Missão 10):** nova tabela `user_feedback` (§9.3) — captura de sugestões/bugs/dificuldades de uso via botão global, `insert`-only para membros da organização, sem `select` de usuário final (arch. §13). Nenhuma migration aplicada ainda.
 > **Mudança desta revisão (24 — Missão 9 dividida em 2 etapas):** nenhuma mudança de schema — `production_mode` (§4.6) já cobria `ai_avatar`/`licensed_stock_video`/`hybrid`/`own_media`/`text_only` desde a revisão 3. Só uma nota de escopo: a **Etapa 1** da Missão 9 usa apenas `licensed_stock_video`; `ai_avatar`/`hybrid` continuam no enum (schema pronto, sem migration necessária depois) mas ficam sem nenhuma linha gravada com esses valores até a **Etapa 2** (futura, recurso Premium) ser implementada. Ver [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9) e [docs/changelog.md](changelog.md).
@@ -97,6 +100,11 @@ content_pieces N───N publishing_channels via publications (fora do MVP)
 | niche | text (nullable) | usado pelo Trend Engine e pelo Especialista de Nicho; nulo até a conversa de onboarding |
 | provider_tier | enum(`economico`,`balanceado`,`premium`) (nullable) | override do tier da organização para esta marca (plano Business) |
 | status | enum(`active`,`archived`) | |
+| logo_storage_path | text (nullable) | ★ novo (Missão 11) — bucket `brand-media` (já existe desde a Sprint 1), path `{organization_id}/{brand_id}/logo.{ext}`; definido 1x no Perfil da Marca, aplicado automaticamente em toda peça gerada ([architecture.md §14.1](architecture.md#141-identidade-visual-automática-★-ativo-permanente-da-marca-ajuste-do-dono-do-produto)) |
+| primary_color_hex | text (nullable) | ★ novo (Missão 11) — ex. `#1E40AF`; campo manual no Perfil da Marca, nunca extraído automaticamente do logo (decisão do dono do produto) |
+| secondary_color_hex | text (nullable) | ★ novo (Missão 11, ajuste) — cor de apoio, mesmo espírito de `primary_color_hex` |
+| font_family | text (nullable) | ★ novo (Missão 11, ajuste) — nome de fonte (Google Fonts), opcional; usado nos templates de composição ([architecture.md §14.4](architecture.md#144-composição-visual-real-storiescarouselthumbnail-★-ajuste-do-dono-do-produto)) |
+| visual_style | text (nullable) | ★ novo (Missão 11, ajuste) — texto livre, não enum fechado (ex. "moderno"/"elegante"/"minimalista"/"corporativo"/"jovem" são sugestões da UI, não uma lista fechada); alimenta prompts de composição/seleção de voz |
 | created_by | uuid FK → auth.users (nullable) | |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
@@ -269,6 +277,7 @@ Implementada e validada na Missão 5 (migration `0006_trend_engine.sql`) — sch
 | title | text | |
 | strategy_summary | jsonb | = `intelligence_hub_sessions.consolidated_result` desta sessão, desnormalizado para leitura rápida |
 | status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`package_ready`,`failed`) | substituído `published` por `package_ready` — MVP não publica |
+| visual_brief | jsonb (nullable) | ★ novo (Missão 11, ressalva de composição) — parâmetros de composição decididos por IA e resolvidos **uma vez por campanha** (cor de destaque escolhida entre `primary_color_hex`/`secondary_color_hex` da marca, redação do título curto, variante de layout) — preenchido na 1ª peça visual gerada da campanha, lido (nunca recalculado) pelas demais peças/candidatos, garantindo identidade visual consistente entre todas as peças ([architecture.md §14.4.3](architecture.md#1443-identidade-visual-consistente-entre-peças-da-mesma-campanha-★-ajuste-do-dono-do-produto)) |
 | created_by | uuid FK → auth.users | |
 | created_at | timestamptz | |
 
@@ -283,7 +292,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | id | uuid PK | |
 | campaign_id | uuid FK → campaigns | |
 | format | enum(`video`,`caption`,`stories`,`carousel`,`thumbnail`,`blog_post`,`email`,`script`,`teleprompter`) | formatos do pacote de conteúdo (PRD §4.3) |
-| production_mode | enum(`ai_avatar`,`licensed_stock_video`,`own_media`,`hybrid`,`text_only`) (nullable) | aplica-se principalmente a `video`/`stories`/`carousel`/`thumbnail`; formatos puramente textuais (`caption`,`blog_post`,`email`,`script`,`teleprompter`) usam `text_only` ou deixam nulo |
+| production_mode | enum(`ai_avatar`,`licensed_stock_video`,`licensed_stock_photo` ★ novo preparação Missão 11,`own_media`,`hybrid`,`text_only`) (nullable) | aplica-se principalmente a `video`/`stories`/`carousel`/`thumbnail`; formatos puramente textuais (`caption`,`blog_post`,`email`,`script`,`teleprompter`) usam `text_only` ou deixam nulo. `licensed_stock_photo` (preparação Missão 11): `stories`/`carousel`/`thumbnail` passam a nascer com esse modo — geração automática via banco de fotos licenciadas, com upload manual (`own_media`) mantido como alternativa por peça ([architecture.md §14.4](architecture.md#144-geração-automática-de-storiescarouselthumbnail)) |
 | is_primary | boolean | `true` para a peça "principal" da campanha (passa pelo Intelligence Hub completo — architecture.md §3.4) |
 | intelligence_hub_session_id | uuid FK → intelligence_hub_sessions (nullable) | preenchido quando a peça é principal |
 | script | text | |
@@ -291,6 +300,7 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | status | enum(`draft`,`generating`,`ready_for_review`,`approved`,`rejected`,`failed` ★ novo, preparação Missão 9) | sem status `published` no MVP; `failed` ★ novo — primeira peça que pode falhar depois de `generating` sem intervenção humana no meio (pipeline assíncrono de vídeo via n8n, [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)/[§8](architecture.md#8-papel-do-n8n)); usuário pode então acionar nova tentativa (mecanismo exato de retry pela UI é decisão de UX, [ux-design.md](ux-design.md)) |
 | approved_by | uuid FK → auth.users (nullable) | |
 | approved_at | timestamptz (nullable) | |
+| selected_version_id | uuid FK → content_versions (nullable) | ★ novo (Missão 11, ressalva de composição) — quando múltiplas `content_versions` são geradas na mesma rodada (§14.4.2), marca qual candidato o usuário escolheu para o pacote final. `null` (todo formato/fluxo existente, sem mudança de comportamento) mantém a regra de sempre hoje — a versão de `version_number` mais alto vence |
 | created_at | timestamptz | |
 
 **`content_versions`**
@@ -345,6 +355,8 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 ### 4.8 `pipeline_runs`
 
 > **★ Ativação real (preparação Missão 9):** esta tabela existe no schema desde revisões antigas, mas nenhuma missão implementada até a revisão 24 chegou a gravar uma linha nela — todo processamento até aqui foi síncrono, sem execução de n8n de verdade. O pipeline de geração de vídeo (§3.5.1) é a primeira escrita real: uma linha por `content_piece` de vídeo em processamento, `engine = 'asset_engine'`, `entity_type = 'content_piece'`, `n8n_execution_id` preenchido pelo workflow do n8n na chamada inicial (usado para correlacionar o webhook de conclusão à execução certa). Granularidade de uma linha por peça (não uma por etapa do pipeline — voz/avatar/render) é a decisão inicial; granularidade mais fina fica para quando houver necessidade real de observabilidade por etapa. **Confirmado (revisão 23):** o ciclo de vida `queued → running → completed`/`failed` já previsto no enum desde a definição original desta tabela é exatamente o usado pelo Fluxo 13 — a linha nasce `queued` (Server Action, antes do webhook para o n8n) e vira `running` assim que o n8n confirma recebimento (passo 2); nenhuma mudança de schema foi necessária para isso.
+>
+> **★ `stage`/`progress_percent`/`estimated_remaining_seconds` (Missão 11):** a granularidade mais fina "fica para quando houver necessidade real de observabilidade por etapa" citada acima chegou — progresso genérico ("gerando...") deixou de ser suficiente para a experiência do produto ([architecture.md §14.9](architecture.md#149-progresso-granular-★-percentual--tempo-estimado)). Continua **uma linha por peça** (não uma por etapa) — as 3 colunas só registram o estado atual da linha, atualizadas in-place pelo próprio pipeline (`narrating` → `selecting_voice` (1ª geração da marca) → `selecting_scenes`/`selecting_photos` → `rendering` → `applying_branding` → `finalizing`), nunca uma tabela de histórico de etapas. `progress_percent`/`estimated_remaining_seconds` são melhor esforço — `null` é esperado quando não há base para estimar.
 
 | Coluna | Tipo | Notas |
 |---|---|---|
@@ -354,6 +366,9 @@ Schema abaixo já documentado desde revisões anteriores, sem mudança de coluna
 | engine | enum(`trend_engine`,`intelligence_hub`,`asset_engine`,`brand_brain`,`learning_engine`) | |
 | n8n_execution_id | text | |
 | status | enum(`queued`,`running`,`completed`,`failed`) | |
+| stage | text (nullable) | ★ novo (Missão 11) — etapa atual dentro de `running` (§14.9); nunca um enum fechado no banco (a UI decide o mapeamento para copy amigável), só uma string curta que o próprio código do pipeline escreve |
+| progress_percent | integer (nullable) | ★ novo (Missão 11, ajuste) — aproximação por peso relativo de cada etapa, calculada no próprio código do pipeline ([architecture.md §14.9](architecture.md#149-progresso-granular-★-percentual--tempo-estimado)) |
+| estimated_remaining_seconds | integer (nullable) | ★ novo (Missão 11, ajuste) — melhor esforço ("quando possível"); `null` é estado esperado quando não há base para estimar (ex. tempo de fila do Shotstack), nunca tratado como erro |
 | error | text (nullable) | |
 | started_at | timestamptz | |
 | finished_at | timestamptz (nullable) | |
@@ -470,10 +485,11 @@ Preço em créditos por tipo de operação — chave é `trigger_reason` (mesmo 
 |---|---|---|---|
 | `trend_ranking` | 2 | 4 | 8 |
 | `asset_generation` ★ novo (Missão 7) | 3 | 6 | 12 |
-| `video_generation` ★ novo (preparação Missão 9) | a definir | a definir | a definir |
+| `video_generation` ★ novo (Missão 9) | 15 | 30 | 50 |
+| `image_generation` ★ novo (preparação Missão 11) | a definir | a definir | a definir |
 | `campaign_strategy` | 5 | 10 | 20 |
 
-`trend_ranking` passa de 1/2/4 (seed original, `0008_billing.sql`) para 2/4/8 — ajuste de preço da Missão 7, aplicado via `UPDATE` numa migration nova (nunca editar uma migration já aplicada). `asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas), mas mais caro que `trend_ranking`. Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas. **`video_generation` (preparação Missão 9):** `trigger_reason` próprio para o pipeline de geração automática de vídeo (§4.6/§4.8, [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)) — deliberadamente separado de `asset_generation` porque o custo real (voz + avatar/mídia + renderização, múltiplos fornecedores pagos) é categoricamente maior e mais variável que uma única chamada de LLM. Valores por tier em aberto (PRD §13, item 11) — linha pode ser inserida com placeholder e ajustada por `UPDATE`, mesmo padrão de `asset_generation`/`trend_ranking`; não bloqueia a migration.
+`trend_ranking` passa de 1/2/4 (seed original, `0008_billing.sql`) para 2/4/8 — ajuste de preço da Missão 7, aplicado via `UPDATE` numa migration nova (nunca editar uma migration já aplicada). `asset_generation`: geração de uma peça de conteúdo textual (`caption`/`blog_post`/`email`/`script`/`teleprompter`) — uma única chamada ao LLM Provider, mais barato que `campaign_strategy` (painel de especialistas), mas mais caro que `trend_ranking`. Peças de formato visual preenchidas por upload manual (MVP) não consomem crédito — não há custo computacional de IA nelas. **`video_generation`:** `trigger_reason` próprio para o pipeline de geração automática de vídeo (§4.6/§4.8, [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)) — deliberadamente separado de `asset_generation` porque o custo real (voz + avatar/mídia + renderização, múltiplos fornecedores pagos) é categoricamente maior e mais variável que uma única chamada de LLM. **`image_generation` (preparação Missão 11):** `trigger_reason` próprio para a geração automática de `stories`/`carousel`/`thumbnail` ([architecture.md §14.4](architecture.md#144-geração-automática-de-storiescarouselthumbnail)) — deliberadamente separado de `video_generation` porque a cadeia de fornecedores é mais simples e mais barata (Pexels Photos + 1 render Shotstack de imagem, contra os 3 fornecedores do vídeo). Valores por tier em aberto — linha inserida com placeholder e ajustada por `UPDATE`, mesmo padrão já usado para `video_generation`/`asset_generation`/`trend_ranking`; não bloqueia a migration.
 
 ### 7.4 `credit_packages` ★ novo (Missão 6)
 

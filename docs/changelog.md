@@ -4,6 +4,123 @@
 
 ---
 
+## v2.28 — 2026-08-05 — Missão 11 implementada e validada com 5 vídeos reais
+
+**Status:** implementação completa (tasks 1-16), validada com chamadas reais a Anthropic/ElevenLabs/Pexels/Shotstack/n8n em toda a extensão do pipeline — nenhum mock. Fechamento da missão.
+
+**3 achados reais durante a validação (task 15), cada um parado-diagnosticado-corrigido-revalidado antes de prosseguir, disciplina padrão do projeto:**
+
+1. **`initialize-campaign-content-pieces.ts` nunca atualizado para a Missão 11:** `stories`/`carousel`/`thumbnail` continuavam sendo criadas com `production_mode: "own_media"` (resquício da Missão 9, quando eram só upload manual) em vez de `"licensed_stock_photo"` — o botão "Gerar automaticamente" nunca aparecia para campanhas novas. Corrigido; campanhas já existentes no ambiente de teste tiveram o campo corrigido diretamente (dado de teste, não migration — o bug era no código de criação, já corrigido, não no schema).
+2. **Seleção de cena sem contexto de destino:** `segmentScript` só recebia o roteiro, sem nicho/destino da campanha — um trecho de fechamento sem menção a lugar concreto (ex.: "a gente cuida de cada detalhe do seu roteiro") gerava buscas genéricas demais ("planejamento de viagem"), que trouxeram um clipe de estoque com um cartão escrito "USA" numa campanha sobre um destino brasileiro. Corrigido injetando o contexto da campanha (destino/nicho) no prompt, com instrução explícita para evitar termos genéricos de escritório nesses trechos — revalidado com o mesmo roteiro, resultado seguinte usou uma cena de fruta do cerrado, coerente com a campanha.
+3. **Renderização de vídeo podia exceder o limite de tamanho do Storage do Supabase:** um vídeo de 60s com cenas de água/cachoeira ultrapassou o limite de objeto do Supabase Storage (abaixo dos 50MB padrão do plano gratuito, valor exato não exposto pela API). `quality: "medium"` sozinho não foi suficiente nem confiável — o mesmo parâmetro produziu ~41MB numa tentativa (sucesso) e estourou o limite em outra (falha), porque cada tentativa reseleciona cenas e o tamanho final depende do bitrate nativo dos clipes sorteados. Corrigido com `resolution: "sd"` + `quality: "medium"` (Shotstack) — corta a contagem de pixels em ~4x, dando folga para qualquer combinação de cenas.
+
+**5 vídeos reais gerados e aprovados visualmente** (destinos/roteiros diferentes — Gramado/Canela, Bonito, Chapada dos Veadeiros, Paraty, Fernando de Noronha), avaliando: sem legenda (confirmado em todos); narração soando natural; vídeo com identidade visual da marca; cenas relevantes ao trecho do roteiro (após o achado 2 acima); tempo de renderização em torno de 1-2min por vídeo; qualidade final aceitável em resolução "sd". Geração automática de foto (stories/thumbnail/carrossel) validada com múltiplas opções reais (3 candidatos no tier premium), branding consistente entre elas (mesmo título/tipografia/cores) e seleção de versão funcionando.
+
+**Smoke test de CI (`apps/web/e2e/smoke.spec.ts`) atualizado:** assumia `stories`/`carousel`/`thumbnail` como `own_media` (Missão 9) — corrigido para refletir que agora são `licensed_stock_photo` com upload manual como alternativa (o smoke test determinístico continua exercitando só o caminho de upload manual, pelo mesmo motivo já documentado para o vídeo: geração automática depende de fornecedores externos reais).
+
+**Incidente de build investigado durante a missão** (crash transiente do `pnpm build`, não regressão de código) — conclusão registrada em [docs/hardening-plan.md](hardening-plan.md); build re-executado limpo ao final desta missão, confirmando a conclusão.
+
+**Nenhuma mudança de escopo em relação às revisões 42-44** — os 3 achados acima são correções de bug dentro do desenho já aprovado, não novas funcionalidades.
+
+---
+
+## v2.27 (revisão 44) — 2026-08-05 — Missão 11 aprovada, ressalva de composição resolvida (análise arquitetural real)
+
+**Status:** dono do produto aprovou integralmente, com uma ressalva antes do código: análise arquitetural real (não suposição) comparando a abordagem de composição de imagem estática (Shotstack) com alternativas dedicadas, mais 2 requisitos novos (múltiplas opções, consistência entre peças da campanha).
+
+**Análise feita (WebSearch/WebFetch, antes de qualquer código) — achado real:** a proposta da revisão anterior (asset `html` do Shotstack) estava **errada** — pesquisa nas fontes oficiais do Shotstack mostrou que esse asset está sendo descontinuado e nunca suportou imagem dentro do HTML (inviável para compor foto+logo+texto). Corrigido antes de escrever qualquer pipeline, mesma disciplina de "validar antes de implementar" de toda missão anterior.
+
+**Comparação técnica (arch. §14.4.1):** Shotstack (timeline em camadas — imagem+shape+texto, `output: jpg/png`, capacidade nativa confirmada por documentação oficial) vs. ferramentas dedicadas de design-automation (Bannerbear/Placid/ApiTemplate.io — pesquisadas via WebSearch, com preços/capacidades reais). **Decisão: manter Shotstack** — zero fornecedor novo, reaproveita 100% da infraestrutura assíncrona já validada pelo vídeo, custo só incremental (sem assinatura mensal adicional que não se justifica no volume atual). Trade-off aceito conscientemente: perde-se o editor visual e a geração nativa de N variações por chamada das ferramentas dedicadas — ambos resolvidos em código, sem redesenho de arquitetura. Documentado como decisão revisável se o volume/demanda futura justificar uma ferramenta dedicada (mesmo padrão de "documentar sem implementar" já usado para avatar/HeyGen e publicação em redes sociais).
+
+**2 requisitos novos incorporados:**
+
+1. **Múltiplas opções por peça** (arch. §14.4.2): quando financeiramente viável, mais de 1 candidato por peça na mesma rodada (mesmo template/identidade, foto de fundo variando) — usuário escolhe. `content_pieces.selected_version_id` (novo, nullable) marca a escolha; `null` preserva o comportamento de sempre (versão mais recente vence) para todo formato que não usa múltiplas opções.
+2. **Identidade visual consistente entre peças da campanha** (arch. §14.4.3): decisões estilísticas por IA (cor de destaque, redação do título curto, layout) resolvidas **uma vez por campanha**, nunca peça a peça — `campaigns.visual_brief` (jsonb, novo, nullable) guarda a decisão, preenchido na 1ª peça visual e reaproveitado pelas demais.
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 27) — §9.4 item 5 expandido, referência ao asset `html` corrigida na tabela de fornecedores (§10).
+2. **docs/architecture.md** (revisão 34) — nova §14.4.1 (análise arquitetural completa), §14.4.2 (múltiplas opções), §14.4.3 (consistência entre peças); §14.5 ajustada para citar o `visual_brief`.
+3. **docs/database.md** (revisão 29) — `campaigns.visual_brief` (§4.5), `content_pieces.selected_version_id` (§4.6).
+4. **docs/flows.md** (revisão 30) — Fluxo 15 reescrito (6 passos: resolução do `visual_brief`, múltiplos candidatos, escolha do usuário).
+5. **docs/ux-design.md** (revisão 28) — §4.6 ganha a grade de múltiplas opções.
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: implementação completa.
+
+---
+
+## v2.26 (revisão 43) — 2026-08-05 — Missão 11 aprovada, escopo ajustado (identidade visual, voz, cenas, composição real)
+
+**Status:** dono do produto aprovou, com ajustes substanciais antes do código.
+
+**Esclarecimento resolvido:** o pedido original continha a frase "o vídeo não precisa de legenda" dentro do item de identidade visual, contradizendo o próprio critério de qualidade ("legenda estiver perfeita") do mesmo pedido. Perguntado diretamente — **decisão confirmada: remover legenda do vídeo por completo** (não foi um lapso). Simplifica o pipeline: `ElevenLabsVoiceProvider` volta ao endpoint simples de síntese (sem `/with-timestamps`), `captionCues` sai do contrato, a timeline do Shotstack perde a track de legenda. O formato textual "Legenda" do pacote (texto de apoio, gerado por LLM) não é afetado — é uma coisa completamente diferente.
+
+**Ajustes por item do pedido:**
+
+1. **Identidade visual vira "ativo permanente":** não é só logo+cor — `brands` ganha 5 campos (logo, cor primária, cor secundária, fonte opcional, estilo visual em texto livre) — todos alimentando automaticamente vídeo/thumbnail/stories/carrossel/imagens futuras.
+2. **Narração — seleção automática de voz por marca:** não é só ajustar `voice_settings` — o Asset Engine passa a escolher a voz mais adequada (catálogo curado, via LLM Provider) considerando nicho/público/tom/idioma da marca, na 1ª geração; a escolha é persistida em `brand_brain_profiles.default_voice_ref` (campo já existente), que continua servindo de override manual.
+3. **Seleção de mídia por trecho do roteiro:** redesenho completo — o roteiro é segmentado (LLM Provider) em trechos com termo de busca próprio, cada trecho busca sua cena específica, evitando repetição — substitui a busca única por `campaign.title` que a revisão anterior só ia ajustar.
+4. **Stories/imagens — composição real, não foto crua:** o mecanismo muda de "foto + logo colada" para templates via asset `html` do Shotstack (tipografia/layout reais, parametrizados pela identidade visual da marca) — "a IA entrega uma arte pronta".
+5. **Thumbnail:** mesma regra do item 4, "precisa parecer feita por um designer".
+6. **Progresso ganha percentual e tempo estimado:** `pipeline_runs` ganha `progress_percent`/`estimated_remaining_seconds` além de `stage` — melhor esforço, `null` é estado esperado quando não há base para estimar.
+7. **Compartilhar:** copiar link entra ao lado de baixar/Web Share API nativa; arquitetura (não implementação) preparada para publicação direta em Instagram/Facebook, reaproveitando `publishing_channels`/`publications` já documentadas e nunca migradas desde revisões antigas.
+8. **Branding adaptativo:** nova subseção explícita (arch. §14.8) — layout muda com/sem logo, nunca deixa espaço reservado vazio.
+9. **Critério de qualidade expandido:** validação com 5 vídeos reais cobrindo voz natural, vídeo profissional, branding consistente e stories/thumbnails "parecendo trabalho de designer" (legenda removida da lista, consistente com o item 1).
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 26) — §9.4 reescrita com os 10 itens ajustados.
+2. **docs/architecture.md** (revisão 33) — §14.1 (5 campos), §14.2 (legenda removida — nota de histórico em §3.5.1), §14.3 (seleção automática de voz), §14.4/§14.5 (composição via Shotstack `html`), §14.7 (segmentação por trecho), nova §14.8 (branding adaptativo), §14.9 renumerada (percentual/ETA), §14.10 renumerada (player, prep. social).
+3. **docs/database.md** (revisão 28) — `brands` ganha 3 colunas a mais (secondary_color_hex/font_family/visual_style); `pipeline_runs` ganha progress_percent/estimated_remaining_seconds.
+4. **docs/flows.md** (revisão 29) — Fluxo 13 passo 3 e Fluxo 15 passo 2 reescritos.
+5. **docs/ux-design.md** (revisão 27) — §4.5/§4.6 ajustados (sem legenda, percentual/ETA, composição real, copiar link), §4.12 expandida (5 campos + voz).
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: implementação completa.
+
+---
+
+## v2.25 (revisão 42) — 2026-08-05 — Preparação Missão 11 (Refinamento da Experiência de Geração de Conteúdo)
+
+**Status:** documentação preparada — **aguardando aprovação explícita do dono do produto antes do início do código**, mesmo processo doc-first de toda missão anterior.
+
+**Pedido do dono do produto:** missão exclusivamente de refinamento (sem novas funcionalidades/arquitetura), corrigindo problemas encontrados no uso real: branding automático, legendas sem corte, narração mais natural, geração automática também para `stories`/`carousel`/`thumbnail`, thumbnail inteligente, vídeo com mais produção (transições/zoom/abertura), seleção de cenas mais relevante, progresso granular, player melhor. Validação obrigatória: 5 vídeos reais aprovados antes de encerrar.
+
+**Auditoria (antes de qualquer decisão) encontrou:**
+
+1. `brands` não tem nenhum campo de identidade visual (logo/cor) — mas o bucket `brand-media` já existe desde a Sprint 1, com RLS já configurada, nunca populado.
+2. `ElevenLabsVoiceProvider` nunca envia `voice_settings`/`speed`, e nunca lê `brand_brain_profiles.default_voice_ref` (campo existente desde a Missão 2) apesar do contrato já prever isso — a voz é sempre a padrão, independente da marca.
+3. `selectVideoScenes` busca uma única vez com `campaign.title` como termo de busca, e **repete deliberadamente o último candidato** quando a busca esgota antes de cobrir a duração total (simplificação já assumida no próprio código como temporária).
+4. `pipeline_runs` só tem status `queued/running/completed/failed`, sem granularidade de etapa — a UI só mostra "gerando...".
+5. O pedido cita formatos "Capa"/"Imagem do Feed" que não existem no `CONTENT_PIECE_FORMATS` atual (só `stories`/`carousel`/`thumbnail` além do vídeo).
+
+**Decisões do dono do produto após a auditoria (4 perguntas, todas resolvidas com a opção recomendada):**
+
+1. **Sem novos formatos no pacote** — focar em `stories`/`carousel`/`thumbnail` (já existentes), `Capa`/`Imagem do Feed` ficam fora do escopo.
+2. **Imagens vêm de banco de fotos licenciadas** (Pexels Photos API) — não de geração por IA (evitaria um Provider novo).
+3. **Cada formato mantém seu próprio botão "Gerar automaticamente"** — sem botão único "Gerar tudo de uma vez" (mesmo padrão já validado do vídeo, Missão 9, menor risco).
+4. **Cor principal da marca é um campo manual no Perfil da Marca** (definido 1x) — não extraída automaticamente do logo.
+
+**Decisões de arquitetura tomadas durante a preparação (sem ambiguidade a resolver com o dono do produto):**
+
+- Identidade visual: 2 colunas novas em `brands` (`logo_storage_path`/`primary_color_hex`), reaproveitando o bucket `brand-media` já existente — nenhuma tabela nova (`brand_media_assets` segue não-migrada, mesma decisão de não-acoplamento da Missão 7).
+- `stories`/`carousel`/`thumbnail` ganham `production_mode = licensed_stock_photo` (novo valor), reaproveitando o mesmo pipeline assíncrono (`pipeline_runs` + n8n) já validado pelo vídeo — evita um segundo mecanismo de geração assíncrona.
+- `MediaProvider` ganha um método de busca de fotos (Pexels Photos, endpoint irmão do já usado para vídeo) — `MediaCandidate.durationSeconds` vira opcional (fotos não têm duração), extensão aditiva.
+- `pipeline_runs` ganha `stage` (progresso granular) — continua uma linha por peça, não uma tabela de histórico de etapas.
+- Novo `trigger_reason` `image_generation` em `credit_pricing`, separado de `video_generation` (cadeia de fornecedores mais simples/barata).
+- "Editar" no player do vídeo não vira um editor de timeline (já fora de escopo do MVP, PRD §9.2) — significa editar o roteiro e gerar de novo. "Compartilhar" é Web Share API client-side, sem integração de rede social nova.
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 25) — nova §9.4, escopo do MVP desta missão e exclusões explícitas.
+2. **docs/architecture.md** (revisão 32) — nova §14 (9 subseções, uma por frente do escopo).
+3. **docs/database.md** (revisão 27) — `brands` (§2.3), `content_pieces.production_mode` (§4.6), `pipeline_runs.stage` (§4.8), `credit_pricing` (§7.3).
+4. **docs/flows.md** (revisão 28) — Fluxo 13 amendado (identidade visual, `stage`, seleção de cenas), novo Fluxo 15.
+5. **docs/ux-design.md** (revisão 26) — §4.5 (progresso granular), §4.6 (player melhor, upload sempre disponível), novo §4.12 (Identidade Visual no Perfil da Marca).
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: aprovação do dono do produto antes do primeiro commit de código.
+
+---
+
 ## v2.24 (revisão 41) — 2026-08-05 — Missão 10 implementada e validada (botão global "Enviar feedback")
 
 **Status:** implementação completa, validada com Supabase real e encerrada — sem próxima missão até novo direcionamento do dono do produto.

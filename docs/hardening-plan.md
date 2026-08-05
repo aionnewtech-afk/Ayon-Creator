@@ -344,4 +344,26 @@ Corrigido pela migration `0016_hardening_provisioning_grant_fix.sql`: `if p_user
 - [x] Suite mínima de smoke tests dos fluxos críticos, rodando no CI
 - [x] Teste automatizado confirmando RLS nos pontos críticos (Storage — `credit_ledger`/`specialists` ficam para H3, que cobre índices/observabilidade e pode ampliar a suíte)
 
+---
+
+## Incidente de ambiente — crash transiente de `pnpm build` durante a Missão 11
+
+**Sintoma:** durante a implementação da Missão 11 (task 9, pipeline de geração automática de foto), `pnpm build` falhou com o worker do Next.js morrendo em `"Collecting page data"`:
+
+```
+[low_level_alloc.cc : 554] RAW: Check new_pages != nullptr failed: VirtualAlloc failed
+⨯ Next.js build worker exited with code: 3221226505 and signal: null
+```
+
+**Investigação (pedido explícito do dono do produto: causa raiz antes de qualquer correção, sem "alterações aleatórias"):**
+
+1. `git stash` de todas as mudanças da Missão 11 + build limpo contra o último commit → passou. Confirma que o crash era uma regressão de código introduzida pela Missão 11, não um problema pré-existente do ambiente.
+2. `git stash pop` + build com a Missão 11 inteira, exceto as 2 rotas novas do pipeline de foto (`/api/pipeline/photo/select`, `/api/pipeline/photo/compose`) → passou. Isola o problema a essas 2 rotas.
+3. Cada rota isolada sozinha (a outra temporariamente renomeada para `route.ts.bak`, fora do roteamento do Next) → **as duas passaram individualmente**, sem crash.
+4. As duas rotas juntas, no mesmo estado de arquivo que originalmente crashou → **passou 3 vezes seguidas**, sem nenhuma mudança de código entre as tentativas.
+
+**Conclusão:** não há regressão determinística de código — nenhuma rota, import ou componente específico reproduz o crash de forma consistente. A causa mais provável é pressão de memória transiente no momento exato do build original: uma sequência de scripts `npx tsx`/`node -e` fazendo chamadas reais a fornecedores (ElevenLabs, Shotstack, download de imagens compostas) rodou imediatamente antes, somada aos 5 containers Docker já ativos em segundo plano (`ayon-creator-n8n`, `n8n`, `evolution_api`, `evolution_postgres`, `evolution_redis`) — provavelmente o suficiente para o Windows recusar uma alocação de memória naquele instante específico (`VirtualAlloc failed`), sem qualquer relação com o código em si.
+
+**Registrado para referência futura:** se `pnpm build` voltar a falhar com esse mesmo sintoma (`VirtualAlloc failed` / worker exit code `3221226505`) neste ambiente, tratar como suspeita de pressão de memória transiente primeiro (tentar de novo, opcionalmente fechando containers Docker não essenciais ao projeto) — só investigar como regressão de código se o crash **reproduzir de forma consistente** com o mesmo estado de arquivos em múltiplas tentativas, como foi feito aqui.
+
 **Pendente, não bloqueante:** branch protection em `master` (exigir os 3 jobs verdes antes de merge) é uma configuração manual nas Settings do GitHub — registrada aqui como passo pendente, fora do alcance de qualquer commit.
