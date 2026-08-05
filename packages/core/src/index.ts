@@ -32,6 +32,7 @@ export * from "./repositories/provider-call-log.repository";
 export * from "./platform-admin/is-platform-admin";
 export * from "./platform-admin/require-platform-admin";
 export * from "./platform-admin/record-admin-action";
+export * from "./platform-admin/get-dashboard-metrics";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
