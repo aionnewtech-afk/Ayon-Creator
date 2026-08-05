@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, SubscriptionPlan } from "@ayon/types";
 
 type PlanRow = Database["public"]["Tables"]["plans"]["Row"];
+type PlanUpdate = Database["public"]["Tables"]["plans"]["Update"];
 
 /**
  * Único ponto de código que fala com a tabela `plans`
@@ -29,5 +30,20 @@ export class PlanRepository {
 
     if (error) throw error;
     return data ?? [];
+  }
+
+  /** Todos os planos, ativos ou não — uso administrativo (tela Planos, §15.8). */
+  async findAll(): Promise<PlanRow[]> {
+    const { data, error } = await this.db.from("plans").select("*").order("price_cents", { ascending: true });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async update(plan: SubscriptionPlan, patch: PlanUpdate): Promise<PlanRow> {
+    const { data, error } = await this.db.from("plans").update(patch).eq("plan", plan).select().single();
+
+    if (error) throw error;
+    return data;
   }
 }
