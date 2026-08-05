@@ -3,6 +3,7 @@ import type { Database } from "@ayon/types";
 import type { ProviderCapability, ProviderTier } from "@ayon/types";
 
 type ProviderConfigRow = Database["public"]["Tables"]["provider_configs"]["Row"];
+type ProviderConfigUpdate = Database["public"]["Tables"]["provider_configs"]["Update"];
 
 /**
  * Único ponto de código que fala com a tabela `provider_configs`
@@ -53,6 +54,26 @@ export class ProviderConfigRepository {
     query = specialistId ? query.eq("specialist_id", specialistId) : query.is("specialist_id", null);
 
     const { data, error } = await query.order("priority", { ascending: false }).limit(1).maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /** Todas as configs, qualquer status — uso administrativo (tela Providers, §15.8). */
+  async findAll(): Promise<ProviderConfigRow[]> {
+    const { data, error } = await this.db
+      .from("provider_configs")
+      .select("*")
+      .order("capability", { ascending: true })
+      .order("tier", { ascending: true })
+      .order("priority", { ascending: false });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async update(id: string, patch: ProviderConfigUpdate): Promise<ProviderConfigRow> {
+    const { data, error } = await this.db.from("provider_configs").update(patch).eq("id", id).select().single();
 
     if (error) throw error;
     return data;

@@ -39,6 +39,7 @@ export * from "./platform-admin/get-trials-overview";
 export * from "./platform-admin/get-credits-overview";
 export * from "./platform-admin/get-mercado-pago-overview";
 export * from "./platform-admin/get-feedbacks-overview";
+export * from "./platform-admin/get-providers-observability";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
