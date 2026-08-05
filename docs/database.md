@@ -1,7 +1,9 @@
 # Banco de Dados — Ayon Creator
 
-> **Status:** v1.0 (revisão 24 — Missão 9 dividida em 2 etapas)
+> **Status:** v1.0 (revisão 26 — Missão 10 aprovada, escopo ajustado)
 > **Última atualização:** 2026-08-04
+> **Mudança desta revisão (26 — Missão 10 aprovada, escopo ajustado):** `user_feedback.category` ganha `other`; 3 colunas novas de contexto automático (`pathname`, `app_version`, `user_agent`), todas nullable — capturadas pela aplicação, nunca preenchidas manualmente. Ver [architecture.md §13.1.1](architecture.md#1311-contexto-automático-★-novo-ajuste-pré-implementação) e [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (25 — preparação Missão 10):** nova tabela `user_feedback` (§9.3) — captura de sugestões/bugs/dificuldades de uso via botão global, `insert`-only para membros da organização, sem `select` de usuário final (arch. §13). Nenhuma migration aplicada ainda.
 > **Mudança desta revisão (24 — Missão 9 dividida em 2 etapas):** nenhuma mudança de schema — `production_mode` (§4.6) já cobria `ai_avatar`/`licensed_stock_video`/`hybrid`/`own_media`/`text_only` desde a revisão 3. Só uma nota de escopo: a **Etapa 1** da Missão 9 usa apenas `licensed_stock_video`; `ai_avatar`/`hybrid` continuam no enum (schema pronto, sem migration necessária depois) mas ficam sem nenhuma linha gravada com esses valores até a **Etapa 2** (futura, recurso Premium) ser implementada. Ver [architecture.md §3.5.1](architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9) e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (23 — fornecedores concretos aprovados):** nenhuma mudança de schema nesta revisão — confirma que `pipeline_runs.status` já suporta o ciclo `queued → running → completed`/`failed` pedido pelo dono do produto (nota em §4.8) e documenta os fornecedores concretos escolhidos para MVP (Pexels/ElevenLabs/HeyGen/Shotstack — ver [architecture.md §5](architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier) e [PRD.md §13](../PRD.md#13-decisões-em-aberto-precisam-de-aprovação-antes-de-virar-escopo)). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (22 — preparação Missão 9):** `provider_configs.capability` (§5.1) ganha `video_render`, nova capacidade da Provider Layer ([architecture.md §5](architecture.md#5-provider-layer-adapters-plugáveis-resolvidos-por-tier)). `content_pieces.status` (§4.6) ganha `failed` — primeiro caminho do produto que pode falhar depois de `generating` sem operação humana no meio (pipeline assíncrono de vídeo, §4.6/§4.8). `content_versions.generation_metadata` (§4.6) ganha nota explícita incluindo `video_render_provider_key`. `pipeline_runs` (§4.8), documentada desde revisões antigas mas nunca escrita por nenhuma missão implementada, passa a ser ativamente usada — primeira vez que uma linha real é gravada nela. `credit_ledger` (§7.2) ganha `related_pipeline_run_id` (nova coluna, idempotência de cobrança assíncrona — análoga a `external_payment_id`). `credit_pricing` (§7.3) ganha `video_generation` como novo `trigger_reason`, valores em aberto (PRD §13, item 11). Nenhuma migration aplicada ainda — mudanças de schema propostas aqui aguardam aprovação antes de virar migration real (será `0017` em diante, seguindo a numeração sequencial já usada). Ver [docs/changelog.md](changelog.md) para o relato completo da auditoria que precedeu esta revisão.
@@ -515,6 +517,7 @@ Números de cada plano — dado, não código. Sem esta tabela, o handler de web
 - `subscriptions`/`credit_ledger` (Missão 6): select restrito a membros da organização (CFG-2/CFG-4 precisam ler); insert/update **só via service role** — nunca o client grava diretamente (grants/consumo vêm do portão de crédito no Server Action, compras/mudanças de assinatura vêm de webhook do Mercado Pago, ambos rodando com service role). Nenhum usuário, nem admin, altera saldo diretamente pela aplicação.
 - `pipeline_runs` (★ ativada na preparação da Missão 9): select restrito a membros da organização da `brand`/`campaign`/`content_piece` referenciada (join por `entity_id`, mesmo princípio de isolamento por `brand_id` já usado para as demais tabelas de Core Engine); insert/update **só via service role** — a Server Action cria a linha inicial, o webhook autenticado do n8n (`apps/web/app/api/webhooks/n8n/route.ts`, service role, nunca client) atualiza status/erro ao concluir. Nenhum usuário grava nesta tabela diretamente.
 - `credit_pricing`/`credit_packages`/`plans` (Missão 6): mesmo padrão de `feature_flags` — select liberado a qualquer `authenticated` (preço/números devem ser visíveis, ex. CFG-2/CFG-4), insert/update/delete só via service role.
+- `user_feedback` (★ novo, preparação Missão 10): `insert` liberado a membros da organização (`is_org_member`), gravando sempre a própria `organization_id`/`user_id` — nunca em nome de outra organização. **Sem policy de `select`/`update`/`delete` para usuário final** — mesmo padrão de `provider_configs`/`specialists`, leitura só via service role (sem interface administrativa nesta missão, PRD §9.3).
 
 ## 9. Plataforma — Auditoria e Feature Flags ★ novo (revisão 5)
 
@@ -545,6 +548,22 @@ Tabela global (não multi-tenant) de toggles de funcionalidade, administrada int
 | enabled | boolean | default `false` |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+### 9.3 `user_feedback` ★ novo (preparação Missão 10)
+
+Captura simples de sugestões/bugs/dificuldades de uso enviadas pelo botão global "Enviar feedback" (arch. §13). Append-only — sem `update`/`updated_at`, cada envio é uma linha nova e definitiva.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| organization_id | uuid FK → organizations | isolamento multi-tenant, mesmo padrão de toda tabela do produto |
+| user_id | uuid FK → auth.users | quem enviou |
+| category | text | `check (category in ('suggestion', 'bug', 'difficulty', 'other'))` — `other` ★ ajuste do dono do produto antes da implementação |
+| description | text not null | texto livre |
+| pathname | text (nullable) | ★ novo (ajuste pré-implementação) — rota onde o usuário estava, capturada no client (`usePathname()`) |
+| app_version | text (nullable) | ★ novo — lida no servidor a partir de `package.json`, nunca do client (arch. §13.1.1) |
+| user_agent | text (nullable) | ★ novo — lido no servidor via `headers()` (`next/headers`), nunca confiado do client (arch. §13.1.1) |
+| created_at | timestamptz | default `now()` |
 
 ## 10. Decisões em Aberto (banco de dados)
 

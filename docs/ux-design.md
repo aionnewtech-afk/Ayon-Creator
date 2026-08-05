@@ -1,7 +1,9 @@
 # UX Design — Ayon Creator
 
-> **Status:** v1.3 (revisão 23 — Missão 9 dividida em 2 etapas)
+> **Status:** v1.3 (revisão 25 — Missão 10 aprovada, escopo ajustado)
 > **Última atualização:** 2026-08-04
+> **Mudança desta revisão (25 — Missão 10 aprovada, escopo ajustado):** Modal de Feedback (§4.9) ganha a opção **Outro** na categoria; contexto (rota/versão/navegador) capturado automaticamente, sem nenhum campo visível ao usuário para isso. Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (24 — preparação Missão 10):** novo componente global **GLOBAL-4 — Enviar Feedback** (§3.10) e **Modal de Feedback** (§4.9) — botão sempre visível no layout autenticado, modal simples com categoria + descrição, confirmação via toast. Sem tela de histórico/leitura de feedback enviado (PRD §9.3). Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (23 — Missão 9 dividida em 2 etapas):** §3.5 (CAMP-4/5) restrita à **Etapa 1** — os estados de geração de vídeo assíncrona cobrem só o pipeline `licensed_stock_video` (ElevenLabs + Pexels + Shotstack). Nenhuma tela específica de avatar (seleção de avatar/voz de avatar) é desenhada nesta revisão — fica para a Etapa 2 (futura, recurso Premium), quando terá doc-first próprio. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (22 — preparação Missão 9):** §3.5 (CAMP-4/5) ganha os estados assíncronos de geração de vídeo (`ai_avatar`/`licensed_stock_video`/`hybrid`, [architecture.md §3.5.1](../docs/architecture.md#351-geração-automática-de-vídeo-★-novo-preparação-missão-9)/[flows.md Fluxo 13](flows.md#fluxo-13--pipeline-de-geração-de-vídeo-n8n-★-novo-preparação-missão-9)) — "gerando vídeo" deixa de ser um estado explicitamente ausente (nota da revisão 18) e passa a ser especificado. §4.5 (Checklist de Geração por Formato) e §4.6 (Cartão de Revisão de Peça) atualizados com o novo estado de falha (`failed`) e ação "Tentar novamente". Mecanismo exato de atualização de progresso (Realtime vs. polling) registrado como decisão em aberto (§10) — primeira vez que o produto precisa de status assíncrono de verdade. Ver [docs/changelog.md](changelog.md) para o relato completo da auditoria que precedeu esta revisão.
 > **Mudança desta revisão (21 — Missão 8 implementada e validada):** EVOL-1 implementada e validada em produção (`InsightList`, dentro de `/o-que-funcionou`) — estados "sinal insuficiente" e "analisando" confirmados, cards de sugestão pendente com Aceitar/Descartar inline, seção de Histórico na mesma tela. Item de navegação "O que Funcionou" passa a `implemented: true`.
@@ -211,6 +213,7 @@ Cada tela é referenciada por um ID curto, usado também em §5–§7. Estados l
 | GLOBAL-1 | Central de Notificações | Lista de eventos assíncronos recentes, com deep link para a tela relevante |
 | GLOBAL-2 | Seletor de Marca | Troca de contexto entre marcas (Business) |
 | GLOBAL-3 | Painel (Home) | Atalhos para "Criar Campanha", tendências recentes, sugestões pendentes, status de campanhas em andamento |
+| GLOBAL-4 ★ novo (Missão 10) | Enviar Feedback | Botão + modal para registrar sugestão/bug/dificuldade de uso, sem sair da tela atual |
 
 ## 4. Componentes
 
@@ -305,6 +308,7 @@ Não é um chat de perguntas e respostas — é a primeira aparição da Ayon co
 | Toast/Banner de Notificação | Eventos assíncronos concluídos, avisos de crédito |
 | Modal de Confirmação | Ações destrutivas (remover item da Knowledge Base, arquivar marca) |
 | Estado Vazio (padrão) | Ilustração leve + frase de orientação + CTA único — usado em KB-1, MEDIA-1, HIST-1, EVOL-1 |
+| Modal de Feedback ★ novo (Missão 10) | GLOBAL-4 — categoria (Sugestão/Bug/Dificuldade de uso/Outro, seleção única) + textarea de descrição + botão enviar; rota/versão/navegador capturados automaticamente, invisíveis ao usuário; confirmação via toast, sem tela de sucesso dedicada |
 
 ### 4.10 Painel "O que a Ayon já sabe" ★ novo (revisão 7)
 

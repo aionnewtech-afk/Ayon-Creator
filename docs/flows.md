@@ -1,7 +1,9 @@
 # Fluxos — Ayon Creator
 
-> **Status:** v1.0 (revisão 25 — Missão 9 dividida em 2 etapas)
+> **Status:** v1.0 (revisão 27 — Missão 10 aprovada, escopo ajustado)
 > **Última atualização:** 2026-08-04
+> **Mudança desta revisão (27 — Missão 10 aprovada, escopo ajustado):** Fluxo 14, passos 2/3, ganham a categoria `other` e a captura automática de contexto (`pathname`/`app_version`/`user_agent`). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (26 — preparação Missão 10):** novo **Fluxo 14 — Enviar Feedback**, utilitário transversal disponível em qualquer tela autenticada. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (25 — Missão 9 dividida em 2 etapas):** Fluxo 3, §3.2, e Fluxo 13 restritos à **Etapa 1** (`licensed_stock_video` apenas — ElevenLabs + Pexels + Shotstack) — `ai_avatar`/`hybrid` ficam para a **Etapa 2** (futura, recurso Premium), sem implementação nem fluxo detalhado agora. Ver [PRD.md](../PRD.md) revisão 22 e [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (24 — preparação Missão 9):** Fluxo 3, §3.2, reescrito para o formato `video` — passa a cobrir `ai_avatar`/`licensed_stock_video`/`hybrid` de fato (não mais só especificação futura), delegando a materialização a um novo sub-fluxo assíncrono, **Fluxo 13 — Pipeline de Geração de Vídeo (n8n)**. Fluxo 6 (Consumo de Créditos) ganha nota sobre o novo `trigger_reason` `video_generation` e sobre a cobrança acontecer no webhook de conclusão do pipeline, não mais dentro da Server Action que dispara a geração. Tabela de Convenções de Status ganha `failed` em `content_pieces`. Ver [docs/changelog.md](changelog.md) para o relato completo da auditoria que precedeu esta revisão.
 > **Mudança desta revisão (23 — Missão 8 implementada e validada):** Fluxo 8 confirmado em produção — `runLearningAnalysisAction` agrega os `learning_signals` não usados, bloqueia com mensagem clara quando há menos de 5, e aciona o Intelligence Hub (`learning_analysis`) quando há sinal suficiente. Fluxo 4, passo 2, confirmado: `approveContentPieceAction`/`rejectContentPieceAction`/`editContentPieceAction` (Missão 7) agora emitem `learning_signals` de verdade — as marcações "★ Missão 8" da revisão 21 foram removidas. Validado em produção que aceitar um insight (`acceptInsightAction`) realmente muda o comportamento de gerações futuras: uma nova sessão de `campaign_strategy` para a mesma marca trouxe os especialistas citando o aprendizado aplicado.
@@ -201,6 +203,17 @@ Sub-fluxo acionado pelo Fluxo 3, §3.2, sempre que uma `content_piece` de format
 6. **Cobrança de crédito só acontece no passo 5, em caso de sucesso** — o webhook chama `recordConsumption`, gravando um lançamento `consumption` em `credit_ledger` vinculado a `related_pipeline_run_id` (idempotente: uma segunda entrega do mesmo webhook falha por constraint em vez de debitar duas vezes — [database.md §7.2](database.md#72-credit_ledger)). Mesmo princípio já usado em todo o resto do produto (Fluxo 6): nunca cobrar uma operação que falhou.
 7. A UI reflete o progresso via Supabase Realtime ou polling (a decidir na fase de UX) — primeira vez que o produto depende disso de fato; até aqui, toda tela refletia o resultado direto de uma Server Action síncrona.
 8. Uma peça `failed` pode ser reenviada para o pipeline (nova tentativa, repetindo os passos 1–6) — mecanismo exato de acionamento pela UI é decisão de UX (ver [ux-design.md](ux-design.md)), mas não abre uma nova cobrança até um novo sucesso.
+
+## Fluxo 14 — Enviar Feedback ★ novo (preparação Missão 10)
+
+Utilitário transversal (arch. §13) — disponível em qualquer tela autenticada, não amarrado a nenhuma campanha/peça/sessão específica.
+
+1. Usuário clica em **"Enviar feedback"**, sempre visível no layout autenticado (mesmo lugar em qualquer tela).
+2. Modal simples abre: categoria (**Sugestão** / **Bug** / **Dificuldade de uso** / **Outro**) + descrição em texto livre.
+3. Usuário escreve e clica em enviar. Client captura a rota atual (`pathname`) e envia junto à Server Action, que grava uma linha em `user_feedback` (`organization_id`/`user_id` da sessão atual, categoria, descrição, `pathname`, `app_version` e `user_agent` capturados no servidor — arch. §13.1.1 — `created_at`).
+4. Modal fecha com uma confirmação simples (toast) — sem redirecionamento, sem interromper o que o usuário estava fazendo na tela de origem.
+5. **Sem consumo de crédito** — não é uma geração de IA, não passa pelo portão de crédito (Fluxo 6).
+6. **Sem leitura pela aplicação nesta missão** — nenhuma tela exibe feedback já enviado, nem para quem enviou, nem para admin (PRD §9.3). Consulta é direta no banco quando necessária.
 
 ---
 

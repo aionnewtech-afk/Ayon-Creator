@@ -1,6 +1,8 @@
 # Arquitetura — Ayon Creator
 
-> **Status:** v1.0 (revisão 29 — Missão 9, Etapa 1, encerrada — n8n provisionado e Fluxo 13 validado de ponta a ponta em ambiente real)
+> **Status:** v1.0 (revisão 31 — Missão 10 aprovada, escopo ajustado)
+> **Mudança desta revisão (31 — Missão 10 aprovada, escopo ajustado):** dono do produto aprovou e pediu 2 ajustes: categoria `other` (§13.1) e captura automática de contexto — `pathname` (client), `userAgent` (servidor, via `headers()`, nunca confiado do client), `app_version` (servidor, de `package.json`) — nova §13.1.1. Achado durante o ajuste: `package.json` do monorepo nunca foi sincronizado com as tags de release, parado em `0.1.0` desde sempre — corrigido para `0.10.2`, e bumpar `package.json` passa a fazer parte do fechamento de toda missão a partir daqui (§13.1.2). Ver [docs/changelog.md](changelog.md).
+> **Mudança desta revisão (30 — preparação Missão 10):** nova §13 — Feedback do Usuário, utilitário transversal (não Core Engine, não Provider Layer) para captura de sugestões/bugs/dificuldades de uso via botão global + modal simples, gravando em `user_feedback`. Ver [docs/changelog.md](changelog.md).
 > **Mudança desta revisão (29 — n8n provisionado, Fluxo 13 completo):** n8n provisionado como instância própria e isolada do Ayon Creator (Docker, `n8n/docker-compose.yml` — nunca compartilhada com outros projetos, achado de auditoria antes de provisionar: já existia um n8n rodando localmente, mas de outro projeto do dono do produto). Workflow real criado e ativado (`n8n/README.md` documenta a estrutura completa). §8 ganha precisão: "n8n chamando o Provider Gateway a cada etapa" (revisão 25) significa, na implementação real, **n8n chama as rotas HTTP internas do Fluxo 13** (`/api/pipeline/video/narrate|scenes|render`), que por sua vez usam o Provider Gateway — o n8n em si nunca importa nem conhece o Provider Gateway diretamente (não poderia, é um sistema externo). Fluxo 13 validado de ponta a ponta em ambiente real (ElevenLabs + Pexels + Shotstack + Supabase + n8n reais, nenhum mock) — vídeo MP4 gerado automaticamente, `pipeline_runs`/`content_pieces`/`content_versions` corretos, crédito debitado uma única vez. Um bug real encontrado e corrigido durante a integração (headers errados no nó de consulta ao Supabase) — ver [docs/changelog.md](changelog.md) para o relato completo. **Missão 9, Etapa 1, encerrada.**
 > **Mudança desta revisão (28 — providers validados com dados reais):** ElevenLabs, Pexels e Shotstack implementados e validados com chamadas reais (contas do dono do produto) — nenhum bug de adapter encontrado. §12.4 ganha uma tabela de latência/custo medidos, insumo para a decisão em aberto de precificação de `video_generation` (PRD §13, item 11, continua aberta — os dados são insumo, não a decisão em si). Ver [docs/changelog.md](changelog.md) para o relato completo, incluindo dois achados de API que teriam causado bugs se não verificados antes de codar (endpoint correto do Pexels e valor `"done"` — não `"completed"` — do status do Shotstack).
 > **Mudança desta revisão (27 — Missão 9 dividida em 2 etapas):** decisão do dono do produto — reduzir risco de retrabalho, mesma disciplina de "uma fatia vertical por vez" de todas as missões anteriores. **Etapa 1** (§3.5.1 reescrita): só `licensed_stock_video` implementado — pipeline completo roteiro → narração (ElevenLabs) → cenas (Pexels) → composição (Shotstack) → MP4, de ponta a ponta, sem depender de avatar. **Etapa 2** (futura, recurso Premium): `ai_avatar` (HeyGen) e `hybrid` (que depende de avatar) — contrato `avatar` (§5) permanece documentado e a Provider Layer permanece desenhada para acomodá-lo sem mudança estrutural quando a Etapa 2 chegar, mas nenhuma linha de código de avatar é escrita na Etapa 1. Ver [docs/changelog.md](changelog.md).
@@ -459,5 +461,43 @@ Números de uma única chamada cada, ambiente de desenvolvimento — ordem de gr
 | Starter | 1 | Econômico | 100 |
 | Pro | 1 | Balanceado | 500 |
 | Business | até 5 | Premium | 1.500 |
+
+## 13. Feedback do Usuário (utilitário transversal) ★ novo (preparação Missão 10)
+
+**Por que não é um Core Engine:** Core Engines (§3) concentram lógica de produto orientada por IA. Feedback do usuário é só captura de texto — não raciocina, não chama Provider Layer, não tem justificativa de marca. **Por que não é Provider Layer:** não esconde fornecedor algum atrás de um contrato — é gravação direta numa tabela. Mesmo raciocínio de exclusão já usado para justificar o Billing como módulo dedicado (§12), aplicado aqui a algo ainda mais simples: um utilitário transversal, sem camada própria.
+
+### 13.1 Responsabilidade
+
+- Um botão **"Enviar feedback"**, visível em qualquer tela autenticada (layout da `(platform)`, ao lado de onde já vivem outras ações globais como troca de tema/sair) — nunca escondido dentro de uma tela específica.
+- Ao clicar, abre um modal simples: categoria (**Sugestão** / **Bug** / **Dificuldade de uso** / **Outro** ★ ajuste do dono do produto) + descrição em texto livre.
+- Ao enviar, grava uma linha em `user_feedback` — usuário, organização, categoria, descrição, data, **e contexto capturado automaticamente** (rota atual, versão da aplicação, navegador — ★ ajuste do dono do produto, §13.1.1) — e fecha o modal com uma confirmação simples (toast), sem fluxo adicional.
+- **Sem interface administrativa nesta missão** (decisão explícita do dono do produto, PRD §9.3) — consulta ao feedback recebido é direta no banco (Supabase Studio ou SQL), não pela aplicação. Puramente write-only do ponto de vista do usuário final.
+
+#### 13.1.1 Contexto automático ★ novo (ajuste pré-implementação)
+
+Capturado sem exigir nada do usuário, para nunca depender de perguntar depois "em qual tela isso aconteceu":
+
+- **Rota atual (`pathname`):** só o client sabe em qual tela o usuário estava — capturado via `usePathname()` (Next.js) no componente do modal, enviado como argumento da Server Action.
+- **Navegador (`userAgent`):** capturado **no servidor**, não confiando em valor enviado pelo client — `headers().get("user-agent")` (`next/headers`), dentro da própria Server Action. Mais confiável que um campo de formulário, mesmo espírito de nunca confiar em input não verificado quando existe uma fonte melhor disponível.
+- **Versão da aplicação (`app_version`):** lida no servidor a partir de `package.json` (`apps/web/package.json.version`) — nunca hardcoded solto em outro lugar, nunca enviada pelo client. **Achado durante este ajuste:** os `package.json` do monorepo nunca foram sincronizados com as tags de release (`CHANGELOG.md`/`git tag`) — todos ainda em `0.1.0` apesar do repositório já estar em `v0.10.2`. Corrigido como parte desta missão (§13.1.2).
+
+#### 13.1.2 Achado: `package.json.version` nunca foi mantido em sincronia com as releases
+
+`package.json` (raiz, `apps/web`, `packages/core`) ficou parado em `0.1.0` desde o início do projeto — nenhuma missão anterior precisou de um valor confiável de versão em runtime, então ninguém bumpava. Corrigido: os 3 `package.json` atualizados para `0.10.2` (última tag), e a partir desta missão, **bumpar `package.json` passa a fazer parte do fechamento de toda missão** (junto de `CHANGELOG.md` e da tag `git`) — nenhuma mudança de processo document-first além dessa, só uma disciplina nova de release.
+
+### 13.2 Onde vive no código
+
+Segue o mesmo padrão de toda ação simples do produto — `Tela → Server Action → Repository → Supabase` (arch. §2.1) — mas sem Core Engine no meio, porque não há lógica de produto a orquestrar: a Server Action grava direto via `UserFeedbackRepository`, sem intermediário.
+
+- Componente de UI (modal + botão) vive em `packages/ui` ou `apps/web/components/layout` (decisão de implementação, não de arquitetura) — reutilizável em qualquer tela por estar no layout autenticado, nunca duplicado por página.
+- `UserFeedbackRepository` (novo, `packages/core/src/repositories/`) — único ponto de código que fala com `user_feedback`, mesmo padrão de todo repository já existente.
+
+### 13.3 Segurança
+
+- RLS: `insert` liberado para membros da organização (`is_org_member`, mesmo padrão de escrita já usado em tabelas equivalentes) — cada usuário só grava feedback vinculado à própria `organization_id`/`user_id`, nunca em nome de outra organização.
+- **Sem policy de `select` para usuário final** — mesmo padrão já usado para tabelas administrativas internas (`specialists`, `provider_configs`, §5.1) — nenhum usuário lê feedback de ninguém, nem o próprio, pela aplicação. Leitura é só via service role (consulta direta ao banco), consistente com "sem interface administrativa nesta missão".
+- Sem `update`/`delete` para ninguém além de service role — `user_feedback` é append-only, mesmo espírito de `credit_ledger`/`audit_logs`.
+
+> Detalhamento de schema em [database.md §4.9](database.md#49-user_feedback-★-novo-preparação-missão-10).
 
 Sem contador de cota separado — a "cota mensal" de cada plano **é** o tamanho do `grant_plan` de créditos lançado no início de cada ciclo (Fluxo 6, passo 4). Um único mecanismo (`credit_ledger`) cobre tanto o limite do Starter quanto o "ilimitado sujeito a fair use" do Pro/Business (PRD §8) — a diferença entre os planos é só o tamanho do grant e o tier incluso, nunca um sistema de contagem paralelo. Resolve PRD §13, item 5. Sem cobrança incremental por marca extra no Business por enquanto — decisão futura se surgir necessidade real (§10, item 10 abaixo).

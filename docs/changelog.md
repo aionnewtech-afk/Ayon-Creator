@@ -4,6 +4,51 @@
 
 ---
 
+## v2.23 (revisão 40) — 2026-08-04 — Missão 10 aprovada, escopo ajustado (categoria "Outro" + contexto automático)
+
+**Status:** documentação aprovada pelo dono do produto, com 2 ajustes pedidos antes do código:
+
+1. **Categoria `other`** ("Outro") — 4ª opção, além de Sugestão/Bug/Dificuldade de uso.
+2. **Contexto automático** — `pathname`, `app_version`, `user_agent` gravados junto de todo envio, sem exigir nada do usuário.
+
+**Decisões de arquitetura para o contexto automático** (arch. §13.1.1): `pathname` só existe no client (`usePathname()`); `user_agent` e `app_version` são lidos **no servidor** (`headers()` e `package.json`, respectivamente), nunca confiados de um valor enviado pelo client.
+
+**Achado durante este ajuste:** `package.json` (raiz, `apps/web`, `packages/core`) nunca foi sincronizado com as tags de release — parado em `0.1.0` desde o início do projeto, apesar do repositório já estar em `v0.10.2`. Corrigido como parte desta missão; bumpar `package.json` passa a fazer parte do fechamento de toda missão a partir daqui, junto de `CHANGELOG.md` e da tag `git`.
+
+**Documentos atualizados:** PRD.md (revisão 24), docs/architecture.md (revisão 31, nova §13.1.1/§13.1.2), docs/database.md (revisão 26, 3 colunas novas em `user_feedback`), docs/flows.md (revisão 27, Fluxo 14 passos 2/3), docs/ux-design.md (revisão 25, Modal de Feedback).
+
+**Próximo passo:** implementação completa (migration, RLS, repository, Server Action, botão global, modal, validação real, typecheck/lint/build, testes, limpeza, commits, tag) — nesta mesma sessão.
+
+---
+
+## v2.22 (revisão 39) — 2026-08-04 — Preparação Missão 10 (Feedback do Usuário)
+
+**Status:** documentação preparada — **aguardando aprovação explícita do dono do produto antes do início do código**, mesmo processo doc-first de toda missão anterior.
+
+**Auditoria (antes de qualquer redação):** busca exaustiva por "feedback" em todo o código e documentação — zero resultado. Funcionalidade genuinamente nova, nenhum mecanismo equivalente já existente para reaproveitar ou entrar em conflito.
+
+**Pedido do dono do produto:** botão "Enviar feedback" dentro da plataforma, abrindo um modal simples (categoria + descrição) que grava direto no banco (`user_feedback`) — sem interface administrativa nesta missão.
+
+**Decisões de arquitetura tomadas (sem ambiguidade a resolver com o dono do produto — escopo já estava claro no pedido):**
+
+1. **Não é um Core Engine nem Provider Layer** — é um utilitário transversal, mesmo raciocínio de exclusão já usado para justificar o Billing como módulo dedicado (arch. §12), aplicado a algo ainda mais simples.
+2. **3 categorias fechadas**, exatamente como pedido: `suggestion` (Sugestão), `bug` (Bug), `difficulty` (Dificuldade de uso) — `check` constraint no banco, nunca uma lista aberta.
+3. **`user_feedback` com `organization_id` e `user_id`**, mesmo padrão de isolamento multi-tenant de toda tabela do produto — mesmo sem interface administrativa agora, evita uma tabela "solta" sem RLS coerente com o resto do schema.
+4. **Sem `select` de usuário final** — nem quem enviou vê o próprio feedback de volta pela aplicação (mesmo padrão de `provider_configs`/`specialists`, tabelas administrativas internas). Leitura é direta no banco (Supabase Studio/SQL), consistente com "sem interface administrativa nesta missão".
+5. **Append-only** — sem `update`/`delete` de ninguém além de service role, mesmo espírito de `credit_ledger`/`audit_logs`.
+
+**Documentos atualizados nesta revisão:**
+
+1. **PRD.md** (revisão 23) — nova §9.3, escopo do MVP desta missão e o que fica explicitamente fora (sem interface administrativa, sem status, sem resposta ao usuário, sem anexos).
+2. **docs/architecture.md** (revisão 30) — nova §13, justificativa de não ser Core Engine/Provider Layer, responsabilidade, onde vive no código (`UserFeedbackRepository`, sem Core Engine intermediário), segurança (RLS).
+3. **docs/database.md** (revisão 25) — nova `user_feedback` (§9.3, ao lado de `audit_logs`/`feature_flags` — mesma família de tabela de plataforma), RLS documentada em §8. Nenhuma migration aplicada ainda.
+4. **docs/flows.md** (revisão 26) — novo **Fluxo 14 — Enviar Feedback**, 6 passos, disponível em qualquer tela autenticada.
+5. **docs/ux-design.md** (revisão 24) — novo **GLOBAL-4** (§3.10) e **Modal de Feedback** (§4.9).
+
+**Nenhuma migration aplicada, nenhum código escrito.** Próximo passo: aprovação do dono do produto antes do primeiro commit de código.
+
+---
+
 ## v2.21 (revisão 38) — 2026-08-04 — Missão 9, Etapa 1: gap de UI fechado + bug real de narração corrigido + guia de uso do zero
 
 **Contexto:** ao preparar um passo a passo de uso "como usuário normal" (`docs/GETTING_STARTED.md`), a verificação real revelou que a Missão 9 nunca tinha sido conectada à interface — `generateVideoContentPieceAction` existia e estava validada por testes automatizados desde o fechamento formal da Etapa 1, mas nenhum componente de UI a chamava. `content-package-review.tsx` (CAMP-5) tinha só um branch binário (`text_only` vs. "qualquer outra coisa"), então a peça `video` caía no fluxo de upload manual pensado para `own_media`.
