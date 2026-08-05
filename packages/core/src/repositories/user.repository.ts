@@ -3,6 +3,7 @@ import type { Database } from "@ayon/types";
 
 type UserProfileRow = Database["public"]["Tables"]["user_profiles"]["Row"];
 type UserProfileInsert = Database["public"]["Tables"]["user_profiles"]["Insert"];
+type UserProfileUpdate = Database["public"]["Tables"]["user_profiles"]["Update"];
 
 /**
  * Único ponto de código que fala com a tabela `user_profiles`
@@ -29,6 +30,18 @@ export class UserRepository {
       .eq("user_id", userId)
       .is("deleted_at", null)
       .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async update(userId: string, patch: UserProfileUpdate): Promise<UserProfileRow> {
+    const { data, error } = await this.db
+      .from("user_profiles")
+      .update(patch)
+      .eq("user_id", userId)
+      .select()
+      .single();
 
     if (error) throw error;
     return data;

@@ -34,6 +34,7 @@ export * from "./platform-admin/require-platform-admin";
 export * from "./platform-admin/record-admin-action";
 export * from "./platform-admin/get-dashboard-metrics";
 export * from "./platform-admin/get-organizations-overview";
+export * from "./platform-admin/get-users-overview";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";

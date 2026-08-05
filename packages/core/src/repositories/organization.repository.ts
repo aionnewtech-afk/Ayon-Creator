@@ -77,4 +77,33 @@ export class OrganizationRepository {
     if (error) throw error;
     return data ?? [];
   }
+
+  async findAllMemberships(): Promise<OrganizationMemberRow[]> {
+    const { data, error } = await this.db.from("organization_members").select("*").is("deleted_at", null);
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async updateMemberRole(membershipId: string, role: OrganizationMemberRow["role"]): Promise<OrganizationMemberRow> {
+    const { data, error } = await this.db
+      .from("organization_members")
+      .update({ role })
+      .eq("id", membershipId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /** Remove um membro de uma organização (soft delete) — nunca exclui a conta em `auth.users`. */
+  async removeMember(membershipId: string): Promise<void> {
+    const { error } = await this.db
+      .from("organization_members")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", membershipId);
+
+    if (error) throw error;
+  }
 }

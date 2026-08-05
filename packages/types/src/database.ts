@@ -88,7 +88,7 @@ export interface Database {
           role?: OrganizationMemberRole;
           created_by?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["organization_members"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["organization_members"]["Insert"]> & { deleted_at?: string | null };
         Relationships: [];
       };
       brands: {
