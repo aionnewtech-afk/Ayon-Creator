@@ -2,6 +2,26 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [0.13.0] — 2026-08-05
+
+### Adicionado
+
+- **Missão 12 — Super Admin (plataforma administrativa completa)**: papel novo de escopo de plataforma inteira (`platform_admins`, 2 níveis — `super_admin`/`support_admin`), desacoplado do papel por organização. 13 telas administrativas, menu dedicado (`/admin`), Design System já existente (nenhum componente visual novo fora do sistema).
+  - **Migrations `0020_super_admin.sql`/`0021_pipeline_runs_actor.sql`**: `platform_admins`, `admin_audit_logs`, `provider_call_logs` (tabelas novas); extensão centralizada de `is_org_member`/`is_org_admin`/`is_org_editor` para conceder acesso automático a qualquer `platform_admin`, sem tocar em nenhuma policy individual; `plans` ganha 11 campos novos (limites/capacidade/flags de recurso, preparando o modelo de negócio para migrar de "só crédito" para "crédito + limite por recurso" sem migration futura); `organizations`/`user_profiles` ganham `status`; `subscriptions` ganha `trialing`/`trial_ends_at`; `provider_configs` ganha `credential_value`/`maintenance`; `user_feedback` vira CRM interno (`status`/`internal_response`/`archived_at`); `pipeline_runs.actor_user_id` (achado real — webhook assíncrono do n8n não tinha como saber quem disparou o pipeline).
+  - **Portão de crédito centralizado**: `ensureSufficientCredits`/`recordConsumption` ganham bypass automático de "ilimitado" para qualquer `platform_admin` — único ponto de decisão de cobrança, nenhuma Server Action de geração ganha lógica própria de admin.
+  - **Impersonação real** ("Entrar como organização"): RLS concede acesso via a mesma extensão centralizada, sem client de service role nem lógica especial por Server Action; banner fixo obrigatório, sem botão de fechar; identidade do ator nunca muda (auditoria sempre com o admin real).
+  - **Instrumentação real dos 4 providers** (Anthropic/ElevenLabs/Pexels/Shotstack): `provider_call_logs` com latência/status/custo estimado/tokens/request_id por chamada real, sem alterar nenhum dos 14 call sites existentes.
+  - **Auditoria administrativa obrigatória**: toda ação grava em `admin_audit_logs` (ator, papel no momento da ação, antes/depois, IP, User-Agent lidos no servidor).
+  - **13 telas**: Dashboard (MRR/ARR/trials/conversão/margem estimada/providers mais usados), Organizações (visão operacional + editar/bloquear/plano/créditos/trial/impersonar/excluir), Usuários (papel/status/reset de senha via Admin API), Planos (preço/créditos/limites/flags, só `super_admin`), Trials (criar/renovar/cancelar/converter), Créditos (saldo/histórico/ajuste), Mercado Pago (sincronizar webhook/cancelar assinatura via API real), Feedbacks (CRM interno — arquivar/responder/resolver/excluir/exportar CSV), Providers (observabilidade real + gestão de config, escrita só `super_admin`), Logs (visão unificada de pipelines/auditoria/providers/pagamentos), Branding (cross-organização, mesmos campos do Perfil da Marca), Auditoria (trilha completa, leitura), Configurações (preço em créditos por ação/flags de recurso/gestão de administradores, só `super_admin`).
+  - `packages/ui` ganha 4 componentes (Badge/Table/Select/Tabs), mesmo padrão dos existentes (sem dependência nova).
+
+### Corrigido durante a implementação (achados reais)
+
+- **`/admin` sempre redirecionava para `/painel`**: `getCurrentSession()` consultava `platform_admins` com o client de sessão, mas a tabela não tem nenhuma policy de RLS para `authenticated` (mesmo padrão de `provider_configs`/`specialists`) — o papel do admin nunca era encontrado. Corrigido consultando via client de service role; achado documentado em `docs/architecture.md` (revisão 37) junto com o mesmo gap em `admin_audit_logs`/`provider_call_logs`/`user_feedback`.
+- **"Criar admins" nunca tinha sido exposto em nenhuma tela**: uma das 4 ações exclusivas de `super_admin` do pedido original, com o repository já pronto desde o início da missão, mas sem nenhuma Server Action ou UI conectada — encontrado na revisão completa antes do fechamento. Adicionada a seção "Administradores da plataforma" em Configurações (criar/revogar, nunca permite auto-revogação).
+- **Menu administrativo inteiro inacessível em telas estreitas**: `AdminSidebar` usa `hidden md:flex` sem nenhum fallback abaixo do breakpoint — encontrado na revisão de responsividade. Adicionado menu hambúrguer (`AdminMobileNav`) reaproveitando a mesma fonte de navegação, escopo restrito ao layout administrativo.
+- Ver [docs/changelog.md](docs/changelog.md) (entradas v2.29/v2.30) para o relato completo da auditoria de arquitetura e das 9 decisões de ajuste do dono do produto.
+
 ## [0.12.0] — 2026-08-05
 
 ### Adicionado

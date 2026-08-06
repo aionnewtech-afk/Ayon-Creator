@@ -4,6 +4,23 @@
 
 ---
 
+## v2.31 — 2026-08-05 — Missão 12 implementada e validada — v0.13.0
+
+**Status:** implementação completa das 13 telas administrativas, migrations `0020`/`0021` aplicadas ao Supabase remoto, todas validadas com dado real (nenhum mock em nenhuma etapa). Fechamento da Missão 12.
+
+**Achados reais durante a implementação e a revisão final** (documentados em detalhe em [architecture.md](architecture.md), revisão 37, e no changelog raiz [`CHANGELOG.md`](../CHANGELOG.md) v0.13.0):
+
+1. `getCurrentSession()` consultava `platform_admins` com o client de sessão — a tabela não tem nenhuma policy de RLS para `authenticated` (mesmo padrão de `provider_configs`/`specialists`), então nenhum `platform_admin` conseguia entrar em `/admin` (redirect permanente). Corrigido com client de service role para essa consulta específica. O mesmo gap existia (e foi corrigido preventivamente) para `admin_audit_logs`/`provider_call_logs` (achado original) e `user_feedback` (achado ao preparar a tela Feedbacks).
+2. "Criar admins" — uma das 4 ações exclusivas de `super_admin` do pedido original — tinha o repository pronto desde o início da missão mas nunca foi conectado a nenhuma Server Action ou tela. Encontrado na revisão completa exigida antes do fechamento; corrigido com uma seção nova em Configurações (criar/revogar administrador, nunca permite auto-revogação).
+3. O menu administrativo inteiro ficava inacessível em viewports estreitos (`AdminSidebar` usa `hidden md:flex`, mesmo padrão do `Sidebar` do produto, sem nenhum fallback). Encontrado na revisão de responsividade; corrigido com um menu hambúrguer dedicado ao layout administrativo, sem tocar no `Sidebar` do produto (fora do escopo desta missão).
+4. `pipeline_runs` nunca teve coluna de autor — o webhook assíncrono de conclusão do n8n não tinha como saber quem disparou o pipeline para decidir o bypass de crédito. Corrigido com `pipeline_runs.actor_user_id` (migration `0021`).
+
+**Revisão completa antes da entrega** (pedido explícito do dono do produto — UX, permissões, RLS, créditos, impersonação, auditoria, responsividade): matriz de capacidades (`super_admin`/`support_admin`) auditada em todas as 13 telas, sem divergência além do achado #2 acima; bypass de crédito confirmado intacto; impersonação testada de ponta a ponta pela UI real (banner com o texto exato aprovado, sem botão de fechar, "Sair da impersonação" funcionando); trilha de auditoria confirmada com IP/User-Agent/antes-depois reais em mais de 20 ações administrativas reais.
+
+Ver [CHANGELOG.md](../CHANGELOG.md) v0.13.0 para a lista completa do que foi entregue.
+
+---
+
 ## v2.30 — 2026-08-05 — Missão 12 aprovada, 9 ajustes incorporados — implementação autorizada
 
 **Status:** dono do produto aprovou a documentação da v2.29 com 9 ajustes. Documentação atualizada para refletir todos; **nenhuma migration aplicada, nenhum código escrito ainda** — implementação autorizada a partir daqui.
