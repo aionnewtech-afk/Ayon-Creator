@@ -30,10 +30,17 @@ export interface NarrateVideoContentPieceResult {
 
 /**
  * Etapa 1 do pipeline de vídeo (Fluxo 13, passo 3) — narração via Voice
- * Provider (ElevenLabs). Lê `content_pieces.script`, já existente e herdado
- * do Intelligence Hub (Fluxo 3.1) — nenhuma geração de texto nova aqui. Grava
- * o áudio no bucket `content-output` e devolve uma signed URL, porque o
- * bucket é privado e o Video Render Provider precisa buscar o arquivo por
+ * Provider (ElevenLabs). Lê o roteiro da peça **primária** da campanha
+ * (`is_primary`, formato `script`) — achado real, sprint de estabilização:
+ * `content_pieces.script` da própria peça de vídeo nunca é populado por
+ * nenhum fluxo (o loop de geração de texto pula qualquer formato fora de
+ * `TEXT_ONLY_CONTENT_PIECE_FORMATS`, e `video` não está nessa lista desde a
+ * Missão 9) — chamar `narrateVideoContentPiece` sempre falhava com "sem
+ * roteiro", mesmo depois de o usuário editar manualmente (a edição ia para
+ * a peça errada). A peça primária é a única fonte de verdade do roteiro em
+ * toda a campanha agora (`ContentPieceRepository.findPrimaryByCampaignId`).
+ * Grava o áudio no bucket `content-output` e devolve uma signed URL, porque
+ * o bucket é privado e o Video Render Provider precisa buscar o arquivo por
  * URL (architecture.md §3.5.1).
  *
  * ★ Missão 11 (arch. §14.3) — a voz não é mais sempre a padrão do
@@ -47,15 +54,17 @@ export async function narrateVideoContentPiece(
   params: NarrateVideoContentPieceParams,
 ): Promise<NarrateVideoContentPieceResult> {
   const contentPieceRepository = new ContentPieceRepository(params.db);
-  const piece = await contentPieceRepository.findById(params.contentPieceId);
-  if (!piece?.script) {
-    throw new Error(`content_piece ${params.contentPieceId} não tem script para narrar.`);
+  const primaryPiece = await contentPieceRepository.findPrimaryByCampaignId(params.campaignId);
+  if (!primaryPiece?.script) {
+    throw new Error(
+      `Campanha ${params.campaignId} não tem roteiro gerado ainda (peça primária sem script) — não é possível narrar o vídeo.`,
+    );
   }
 
   const voiceRef = await resolveVoiceRef(params);
 
   const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
-  const result = await voiceProvider.synthesizeVoice({ script: piece.script, voiceRef });
+  const result = await voiceProvider.synthesizeVoice({ script: primaryPiece.script, voiceRef });
 
   const audioBuffer = Buffer.from(result.audioBase64, "base64");
   const storagePath = `${params.organizationId}/${params.campaignId}/${params.contentPieceId}-narration.mp3`;

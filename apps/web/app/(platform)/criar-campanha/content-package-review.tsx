@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Textarea } from "@ayon/ui";
 import {
   approveContentPieceAction,
@@ -53,17 +54,30 @@ const STAGE_LABELS: Record<string, string> = {
 export interface ContentPackageReviewProps {
   brandName: string;
   initialContentPieces: ContentPieceView[];
+  /** ★ Sprint de estabilização — título da campanha, quando revisitada via `/campanhas/[id]` (ausente no fluxo de criação, onde o título ainda não importa para o usuário). */
+  campaignTitle?: string;
+  /** ★ Sprint de estabilização — pacote já montado em uma sessão anterior (`campaigns.status === "package_ready"`), para não exigir reaprovar tudo de novo só para ver o link de download. */
+  initialPackageReady?: boolean;
+  initialDownloadUrl?: string;
 }
 
-export function ContentPackageReview({ brandName, initialContentPieces }: ContentPackageReviewProps) {
+export function ContentPackageReview({
+  brandName,
+  initialContentPieces,
+  campaignTitle,
+  initialPackageReady,
+  initialDownloadUrl,
+}: ContentPackageReviewProps) {
   const [pieces, setPieces] = useState<ContentPieceView[]>(initialContentPieces);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftScript, setDraftScript] = useState("");
+  /** ★ Sprint de estabilização — nicho opcional por peça ao regenerar imagem (ex.: "praia", "shows"), achado real: busca automática ainda genérica demais para o gosto do usuário em alguns casos. */
+  const [photoNicheDrafts, setPhotoNicheDrafts] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
-  const [packageReady, setPackageReady] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | undefined>(undefined);
+  const [packageReady, setPackageReady] = useState(initialPackageReady ?? false);
+  const [downloadUrl, setDownloadUrl] = useState<string | undefined>(initialDownloadUrl);
 
   function updatePiece(updated: ContentPieceView) {
     setPieces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -156,7 +170,7 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
 
   async function handleGeneratePhoto(pieceId: string) {
     setLoadingId(pieceId);
-    handleActionResult(await generatePhotoContentPieceAction(pieceId));
+    handleActionResult(await generatePhotoContentPieceAction(pieceId, photoNicheDrafts[pieceId]));
   }
 
   async function handleSelectVersion(pieceId: string, versionId: string) {
@@ -195,6 +209,11 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
             Baixar pacote (.zip)
           </a>
         ) : null}
+        <div>
+          <Link href="/campanhas" className="text-sm text-muted-foreground underline underline-offset-4">
+            Voltar para Campanhas
+          </Link>
+        </div>
       </div>
     );
   }
@@ -202,7 +221,14 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
   return (
     <div className="mx-auto max-w-3xl space-y-6 py-8">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Revisão do pacote de conteúdo</h1>
+        {campaignTitle ? (
+          <Link href="/campanhas" className="text-sm text-muted-foreground underline underline-offset-4">
+            &larr; Voltar para Campanhas
+          </Link>
+        ) : null}
+        <h1 className="text-xl font-semibold text-foreground">
+          {campaignTitle ? campaignTitle : "Revisão do pacote de conteúdo"}
+        </h1>
         <p className="text-sm text-muted-foreground">
           Aprove cada peça para liberar o pacote final. Formatos de texto foram gerados pela Ayon; formatos visuais
           precisam do seu arquivo.
@@ -298,13 +324,14 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
                   <>
                     {piece.status === "draft" ? (
                       <p className="text-muted-foreground">
-                        Gere o vídeo automaticamente — narração por IA, cenas de banco de vídeo licenciado e
-                        identidade visual da marca, montados em um MP4 vertical pronto.
+                        Gere o vídeo automaticamente — a narração usa o roteiro da peça &quot;Roteiro&quot; desta campanha,
+                        cenas de banco de vídeo licenciado e identidade visual da marca, montados em um MP4 vertical
+                        pronto. Se a peça &quot;Roteiro&quot; ainda não tiver conteúdo, gere/edite ela primeiro.
                       </p>
                     ) : piece.status === "generating" ? (
                       <GenerationProgress piece={piece} />
                     ) : piece.status === "failed" ? (
-                      <p className="text-destructive">Não conseguimos gerar esse vídeo agora.</p>
+                      <p className="text-destructive">{failureMessage(piece, "esse vídeo")}</p>
                     ) : piece.mediaUrl ? (
                       <>
                         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -341,14 +368,6 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
                             size="sm"
                             variant="outline"
                             disabled={isLoading}
-                            onClick={() => startEditing(piece)}
-                          >
-                            Editar roteiro
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isLoading}
                             onClick={() => handleGenerateVideo(piece.id)}
                           >
                             Gerar de novo
@@ -359,22 +378,13 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
                         </>
                       ) : null}
                     </div>
-
-                    {isEditing ? (
-                      <div className="space-y-2 pt-2">
-                        <Textarea value={draftScript} onChange={(event) => setDraftScript(event.target.value)} className="min-h-[100px]" />
-                        <Button size="sm" disabled={isLoading} onClick={() => saveEdit(piece.id)}>
-                          {isLoading ? "Salvando..." : "Salvar roteiro"}
-                        </Button>
-                      </div>
-                    ) : null}
                   </>
                 ) : isPhotoAutoGenerated ? (
                   <>
                     {piece.status === "generating" ? (
                       <GenerationProgress piece={piece} />
                     ) : piece.status === "failed" ? (
-                      <p className="text-destructive">Não conseguimos gerar essa imagem agora.</p>
+                      <p className="text-destructive">{failureMessage(piece, "essa imagem")}</p>
                     ) : piece.mediaOptions && piece.mediaOptions.length > 1 ? (
                       <div className="space-y-2">
                         <p className="text-muted-foreground">Escolha uma das opções geradas:</p>
@@ -416,6 +426,14 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Nicho da imagem (opcional): praia, shows, gastronomia..."
+                        value={photoNicheDrafts[piece.id] ?? ""}
+                        onChange={(event) => setPhotoNicheDrafts((prev) => ({ ...prev, [piece.id]: event.target.value }))}
+                        disabled={isLoading || piece.status === "generating"}
+                        className="h-9 min-w-[220px] flex-1 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground"
+                      />
                       <Button
                         size="sm"
                         variant={piece.status === "ready_for_review" ? "outline" : "default"}
@@ -507,6 +525,21 @@ export function ContentPackageReview({ brandName, initialContentPieces }: Conten
       </div>
     </div>
   );
+}
+
+/**
+ * ★ Sprint de estabilização (Missão 12, item "UX") — mensagem de falha
+ * aponta em qual etapa o pipeline parou (mesmas copy amigáveis de
+ * `STAGE_LABELS`, nunca o erro cru do provedor — arch. §14.9), em vez de só
+ * "não conseguimos gerar" sem contexto. Usuário nunca precisa descobrir
+ * sozinho qual etapa falhou.
+ */
+function failureMessage(piece: ContentPieceView, mediaLabelWithArticle: string): string {
+  const stageLabel = piece.pipelineStage ? STAGE_LABELS[piece.pipelineStage]?.replace(/\.\.\.$/, "") : null;
+  if (stageLabel) {
+    return `Não conseguimos concluir a etapa "${stageLabel}" ao gerar ${mediaLabelWithArticle}. Tenta de novo?`;
+  }
+  return `Não conseguimos gerar ${mediaLabelWithArticle} agora. Tenta de novo em instantes?`;
 }
 
 /**

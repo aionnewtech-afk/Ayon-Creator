@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
 import type { VoiceProvider, VoiceSettings, VoiceSynthesisRequest, VoiceSynthesisResult } from "./voice-provider";
 import { logProviderCall } from "./log-provider-call";
+import { fetchWithRetry } from "../shared/fetch-with-retry";
 
 /**
  * Adapter concreto do Voice Provider (architecture.md §5, §3.5.1) para o
@@ -32,7 +33,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     let errorMessage: string | undefined;
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithRetry(endpoint, {
         method: "POST",
         headers: {
           "xi-api-key": this.apiKey,

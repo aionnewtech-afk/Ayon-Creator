@@ -51,4 +51,23 @@ export class TrendResearchRepository {
     if (error) throw error;
     return data;
   }
+
+  /**
+   * Últimas N execuções concluídas — usado para extrair títulos já
+   * mostrados ao usuário (achado real, sprint de estabilização: "Buscar
+   * novidades" sempre trazia as mesmas tendências, porque nada avisava o
+   * Trend Source Provider quais já tinham sido mostradas antes).
+   */
+  async findRecentCompletedByBrandId(brandId: string, limit = 5): Promise<TrendResearchRow[]> {
+    const { data, error } = await this.db
+      .from("trend_research")
+      .select("*")
+      .eq("brand_id", brandId)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data ?? [];
+  }
 }

@@ -2,7 +2,38 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
-## [0.13.0] — 2026-08-05
+## [0.13.1] — 2026-08-08
+
+### Sprint de Estabilização da Missão 12
+
+Sem funcionalidade nova planejada — auditoria completa do estado real da aplicação contra os problemas relatados em uso real, causa raiz identificada e corrigida para cada um, validação com dados/execuções reais (nunca mocks) em todos os itens. Uma única exceção autorizada pelo dono do produto ao final da sprint: alerta de divergência de cor na Identidade Visual (ver "Adicionado" abaixo).
+
+### Corrigido (achados reais)
+
+- **Pipeline de vídeo narrava sem roteiro válido, mesmo após inserido manualmente**: causa raiz — a peça de vídeo nunca tem `.script` próprio; a única fonte real do roteiro é a peça "Roteiro" (`is_primary=true`), e uma cópia pontual feita só no momento da aprovação da campanha ficava desatualizada (ou nunca acontecia, se a geração do roteiro falhasse). `narrateVideoContentPiece`/`triggerVideoGeneration` passam a resolver a peça primária **ao vivo** a cada chamada (`ContentPieceRepository.findPrimaryByCampaignId`, novo), com falha explícita (`MissingScriptError`) antes de qualquer chamada à ElevenLabs se não houver roteiro. Removida a cópia pontual (código morto).
+- **Workflow n8n apontava para a porta errada** (`3000` em vez da `3010` real do `next dev`) em todos os 9 nós HTTP — causa raiz separada do bug acima, mas com o mesmo sintoma ("geração trava para sempre"). Corrigido via API REST do n8n.
+- **Campanhas geradas não apareciam em nenhum histórico**: causa raiz — o item de navegação "Campanhas" nunca foi implementado (placeholder "em breve"); a tela de revisão do pacote de conteúdo só existia como estado efêmero de componente cliente, perdido ao sair da página. Novas telas `/campanhas` (histórico, todas as campanhas da marca) e `/campanhas/[id]` (detalhe persistido, reaproveita `ContentPackageReview`). Auditoria de persistência encontrou 2 campanhas reais com `status` avançado e zero `content_pieces` — guarda defensiva adicionada em `approveCampaignStrategyAction` (nunca avança o status da campanha sem confirmar que as peças persistiram).
+- **Reunião dos especialistas (Intelligence Hub)**: respostas longas, sem resumo executivo, com datas desatualizadas (ex. maio de 2025). Contexto temporal real (data/mês/ano/estação/país) passa a ser injetado em todo prompt do Intelligence Hub e do Trend Engine (`buildTemporalContextBlock`, novo, `packages/core/src/shared/temporal-context.ts`); instrução de objetividade adicionada; `executive_summary` novo campo no schema de resposta do Coordinator, exibido em destaque na UI.
+- **"Buscar novidades" (Trend Engine) sempre retornava as mesmas tendências**: nenhuma exclusão contra pesquisas anteriores. `runTrendDiscovery` passa a buscar as últimas 5 pesquisas concluídas da marca e excluir os títulos já mostrados do prompt de busca (`excludeTitles`, novo).
+- **Busca de imagens genérica**: já corrigida em turno anterior à sprint via consulta derivada por LLM; esta sprint adiciona um campo de nicho opcional por peça (ex. "praia", "shows") que o usuário pode informar ao regenerar, propagado por toda a cadeia (app → rota interna → n8n → Media Provider), sobrepondo a derivação automática quando preenchido. Validado ao vivo: regeneração com "praia" produziu foto de praia real (antes: resultado genérico/irrelevante).
+- **Mensagens de erro de geração eram genéricas** ("não conseguimos gerar agora"), sem indicar em qual etapa o pipeline parou. `ContentPieceView` passa a carregar `pipelineStage` também em `status: "failed"` (antes só em `"generating"`); a UI monta uma mensagem específica por etapa (ex. "não conseguimos concluir a etapa 'Gerando narração'"), nunca expondo nome de fornecedor/API (mesma convenção já usada em `STAGE_LABELS`).
+- **Peças de texto com falha na geração ficavam marcadas como `"draft"`** (indistinguíveis de uma peça nunca gerada) — `generate-text-piece.ts` agora marca `"failed"` no catch.
+
+### Adicionado
+
+- **Retry automático para falhas transitórias de provedores externos**: `fetchWithRetry` (novo, `packages/core/src/shared/fetch-with-retry.ts`) — 3 tentativas, backoff exponencial, aplicado a ElevenLabs, Pexels, Shotstack (submit e polling) e aos 2 pontos de disparo do pipeline via n8n (vídeo e foto). Anthropic já coberto pelos defaults do SDK oficial.
+- **Alerta de divergência de identidade visual** (único item autorizado como funcionalidade nova nesta sprint, a pedido explícito do dono do produto após o fechamento da auditoria): `detectBrandColorMismatch` (novo, `packages/core/src/asset-engine/detect-brand-color-mismatch.ts`) analisa as cores predominantes reais da logo enviada (via `sharp`) e compara com `primary_color_hex`/`secondary_color_hex` cadastrados — **só detecta e avisa, nunca extrai ou aplica cor automaticamente** (decisão explícita). Banner de aviso não bloqueante em Perfil da Marca quando alguma cor cadastrada não corresponde à logo. Validado com o caso real da Todo Canto: cor primária corretamente reconhecida, cor secundária corretamente sinalizada como divergente — mesmo problema visual relatado originalmente pelo usuário.
+
+### Auditado, causa raiz não é um bug de código (documentado, sem correção nesta sprint)
+
+- **Identidade visual "parece só sobreposta"**: o pipeline aplica corretamente logo/cores configuradas (`resolveBrandBranding` → `ShotstackVideoRenderProvider`) — a causa real, para a conta real auditada, é que a cor secundária cadastrada não corresponde à paleta real da logo enviada, e a logo em si não tem transparência (fundo sólido embutido no arquivo). Dados de conta, não defeito de pipeline — endereçado via o alerta acima, correção dos dados fica a critério do usuário.
+- **Sandbox do Shotstack sempre aplica marca d'água** (`SHOTSTACK_HOST=.../edit/stage/render`) — decisão deliberada e pré-existente da Missão 9 (ambiente gratuito de testes), não um bug introduzido; migrar para produção (paga, sem marca d'água) é uma decisão de billing que cabe ao usuário.
+- **Ordem segura do pipeline** ("nenhuma etapa inicia antes da anterior estar concluída e persistida"): já garantida pela arquitetura existente + pelas correções desta sprint (falha explícita de roteiro ausente antes do disparo, guarda de 0 peças persistidas antes de avançar status) — confirmado com dados reais de `pipeline_runs` mostrando progressão sempre ordenada (`narrating` → `selecting_scenes` → `rendering`).
+
+### Corrigido (infraestrutura de build, achado durante a implementação do alerta de cor)
+
+- **`sharp` (dependência nativa usada pela detecção de divergência de cor) vazava para bundles de cliente**: o barrel plano de `packages/core/src/index.ts` (`export *`) fazia até um client component que só precisa de `hasMinimumRole` puxar o módulo inteiro, incluindo `sharp` — webpack falhava ao tentar empacotar dependências nativas (`node:child_process`, `node:crypto`) no bundle do navegador. Corrigido excluindo o módulo do barrel, importado por caminho direto no único consumidor (Server Component) — mesmo padrão já usado para `build-content-package`/`verify-n8n-webhook-secret`.
+- **`sharp` não resolvia durante `next build`** mesmo depois do fix acima: o `require` externalizado (`serverExternalPackages`) do webpack resolve relativo à localização do bundle de saída (`apps/web/.next/...`), não do arquivo-fonte original — e sob o isolamento estrito do pnpm, `sharp` só estava linkado em `packages/core/node_modules`. Corrigido adicionando `sharp` também como dependência direta de `apps/web`.
 
 ### Adicionado
 

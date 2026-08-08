@@ -24,6 +24,7 @@ export interface RunCampaignStrategySessionResult {
   campaignId: string;
   sessionId: string;
   opinions: SpecialistOpinionResult[];
+  executiveSummary: string | null;
   consolidatedStrategy: string;
   rationale: string;
   divergences: string | null;
@@ -112,6 +113,7 @@ export async function runCampaignStrategySession(
     });
 
     const consolidatedResult = {
+      executive_summary: coordinatorResult.executiveSummary,
       consolidated_strategy: coordinatorResult.consolidatedStrategy,
       rationale: coordinatorResult.rationale,
       divergences: coordinatorResult.divergences,
@@ -133,6 +135,7 @@ export async function runCampaignStrategySession(
       campaignId,
       sessionId: session.id,
       opinions,
+      executiveSummary: coordinatorResult.executiveSummary,
       consolidatedStrategy: coordinatorResult.consolidatedStrategy,
       rationale: coordinatorResult.rationale,
       divergences: coordinatorResult.divergences,

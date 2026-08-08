@@ -15,6 +15,8 @@ export interface IdentityFormProps {
   fontFamily: string | null;
   visualStyle: string | null;
   voiceId: string | null;
+  /** ★ Sprint de estabilização — aviso quando a(s) cor(es) cadastrada(s) parecem não bater com as cores predominantes da logo enviada. Só um alerta: a Ayon nunca altera isso sozinha. */
+  colorMismatchWarning?: string | null;
 }
 
 /**
@@ -31,6 +33,7 @@ export function IdentityForm({
   fontFamily,
   visualStyle,
   voiceId,
+  colorMismatchWarning,
 }: IdentityFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +76,12 @@ export function IdentityForm({
         )}
         <Input id="identity-logo" name="logo" type="file" accept="image/*" />
       </div>
+
+      {colorMismatchWarning ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          {colorMismatchWarning}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">

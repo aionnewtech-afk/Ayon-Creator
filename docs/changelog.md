@@ -4,6 +4,30 @@
 
 ---
 
+## v2.32 — 2026-08-08 — Sprint de Estabilização da Missão 12 encerrada — v0.13.1
+
+**Status:** dono do produto pediu, antes de iniciar qualquer missão nova, o fechamento completo da Missão 12 — auditoria do estado real da aplicação contra 9 problemas relatados em uso real (não hipotéticos), causa raiz de cada um, correção, validação real (nunca mock), testes de ponta a ponta. Sem funcionalidade nova planejada; uma única exceção autorizada ao final pelo dono do produto (alerta de divergência de cor, ver item 9 abaixo). Trabalho conduzido de forma autônoma, sem pausa para aprovação entre itens (autorização explícita do pedido original).
+
+**Os 9 problemas, causa raiz e resultado** (lista completa em [`CHANGELOG.md`](../CHANGELOG.md) v0.13.1):
+
+1. **Pipeline de vídeo narrava sem roteiro** — causa raiz: nenhuma fonte única de verdade para o roteiro (a peça de vídeo nunca tem `.script` próprio; uma cópia pontual da peça "Roteiro" feita só na aprovação da campanha ficava desatualizada ou nunca acontecia). Corrigido: resolução ao vivo da peça primária a cada chamada, falha explícita antes de qualquer chamada à ElevenLabs. Achado colateral, mesma causa aparente: workflow n8n com porta hardcoded errada (3000 em vez de 3010).
+2. **Campanhas não apareciam em histórico** — causa raiz: "Campanhas" nunca foi implementada (placeholder), a revisão do pacote só existia em estado efêmero de cliente. Corrigido: telas `/campanhas` e `/campanhas/[id]` novas, persistidas, reaproveitando o componente de revisão já existente.
+3. **Reunião dos especialistas** — respostas longas, datas desatualizadas, sem resumo. Corrigido: contexto temporal real injetado em todo prompt, resumo executivo novo no schema de resposta do Coordinator.
+4. **"Buscar novidades" sempre repetia** — corrigido com lista de exclusão contra as últimas 5 pesquisas da marca.
+5. **Busca de imagens genérica** — consulta por LLM (turno anterior) + nicho opcional por peça informado pelo usuário, propagado por toda a cadeia incluindo o workflow n8n.
+6. **Identidade visual "só sobreposta"** — auditado a fundo: pipeline aplica corretamente a identidade configurada; a causa real (conta real da Todo Canto) é dado de conta (cor secundária cadastrada não bate com a paleta real da logo, logo sem transparência), não defeito de código. Documentado, sem correção de dado — ver item 9.
+7. **Retry automático** — `fetchWithRetry` novo (backoff exponencial, 3 tentativas) aplicado aos 4 providers com `fetch` cru (ElevenLabs/Pexels/Shotstack) e aos 2 pontos de disparo do n8n.
+8. **UX de erro/feedback** — mensagens de falha passam a indicar a etapa exata onde o pipeline parou (nunca o erro cru do provedor), corrigindo um erro de concordância de gênero introduzido e pego antes de reportar como concluído ("essa vídeo" → "esse vídeo").
+9. **Pipeline seguro** ("nenhuma etapa antes da anterior persistida") — já garantido pela arquitetura + pelas correções acima (falha explícita de roteiro ausente, guarda de 0 `content_pieces` persistidas antes de avançar status da campanha); confirmado com dados reais de `pipeline_runs` (progressão sempre ordenada).
+
+**Ajuste final autorizado explicitamente pelo dono do produto, após o fechamento da auditoria** — alerta (não extração automática) de divergência entre a identidade visual cadastrada e a identidade real da logo: `detectBrandColorMismatch` (novo) usa `sharp` para extrair as cores predominantes reais da logo (downscale sem blending — achado real: o kernel padrão do `sharp` lavava a paleta inteira para tons pasteis, corrigido com `kernel: "nearest"` e uma resolução maior) e compara com as cores cadastradas por distância euclidiana em RGB. Validado com o caso real da Todo Canto: reproduz exatamente o mesmo problema relatado no início da sprint (cor secundária maroon sem relação com a logo navy/laranja/verde).
+
+**Achado real de infraestrutura de build durante essa implementação**: `sharp` (dependência nativa) vazava para bundles de cliente por causa do barrel plano de `packages/core/src/index.ts` (`export *` — até um client component que só usa `hasMinimumRole` puxava o módulo inteiro). Corrigido excluindo o módulo do barrel (import direto por caminho, mesmo padrão já usado em outros pontos do código). Um segundo problema, só visível em `next build` (nunca em `next dev`): o `require` externalizado do webpack resolve relativo à localização do bundle de saída, não do arquivo-fonte — sob o isolamento estrito do pnpm, isso exigiu adicionar `sharp` como dependência direta também de `apps/web`, não só de `packages/core`.
+
+Ver [CHANGELOG.md](../CHANGELOG.md) v0.13.1 para a lista completa e detalhada de correções.
+
+---
+
 ## v2.31 — 2026-08-05 — Missão 12 implementada e validada — v0.13.0
 
 **Status:** implementação completa das 13 telas administrativas, migrations `0020`/`0021` aplicadas ao Supabase remoto, todas validadas com dado real (nenhum mock em nenhuma etapa). Fechamento da Missão 12.

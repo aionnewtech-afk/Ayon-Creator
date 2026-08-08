@@ -1,12 +1,16 @@
 import { ONBOARDING_QUESTION_LABELS } from "../brand-brain/onboarding-themes";
 import type { KnownFieldsSnapshot } from "../brand-brain/onboarding-prompt";
+import { buildTemporalContextBlock } from "../shared/temporal-context";
 
 /**
  * Blocos de contexto compartilhados entre especialistas e Coordinator. A
  * persona/comportamento de cada um vem do `system_prompt` do Specialist
  * Registry (dado, não código) — o que é código aqui é só a injeção do
  * contexto de marca, igual para todo mundo (architecture.md §4.1).
+ * `buildTemporalContextBlock` vive em `shared/temporal-context.ts` (exportado
+ * pelo barrel de lá, não daqui) porque também é usado pelo Provider Layer.
  */
+
 /**
  * Reaproveitado também pelo Trend Engine (trend-ranking-prompts.ts) e pelo
  * Learning Engine (learning-engine-prompts.ts) — mesmo bloco de contexto de
@@ -25,8 +29,17 @@ export function buildBrandContextBlock(brandName: string, knownFields: KnownFiel
     ? `\n\nAprendizados aplicados anteriormente (Brand Evolution, aceitos pelo cliente — leve isso em conta como preferência real da marca):\n${learnedPreferencesText}`
     : "";
 
-  return `Marca: ${brandName}\n\nO que sabemos sobre a marca:\n${fieldsText}${preferencesBlock}`;
+  return `${buildTemporalContextBlock()}\n\nMarca: ${brandName}\n\nO que sabemos sobre a marca:\n${fieldsText}${preferencesBlock}`;
 }
+
+/**
+ * Achado real, sprint de estabilização: opiniões de especialista vinham
+ * longas demais (o `system_prompt` de cada especialista, dado no Specialist
+ * Registry, não instruía objetividade) — reforçado aqui, uma vez, em vez de
+ * editar o prompt de cada especialista individualmente no banco.
+ */
+const BREVITY_INSTRUCTION =
+  "Seja objetivo: opinion em no máximo 2-3 frases diretas (sem repetir o objetivo do usuário), rationale em no máximo 1-2 frases.";
 
 export function buildSpecialistUserMessage(params: {
   brandName: string;
@@ -34,7 +47,7 @@ export function buildSpecialistUserMessage(params: {
   learnedPreferencesText?: string;
   objective: string;
 }): string {
-  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nDê sua opinião especializada sobre esse objetivo de campanha, seguindo as regras do seu papel.`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nDê sua opinião especializada sobre esse objetivo de campanha, seguindo as regras do seu papel. ${BREVITY_INSTRUCTION}`;
 }
 
 export interface SuccessfulOpinionForCoordinator {
@@ -55,5 +68,5 @@ export function buildCoordinatorUserMessage(params: {
       ? "Nenhum especialista respondeu com sucesso desta vez."
       : params.opinions.map((o) => `- ${o.specialistName}: "${o.opinion}" (justificativa: ${o.rationale})`).join("\n");
 
-  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em uma única estratégia coerente para esta campanha.\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"consolidated_strategy": "a estratégia final, 3-5 frases", "rationale": "por que essa síntese, citando as opiniões dos especialistas e o Brand Brain", "divergences": "descrição de divergências resolvidas entre especialistas, ou null se convergiram"}.`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em uma única estratégia coerente para esta campanha. ${BREVITY_INSTRUCTION}\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"executive_summary": "1 frase direta, o essencial da estratégia para quem só vai ler isso", "consolidated_strategy": "a estratégia final, 3-5 frases objetivas", "rationale": "por que essa síntese, citando as opiniões dos especialistas e o Brand Brain, no máximo 2-3 frases", "divergences": "descrição objetiva de divergências resolvidas entre especialistas, ou null se convergiram"}.`;
 }

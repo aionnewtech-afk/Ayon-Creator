@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
 import type { MediaCandidate, MediaProvider, MediaSearchRequest, MediaSearchResult } from "./media-provider";
 import { logProviderCall } from "./log-provider-call";
+import { fetchWithRetry } from "../shared/fetch-with-retry";
 
 /**
  * Adapter concreto do Media Provider (architecture.md §5, §3.5.1) para o
@@ -66,7 +67,7 @@ export class PexelsMediaProvider implements MediaProvider {
     let errorMessage: string | undefined;
 
     try {
-      const response = await fetch(url, { headers: { Authorization: this.apiKey } });
+      const response = await fetchWithRetry(url, { headers: { Authorization: this.apiKey } });
 
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "");

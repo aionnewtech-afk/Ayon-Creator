@@ -32,6 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       tier: body.tier,
       campaignId: body.campaignId,
       contentPieceId: body.contentPieceId,
+      nicheOverride: body.nicheOverride ?? null,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

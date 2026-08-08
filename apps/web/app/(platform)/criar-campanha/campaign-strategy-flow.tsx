@@ -14,6 +14,7 @@ import type { ContentPieceView } from "./asset-actions";
 interface StrategyResult {
   campaignId: string;
   opinions: SpecialistOpinionView[];
+  executiveSummary: string | null;
   consolidatedStrategy: string;
   rationale: string;
   divergences: string | null;
@@ -57,6 +58,7 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
     setResult({
       campaignId: response.campaignId,
       opinions: response.opinions,
+      executiveSummary: response.executiveSummary ?? null,
       consolidatedStrategy: response.consolidatedStrategy,
       rationale: response.rationale,
       divergences: response.divergences ?? null,
@@ -120,6 +122,9 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
             <CardDescription>Como o Coordinator uniu as opiniões acima em um único caminho.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            {result.executiveSummary ? (
+              <p className="text-base font-medium text-foreground">{result.executiveSummary}</p>
+            ) : null}
             <p className="text-foreground">{result.consolidatedStrategy}</p>
             <div className="rounded-md bg-secondary/60 px-4 py-3 text-secondary-foreground">
               <p className="text-xs font-medium uppercase tracking-wide">Por que fiz assim?</p>

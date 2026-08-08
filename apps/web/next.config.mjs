@@ -16,7 +16,11 @@ const nextConfig = {
   // virou chave estável de topo (`serverExternalPackages`); `serverActions`
   // continua em `experimental` mesmo no Next 15.5 (confirmado no tipo
   // `ExperimentalConfig` do pacote instalado).
-  serverExternalPackages: ["pdf-parse"],
+  // sharp (Sprint de estabilização, Missão 12 — detecção de divergência de
+  // cor da logo) tem binding nativo (libvips) — mesmo motivo do pdf-parse,
+  // webpack não consegue empacotar `node:child_process`/`node:fs` que o
+  // detect-libc (dependência do sharp) usa internamente.
+  serverExternalPackages: ["pdf-parse", "sharp"],
   experimental: {
     // Hardening (Missão H1, docs/hardening-plan.md item 5.3b): o default do
     // Next.js é 1MB — nenhum upload real (KB até 10MB, own_media até 20MB)

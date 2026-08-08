@@ -62,10 +62,23 @@ export async function runTrendDiscovery(params: RunTrendDiscoveryParams): Promis
   let session: Awaited<ReturnType<typeof sessionRepository.create>> | undefined;
 
   try {
+    // ★ Sprint de estabilização — achado real: "Buscar novidades" sempre
+    // trazia as mesmas tendências, porque nada dizia ao provider quais já
+    // tinham sido mostradas. Junta os títulos das últimas execuções
+    // concluídas desta marca para instruir o provider a evitar repetição.
+    const recentResearch = await trendResearchRepository.findRecentCompletedByBrandId(params.brandId, 5);
+    const excludeTitles = recentResearch
+      .flatMap((research) => {
+        const summary = research.summary as { rankings?: Array<{ title?: string }> } | null;
+        return summary?.rankings?.map((ranking) => ranking.title).filter((title): title is string => Boolean(title)) ?? [];
+      })
+      .filter((title, index, all) => all.indexOf(title) === index);
+
     const trendSourceProvider = await resolveTrendSourceProvider(params.serviceRoleDb, params.tier);
     const candidateResult = await trendSourceProvider.findCandidates({
       niche: params.niche,
       brandName: params.brandName,
+      excludeTitles,
     });
 
     session = await sessionRepository.create({

@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContentPieceFormat, Database, ProviderTier } from "@ayon/types";
-import { resolveMediaProvider } from "../providers/provider-gateway";
+import { resolveLlmProvider, resolveMediaProvider } from "../providers/provider-gateway";
 import type { MediaCandidate } from "../providers/media-provider";
 import { BrandRepository } from "../repositories/brand.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
+import { derivePhotoSearchQuery } from "./derive-photo-search-query";
 
 /**
  * Número de opções geradas por rodada (arch. §14.4.2) — "quando
@@ -31,6 +32,17 @@ export interface SelectPhotoCandidatesParams {
   tier: ProviderTier;
   campaignId: string;
   contentPieceId: string;
+  /**
+   * Nicho/tema informado pelo usuário ao regenerar (ex.: "praia", "shows",
+   * "gastronomia") — achado real, sprint de estabilização: a busca
+   * automática (via LLM, `derivePhotoSearchQuery`) já é mais relevante que a
+   * concatenação bruta anterior, mas ainda é "genérica demais" quando o
+   * usuário tem uma ideia específica de imagem em mente. Quando informado,
+   * usado diretamente como termo de busca (o usuário já escreve algo curto
+   * e específico — pular a derivação via LLM é mais previsível e mais
+   * barato do que reinterpretar a intenção dele).
+   */
+  nicheOverride?: string | null;
 }
 
 export interface SelectPhotoCandidatesResult {
@@ -52,7 +64,17 @@ export async function selectPhotoCandidates(params: SelectPhotoCandidatesParams)
   const campaign = await new CampaignRepository(params.db).findById(params.campaignId);
   const brand = campaign ? await new BrandRepository(params.db).findById(campaign.brand_id) : null;
 
-  const query = [brand?.niche, campaign?.title].filter(Boolean).join(" ") || "viagem paisagem";
+  const fallbackQuery = [brand?.niche, campaign?.title].filter(Boolean).join(" ") || "viagem paisagem";
+  const trimmedOverride = params.nicheOverride?.trim();
+
+  let query: string;
+  if (trimmedOverride) {
+    query = trimmedOverride;
+  } else {
+    const theme = [campaign?.title, brand?.niche].filter(Boolean).join(" — ") || fallbackQuery;
+    const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier);
+    query = await derivePhotoSearchQuery(theme, llmProvider, fallbackQuery);
+  }
 
   const mediaProvider = await resolveMediaProvider(params.serviceRoleDb, params.tier);
   const optionsCount = OPTIONS_PER_TIER[params.tier];

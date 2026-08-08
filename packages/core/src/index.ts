@@ -68,6 +68,8 @@ export * from "./brand-brain/build-onboarding-synthesis";
 export * from "./brand-brain/conversation-log";
 export * from "./brand-brain/onboarding-conversation-engine";
 export * from "./shared/llm-json";
+export * from "./shared/temporal-context";
+export * from "./shared/fetch-with-retry";
 export * from "./intelligence-hub/intelligence-hub-prompts";
 export * from "./intelligence-hub/run-specialist-panel";
 export * from "./intelligence-hub/run-coordinator";
@@ -96,6 +98,13 @@ export * from "./asset-engine/photo-pipeline-compose";
 export * from "./asset-engine/photo-pipeline-trigger";
 export * from "./asset-engine/photo-pipeline-complete";
 export * from "./asset-engine/pipeline-progress";
+// detect-brand-color-mismatch NÃO entra no barrel (mesmo padrão de
+// build-content-package/verify-n8n-webhook-secret): usa `sharp` (binding
+// nativo), e o barrel plano (`export *`) faz até um client component que só
+// quer `hasMinimumRole` puxar o módulo inteiro — webpack então tenta
+// empacotar `sharp` no bundle do client, o que sempre falha (dependências
+// nativas não rodam no browser). Import direto por caminho no único
+// consumidor (Server Component), nunca pelo barrel.
 export * from "./learning-engine/learning-engine-prompts";
 export * from "./learning-engine/run-learning-analysis-panel";
 export * from "./learning-engine/run-learning-coordinator";

@@ -5,11 +5,13 @@ import {
   AuditRepository,
   BrandBrainRepository,
   CampaignRepository,
+  ContentPackageRepository,
   ContentPieceRepository,
   ContentVersionRepository,
   InactiveSubscriptionError,
   InsufficientCreditsError,
   LearningSignalRepository,
+  MissingScriptError,
   N8nDispatchError,
   PipelineRunRepository,
   ensureSufficientCredits,
@@ -23,7 +25,7 @@ import {
   triggerVideoGeneration,
 } from "@ayon/core";
 import { buildContentPackage, PackageNotReadyError } from "@ayon/core/src/asset-engine/build-content-package";
-import type { ContentPieceFormat, ContentPieceStatus, Database, ProductionMode } from "@ayon/types";
+import type { CampaignStatus, ContentPieceFormat, ContentPieceStatus, Database, ProductionMode } from "@ayon/types";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -50,7 +52,7 @@ export interface ContentPieceView {
   mediaOptions?: { versionId: string; mediaUrl: string }[];
   /** ★ Missão 11 — versão escolhida pelo usuário entre várias opções (`content_pieces.selected_version_id`). */
   selectedVersionId?: string | null;
-  /** ★ Missão 11 (arch. §14.9) — progresso granular do pipeline assíncrono, só presente enquanto `status === "generating"`. */
+  /** ★ Missão 11 (arch. §14.9) — progresso granular do pipeline assíncrono, presente enquanto `status === "generating"` e também em `"failed"` (para indicar em qual etapa parou). */
   pipelineStage?: string | null;
   pipelineProgressPercent?: number | null;
   pipelineEstimatedRemainingSeconds?: number | null;
@@ -96,7 +98,7 @@ async function toViewWithMedia(
   const view = toView(piece);
   if (piece.production_mode === "text_only") return view;
 
-  if (piece.status === "generating") {
+  if (piece.status === "generating" || piece.status === "failed") {
     const pipelineRunRepository = new PipelineRunRepository(db);
     const run = await pipelineRunRepository.findLatestByEntity("content_piece", piece.id);
     if (run) {
@@ -336,6 +338,9 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
         error: "Créditos insuficientes para gerar esse vídeo. Compre mais créditos em Configurações.",
       };
     }
+    if (error instanceof MissingScriptError) {
+      return { ok: false, error: error.message };
+    }
     if (error instanceof N8nDispatchError) {
       logger.error("asset_engine.video_dispatch_failed", { contentPieceId, reason: error.message });
       return { ok: false, error: "Não consegui iniciar a geração do vídeo agora. Tenta de novo em instantes?" };
@@ -355,7 +360,7 @@ export async function generateVideoContentPieceAction(contentPieceId: string): P
  * mesmo com uma versão (upload manual ou geração anterior) já aprovada —
  * upload manual continua disponível como alternativa (arch. §14.4).
  */
-export async function generatePhotoContentPieceAction(contentPieceId: string): Promise<ContentPieceActionResult> {
+export async function generatePhotoContentPieceAction(contentPieceId: string, niche?: string): Promise<ContentPieceActionResult> {
   const session = await getCurrentSession();
   if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
   if (!hasMinimumRole(session.membership.role, "editor")) {
@@ -382,6 +387,7 @@ export async function generatePhotoContentPieceAction(contentPieceId: string): P
       campaignId: piece.campaign_id,
       tier,
       contentPieceId,
+      nicheOverride: niche?.trim() || null,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);
@@ -464,6 +470,51 @@ export async function getContentPieceAction(contentPieceId: string): Promise<Con
   if (!piece) return { ok: false, error: FRIENDLY_ERROR };
 
   return { ok: true, contentPiece: await toViewWithMedia(db, piece) };
+}
+
+export interface CampaignContentPiecesResult {
+  ok: boolean;
+  error?: string;
+  campaignTitle?: string;
+  campaignStatus?: CampaignStatus;
+  contentPieces?: ContentPieceView[];
+  packageDownloadUrl?: string;
+}
+
+/**
+ * ★ Sprint de estabilização (Missão 12, item "Campanhas") — carrega o estado
+ * persistido de uma campanha (peças + pacote final, quando já montado) para
+ * a tela de histórico (`/campanhas/[id]`). Antes desta sprint não existia
+ * nenhum jeito de revisitar uma campanha depois do fluxo de criação —
+ * `ContentPackageReview` só vivia em estado de cliente efêmero.
+ */
+export async function getCampaignContentPiecesAction(campaignId: string): Promise<CampaignContentPiecesResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+
+  const db = await createClient();
+  const campaignRepository = new CampaignRepository(db);
+  const contentPieceRepository = new ContentPieceRepository(db);
+  const contentPackageRepository = new ContentPackageRepository(db);
+
+  const campaign = await campaignRepository.findById(campaignId);
+  if (!campaign || campaign.brand_id !== session.brand.id) {
+    return { ok: false, error: "Campanha não encontrada." };
+  }
+
+  const pieces = await contentPieceRepository.findByCampaignId(campaignId);
+  const contentPieces = await Promise.all(pieces.map((piece) => toViewWithMedia(db, piece)));
+
+  let packageDownloadUrl: string | undefined;
+  if (campaign.status === "package_ready") {
+    const contentPackage = await contentPackageRepository.findByCampaignId(campaignId);
+    if (contentPackage?.storage_path) {
+      const { data: signed } = await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(contentPackage.storage_path, 3600);
+      packageDownloadUrl = signed?.signedUrl;
+    }
+  }
+
+  return { ok: true, campaignTitle: campaign.title, campaignStatus: campaign.status, contentPieces, packageDownloadUrl };
 }
 
 /** Upload manual de um formato visual (`own_media`, MVP da Missão 7) — CAMP-5. Sem custo em créditos. */

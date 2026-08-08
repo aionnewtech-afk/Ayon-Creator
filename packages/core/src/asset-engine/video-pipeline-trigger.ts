@@ -3,6 +3,7 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ensureSufficientCredits } from "../billing/credit-gate";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
+import { fetchWithRetry } from "../shared/fetch-with-retry";
 
 const VIDEO_GENERATION_TRIGGER_REASON = "video_generation";
 
@@ -10,6 +11,20 @@ export class N8nDispatchError extends Error {
   constructor(cause: unknown) {
     super(`Falha ao disparar o workflow do n8n: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "N8nDispatchError";
+  }
+}
+
+/**
+ * Achado real, sprint de estabilização: "nunca chamar ElevenLabs sem
+ * roteiro válido" — checado aqui, na borda de disparo (antes de reservar
+ * crédito ou criar `pipeline_runs`), não só dentro do handler assíncrono do
+ * n8n. Erro nomeado para a UI mostrar uma mensagem específica ("gere o
+ * roteiro primeiro"), nunca um erro genérico de pipeline.
+ */
+export class MissingScriptError extends Error {
+  constructor() {
+    super("Esta campanha ainda não tem um roteiro gerado — gere o roteiro antes de criar o vídeo.");
+    this.name = "MissingScriptError";
   }
 }
 
@@ -44,6 +59,11 @@ export async function triggerVideoGeneration(
   const contentPieceRepository = new ContentPieceRepository(params.db);
   const pipelineRunRepository = new PipelineRunRepository(params.db);
 
+  const primaryPiece = await contentPieceRepository.findPrimaryByCampaignId(params.campaignId);
+  if (!primaryPiece?.script) {
+    throw new MissingScriptError();
+  }
+
   await ensureSufficientCredits({
     serviceRoleDb: params.serviceRoleDb,
     organizationId: params.organizationId,
@@ -73,7 +93,7 @@ export async function triggerVideoGeneration(
   }
 
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetchWithRetry(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-ayon-webhook-secret": webhookSecret },
       body: JSON.stringify({

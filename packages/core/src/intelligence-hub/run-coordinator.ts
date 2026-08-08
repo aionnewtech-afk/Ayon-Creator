@@ -10,12 +10,14 @@ import type { SpecialistOpinionResult } from "./run-specialist-panel";
 type SpecialistRow = Database["public"]["Tables"]["specialists"]["Row"];
 
 const CoordinatorResponseSchema = z.object({
+  executive_summary: z.string().min(1).optional(),
   consolidated_strategy: z.string().min(1),
   rationale: z.string().min(1),
   divergences: z.string().nullable().default(null),
 });
 
 export interface CoordinatorResult {
+  executiveSummary: string | null;
   consolidatedStrategy: string;
   rationale: string;
   divergences: string | null;
@@ -67,6 +69,7 @@ export async function runCoordinator(params: RunCoordinatorParams): Promise<Coor
   const parsed = CoordinatorResponseSchema.parse(parseLlmJson(completion.text));
 
   return {
+    executiveSummary: parsed.executive_summary ?? null,
     consolidatedStrategy: parsed.consolidated_strategy,
     rationale: parsed.rationale,
     divergences: parsed.divergences,

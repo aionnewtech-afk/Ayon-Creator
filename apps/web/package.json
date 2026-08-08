@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -21,7 +21,8 @@
     "@supabase/supabase-js": "^2.45.4",
     "lucide-react": "^0.436.0",
     "next-themes": "^0.3.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "typescript": "^5",

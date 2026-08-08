@@ -78,7 +78,13 @@ export async function generateTextPiece(params: GenerateTextPieceParams): Promis
 
     return { content: parsed.content, rationale: parsed.rationale };
   } catch (error) {
-    await contentPieceRepository.update(params.contentPieceId, { status: "draft" }).catch(() => undefined);
+    // Achado real, sprint de estabilização: status voltava para "draft" —
+    // indistinguível de "nunca tentado" na UI ("Aguardando"), então uma
+    // peça que falhou de verdade (ex.: campanhas sem `video`/pieces
+    // completos) nunca mostrava sinal nenhum de erro ao usuário. `failed`
+    // já é um status válido e já tem tratamento de UI ("Falhou" +
+    // "Tentar novamente") — só nunca era usado aqui.
+    await contentPieceRepository.update(params.contentPieceId, { status: "failed" }).catch(() => undefined);
     throw error;
   }
 }

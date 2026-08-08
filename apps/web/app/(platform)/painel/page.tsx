@@ -10,7 +10,7 @@ export default function PainelPage() {
     <EmptyState
       icon={Sparkles}
       title="Bem-vindo(a) à Ayon Creator"
-      description="Sua organização está pronta. Quando as próximas funcionalidades chegarem, suas campanhas e tendências vão aparecer aqui."
+      description="Sua organização está pronta. Crie uma campanha para começar — o histórico completo fica disponível em Campanhas."
       action={
         criarCampanha ? (
           <Link href={navItemHref(criarCampanha)} className={buttonVariants()}>

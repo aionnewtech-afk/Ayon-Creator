@@ -3,6 +3,7 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ensureSufficientCredits } from "../billing/credit-gate";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
+import { fetchWithRetry } from "../shared/fetch-with-retry";
 import { N8nDispatchError } from "./video-pipeline-trigger";
 
 const IMAGE_GENERATION_TRIGGER_REASON = "image_generation";
@@ -18,6 +19,8 @@ export interface TriggerPhotoGenerationParams {
   campaignId: string;
   tier: ProviderTier;
   contentPieceId: string;
+  /** Nicho/tema informado pelo usuário ao regenerar (ex.: "praia", "shows") — repassado ao n8n, ver `selectPhotoCandidates`. */
+  nicheOverride?: string | null;
 }
 
 export interface TriggerPhotoGenerationResult {
@@ -66,7 +69,7 @@ export async function triggerPhotoGeneration(
   }
 
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetchWithRetry(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-ayon-webhook-secret": webhookSecret },
       body: JSON.stringify({
@@ -76,6 +79,7 @@ export async function triggerPhotoGeneration(
         pipelineRunId: pipelineRun.id,
         organizationId: params.organizationId,
         tier: params.tier,
+        nicheOverride: params.nicheOverride ?? null,
       }),
     });
     if (!response.ok) throw new Error(`n8n respondeu ${response.status}`);

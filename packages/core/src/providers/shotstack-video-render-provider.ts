@@ -9,6 +9,7 @@ import type {
   VideoRenderResult,
 } from "./video-render-provider";
 import { logProviderCall } from "./log-provider-call";
+import { fetchWithRetry } from "../shared/fetch-with-retry";
 
 /**
  * Adapter concreto do Video Render Provider (architecture.md §5, §3.5.1,
@@ -85,7 +86,7 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
     let renderId: string | undefined;
 
     try {
-      const submitResponse = await fetch(endpoint, {
+      const submitResponse = await fetchWithRetry(endpoint, {
         method: "POST",
         headers: {
           "x-api-key": this.apiKey,
@@ -125,7 +126,7 @@ export class ShotstackVideoRenderProvider implements VideoRenderProvider {
 
   private async pollUntilDone(renderId: string): Promise<string> {
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-      const statusResponse = await fetch(`${this.host}/render/${renderId}`, {
+      const statusResponse = await fetchWithRetry(`${this.host}/render/${renderId}`, {
         headers: { "x-api-key": this.apiKey },
       });
 

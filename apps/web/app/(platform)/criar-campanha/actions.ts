@@ -38,6 +38,7 @@ export interface CreateCampaignStrategyResult {
   ok: boolean;
   campaignId?: string;
   opinions?: SpecialistOpinionView[];
+  executiveSummary?: string | null;
   consolidatedStrategy?: string;
   rationale?: string;
   divergences?: string | null;
@@ -112,6 +113,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
         opinion: opinion.opinion,
         rationale: opinion.rationale,
       })),
+      executiveSummary: result.executiveSummary,
       consolidatedStrategy: result.consolidatedStrategy,
       rationale: result.rationale,
       divergences: result.divergences,
@@ -195,6 +197,18 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
 
   const pieces = await initializeCampaignContentPieces(db, campaignId, campaign.intelligence_hub_session_id);
 
+  // ★ Sprint de estabilização — achado real: uma campanha real ficou com
+  // status `ready_for_review` e zero `content_pieces` (nenhum jeito de o
+  // usuário perceber ou recuperar — a tela de revisão simplesmente ficava
+  // vazia, sem erro nenhum). O fluxo nunca verificava se a criação das 9
+  // peças realmente persistiu antes de avançar o status da campanha —
+  // "nenhuma etapa inicia antes da anterior estar concluída e persistida".
+  if (pieces.length === 0) {
+    await campaignRepository.update(campaignId, { status: "failed" });
+    logger.error("asset_engine.content_pieces_not_persisted", { campaignId });
+    return { ok: false, error: "Não conseguimos preparar as peças desta campanha agora. Tenta de novo em instantes?" };
+  }
+
   for (const piece of pieces) {
     if (!(TEXT_ONLY_CONTENT_PIECE_FORMATS as readonly string[]).includes(piece.format)) continue;
 
@@ -240,24 +254,17 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
     }
   }
 
-  // ★ Missão 9 — achado real durante a validação em ambiente real: a peça
-  // `video` (production_mode `licensed_stock_video`) nunca é `text_only`,
-  // então o loop acima nunca preenche `content_pieces.script` para ela — e
-  // `narrateVideoContentPiece` (Fluxo 13, passo 3) exige um script para
-  // narrar. Em vez de uma chamada de LLM redundante, reaproveita o mesmo
-  // texto já gerado para a peça principal "Roteiro" (is_primary), que é
-  // literalmente o roteiro/narrativa central da campanha — garante também
-  // que o vídeo narrado nunca diverge do roteiro escrito exibido ao usuário.
-  const primaryScriptPiece = pieces.find((piece) => piece.is_primary);
-  const videoPiece = pieces.find((piece) => piece.format === "video" && piece.production_mode === "licensed_stock_video");
-
-  if (primaryScriptPiece && videoPiece) {
-    const generatedPrimary = await contentPieceRepository.findById(primaryScriptPiece.id);
-    if (generatedPrimary?.script) {
-      await contentPieceRepository.update(videoPiece.id, { script: generatedPrimary.script });
-    }
-  }
-
+  // ★ Sprint de estabilização — achado real: a cópia pontual do roteiro
+  // para `content_pieces.script` da peça `video` (feita aqui antigamente)
+  // não pegava o roteiro atualizado nunca mais rege — se a peça primária
+  // (`script`) falhasse ao gerar (try/catch acima, falha parcial nunca
+  // bloqueia as demais) a cópia simplesmente não acontecia, sem nenhum
+  // aviso ao usuário; e mesmo quando funcionava, era uma cópia congelada no
+  // momento da aprovação — editar o roteiro depois nunca refletia no vídeo.
+  // `narrateVideoContentPiece`/`triggerVideoGeneration` agora leem a peça
+  // primária diretamente a cada chamada (`findPrimaryByCampaignId`), então
+  // não existe mais cópia para manter — a peça primária é a única fonte de
+  // verdade do roteiro, sempre atual.
   await campaignRepository.update(campaignId, { status: "ready_for_review" });
 
   const updatedPieces = await contentPieceRepository.findByCampaignId(campaignId);

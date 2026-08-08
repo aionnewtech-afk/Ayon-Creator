@@ -1,6 +1,7 @@
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseLlmJson } from "../shared/llm-json";
+import { buildTemporalContextBlock } from "../shared/temporal-context";
 import type {
   TrendCandidateSearchRequest,
   TrendCandidateSearchResult,
@@ -67,6 +68,19 @@ const CandidateSearchResponseSchema = z.object({
 const SYSTEM_PROMPT =
   'Você é o Trend Source Provider da Ayon Creator. Sua única função é pesquisar na web tendências atuais e genuinamente relevantes para o nicho de negócio informado, usando a ferramenta de busca disponível. Não avalie se a tendência combina com a marca especificamente — isso é responsabilidade do Intelligence Hub, não sua. Priorize sinais recentes e verificáveis (notícias, dados de comportamento de consumo, movimentos de mercado do nicho) sobre especulação. Se a busca não revelar nada genuinamente relevante ao nicho, retorne uma lista vazia — nunca invente uma tendência para preencher a resposta. Depois de pesquisar, responda SOMENTE com um JSON estrito, sem texto antes ou depois: {"candidates": [{"title": "título curto da tendência", "summary": "do que se trata e por que é relevante para este nicho agora, 2-3 frases", "source_url": "URL da fonte mais relevante, ou null se não houver uma única fonte clara"}]}. No máximo 6 candidatos.';
 
+/**
+ * Achado real, sprint de estabilização: "Buscar novidades" sempre trazia as
+ * mesmas tendências — a mensagem nunca dizia que dia era hoje (o modelo
+ * caía no seu próprio senso de "atual", vindo do treino) nem o que já tinha
+ * sido mostrado antes (nada incentivava variedade entre buscas). Os dois
+ * corrigidos aqui, na mensagem por request — o `SYSTEM_PROMPT` (persona,
+ * estático) não muda.
+ */
 function buildUserMessage(request: TrendCandidateSearchRequest): string {
-  return `Nicho de negócio: ${request.niche}\nMarca (contexto, não filtro de pesquisa): ${request.brandName}\n\nPesquise tendências atuais relevantes para este nicho.`;
+  const excludeBlock =
+    request.excludeTitles && request.excludeTitles.length > 0
+      ? `\n\nTendências já mostradas ao usuário em buscas anteriores (evite repetir estas — procure sinais genuinamente novos, mas nunca invente algo só para variar):\n${request.excludeTitles.map((title) => `- ${title}`).join("\n")}`
+      : "";
+
+  return `${buildTemporalContextBlock()}\n\nNicho de negócio: ${request.niche}\nMarca (contexto, não filtro de pesquisa): ${request.brandName}\n\nPesquise tendências atuais (de verdade, de hoje) relevantes para este nicho.${excludeBlock}`;
 }

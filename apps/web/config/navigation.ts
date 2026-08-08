@@ -70,10 +70,10 @@ export const NAV_ITEMS: NavItem[] = [
   {
     slug: "campanhas",
     label: "Campanhas",
-    description: "Em breve você vai encontrar aqui o histórico de todas as suas campanhas.",
+    description: "Histórico de todas as suas campanhas — conteúdos, imagens e vídeos gerados.",
     icon: Megaphone,
     minRole: "viewer",
-    implemented: false,
+    implemented: true,
   },
   {
     slug: "biblioteca-de-midia",
