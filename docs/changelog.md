@@ -4,6 +4,17 @@
 
 ---
 
+## v2.33 — 2026-08-08 — Auditoria de infraestrutura local, pré-Missão 13
+
+**Status:** infraestrutura de desenvolvimento local, sem mudança de comportamento de produto, sem bump de versão. Dono do produto pediu uma última auditoria antes de iniciar a Missão 13, com 2 achados concretos relatados.
+
+1. **Porta do Next.js inconsistente**: a Sprint de Estabilização (v0.13.1) corrigiu só `.claude/launch.json` — que afeta apenas o preview interno do Claude Code, nunca `pnpm dev` chamado direto num terminal real (a causa raiz real: `apps/web/package.json` nunca fixava porta). Corrigido fixando `-p 3010` em `dev`/`start`, e unificada toda referência a porta no repositório (config de app, fallback de `NEXT_PUBLIC_APP_URL`, `.env.local(.example)`, Playwright, `supabase/config.toml`, READMEs). Auditoria (`grep` de `3000` em todo o repositório) confirmou zero referência residual.
+2. **`N8N_ENCRYPTION_KEY` sempre vazia** ao subir o container n8n: causa raiz — `${N8N_ENCRYPTION_KEY}` no YAML depende do flag `--env-file` do `docker compose`, resolvido relativo ao **diretório de execução do comando**, não ao arquivo do compose; o comando documentado (raiz do repo) procurava um `.env.local` que não define essa chave. Corrigido com `env_file: [.env.local]` (caminho sempre relativo ao arquivo do compose) e remoção da interpolação redundante em `environment:` (que teria precedência e poderia mascarar a chave correta com um valor vazio se a interpolação voltasse a falhar). Verificado empiricamente com `docker compose config` — chave resolve para um valor real; confirmado também que o `.env.local` da raiz (arquivo "errado") não define essa variável, descartando coincidência.
+
+Ver [CHANGELOG.md](../CHANGELOG.md) ("Auditoria de infraestrutura local") para o detalhamento técnico completo.
+
+---
+
 ## v2.32 — 2026-08-08 — Sprint de Estabilização da Missão 12 encerrada — v0.13.1
 
 **Status:** dono do produto pediu, antes de iniciar qualquer missão nova, o fechamento completo da Missão 12 — auditoria do estado real da aplicação contra 9 problemas relatados em uso real (não hipotéticos), causa raiz de cada um, correção, validação real (nunca mock), testes de ponta a ponta. Sem funcionalidade nova planejada; uma única exceção autorizada ao final pelo dono do produto (alerta de divergência de cor, ver item 9 abaixo). Trabalho conduzido de forma autônoma, sem pausa para aprovação entre itens (autorização explícita do pedido original).

@@ -11,8 +11,17 @@ Uma auditoria antes de provisionar qualquer coisa encontrou um container `n8n` j
 ```bash
 cp n8n/.env.local.example n8n/.env.local
 # preencher N8N_ENCRYPTION_KEY (gerar com o comando no próprio .env.local.example)
-docker compose --env-file n8n/.env.local -f n8n/docker-compose.yml up -d
+docker compose -f n8n/docker-compose.yml up -d
 ```
+
+> ★ Achado real (auditoria pré-Missão 13): `n8n/docker-compose.yml` usa
+> `env_file:` para carregar `n8n/.env.local` — o caminho é sempre relativo
+> ao próprio arquivo do compose, nunca à pasta de onde o comando é chamado.
+> **Não** use `--env-file <caminho>`: esse flag alimenta só a interpolação
+> `${VAR}` dentro do YAML (mecanismo diferente de `env_file:`), e depende de
+> um caminho relativo ao diretório de execução — foi exatamente essa
+> confusão que causava `N8N_ENCRYPTION_KEY` vazia ao rodar o comando a
+> partir da raiz do repo.
 
 UI: http://localhost:5679
 
@@ -83,7 +92,7 @@ Cria uma organização/marca/campanha/peça de teste, dispara `triggerVideoGener
 ## Parar / remover
 
 ```bash
-docker compose --env-file n8n/.env.local -f n8n/docker-compose.yml down
+docker compose -f n8n/docker-compose.yml down
 # remove também o volume (perde workflows e credenciais salvas):
-docker compose --env-file n8n/.env.local -f n8n/docker-compose.yml down -v
+docker compose -f n8n/docker-compose.yml down -v
 ```

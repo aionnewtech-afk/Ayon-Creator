@@ -2,6 +2,15 @@
 
 Histórico de releases do código da Ayon Creator. Para o histórico de decisões de escopo/documentação, ver [docs/changelog.md](docs/changelog.md).
 
+## [Não lançado] — Auditoria de infraestrutura local (pré-Missão 13)
+
+Sem mudança de comportamento de produto — apenas infraestrutura de desenvolvimento local. Sem bump de versão de pacote.
+
+### Corrigido
+
+- **Next.js voltava a iniciar na porta 3000 fora do launcher do Claude Code**: a Sprint de Estabilização (v0.13.1) só tinha corrigido `.claude/launch.json` — que afeta apenas como o preview do Claude Code inicia o servidor, nunca `pnpm dev`/`next dev` chamado diretamente num terminal real. Causa raiz real: `apps/web/package.json` nunca fixava a porta (`"dev": "next dev"`, sem `-p`). Corrigido fixando `-p 3010` em `dev`/`start`; toda referência de porta unificada em `apps/web/config/app.ts`, `apps/web/app/(platform)/configuracoes/actions.ts` (fallback de `NEXT_PUBLIC_APP_URL`), `.env.local(.example)`, `apps/web/playwright.config.ts`, `supabase/config.toml` (`site_url`/`additional_redirect_urls`), `apps/web/README.md`, `n8n/README.md`. Auditoria completa confirmou zero referência residual a 3000 em todo o repositório (fora de intervalos/timeouts em ms, não relacionados a porta).
+- **`N8N_ENCRYPTION_KEY` sempre resolvia vazia** (warning do n8n ao subir o container): causa raiz — `n8n/docker-compose.yml` usava `${N8N_ENCRYPTION_KEY}` (interpolação de variável na leitura do YAML), que só é alimentada pelo flag `--env-file <caminho>` do `docker compose`, cujo caminho é relativo ao **diretório de onde o comando é executado**, nunca ao arquivo do compose. Rodando o comando documentado (`-f n8n/docker-compose.yml`, a partir da raiz do repo), o antigo `--env-file .env.local` procurava um `.env.local` na raiz (que não define essa chave) — resolvendo sempre vazio. Corrigido com `env_file: [.env.local]` (mecanismo diferente, caminho sempre relativo ao arquivo do compose, funciona não importa de onde o comando é chamado) e removendo a interpolação redundante do bloco `environment:` (que teria precedência sobre `env_file:` e poderia mascarar silenciosamente a chave correta com um valor vazio se a interpolação voltasse a falhar). Verificado com `docker compose config`: a chave resolve para um valor real.
+
 ## [0.13.1] — 2026-08-08
 
 ### Sprint de Estabilização da Missão 12

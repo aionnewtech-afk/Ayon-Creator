@@ -13,7 +13,7 @@ export interface CheckoutRedirectResult {
 }
 
 const FRIENDLY_ERROR = "Não consegui iniciar o pagamento agora. Pode tentar de novo em instantes?";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3010";
 
 /** Assinar ou trocar de plano (CFG-2) — Fluxo 12, "assinar/trocar de plano". */
 export async function subscribeToPlanAction(plan: SubscriptionPlan): Promise<CheckoutRedirectResult> {

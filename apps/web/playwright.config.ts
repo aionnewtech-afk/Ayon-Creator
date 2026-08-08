@@ -32,13 +32,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:3010",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   webServer: {
     command: "pnpm dev",
-    url: "http://localhost:3000",
+    url: "http://localhost:3010",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
     env: {
@@ -50,7 +50,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_ANON_KEY: requireEnv("SUPABASE_ANON_KEY"),
       SUPABASE_SERVICE_ROLE_KEY: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
       LLM_PROVIDER_MODE: "fake",
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3010",
     },
   },
 });

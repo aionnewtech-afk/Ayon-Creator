@@ -4,11 +4,23 @@
 # porta 5678, volume/rede próprios daquele projeto — este é um container,
 # volume e rede totalmente separados, porta 5679).
 #
-# Subir:   docker compose --env-file .env.local -f n8n/docker-compose.yml up -d
-# Parar:   docker compose --env-file .env.local -f n8n/docker-compose.yml down
+# Subir:   docker compose -f n8n/docker-compose.yml up -d
+# Parar:   docker compose -f n8n/docker-compose.yml down
 # UI:      http://localhost:5679
 #
 # Variáveis em n8n/.env.local (gitignored — ver n8n/.env.local.example).
+# ★ Achado real (auditoria de infra pré-Missão 13): a versão anterior deste
+# arquivo dependia de `${N8N_ENCRYPTION_KEY}` (interpolação de variável na
+# leitura do YAML), que só é resolvida a partir de `--env-file <caminho>` —
+# e esse caminho é relativo ao diretório de onde `docker compose` é
+# EXECUTADO, não ao diretório deste arquivo. Rodando o comando documentado
+# (`-f n8n/docker-compose.yml`, ou seja, a partir da raiz do repo), o antigo
+# `--env-file .env.local` procurava `.env.local` na raiz — que nem existe —
+# e a chave sempre resolvia vazia (warning "N8N_ENCRYPTION_KEY is empty").
+# `env_file:` abaixo é um mecanismo diferente: injeta as variáveis direto no
+# container, com o caminho sempre relativo a ESTE arquivo (o "diretório do
+# projeto" do Compose, já que nenhum `--project-directory` é passado) —
+# funciona não importa de onde `docker compose` seja chamado.
 
 services:
   n8n:
@@ -17,6 +29,8 @@ services:
     restart: unless-stopped
     ports:
       - "5679:5678"
+    env_file:
+      - .env.local
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
@@ -24,7 +38,12 @@ services:
       - WEBHOOK_URL=http://localhost:5679/
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - TZ=America/Sao_Paulo
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # N8N_ENCRYPTION_KEY vem de `env_file` acima (n8n/.env.local) — nunca
+      # redeclarar aqui com `${...}`: se a interpolação falhasse (ex. alguém
+      # voltar a chamar com `--env-file` de outro diretório), um valor vazio
+      # aqui teria PRECEDÊNCIA sobre o `env_file` e sobrescreveria a chave
+      # correta silenciosamente — a mesma classe de bug que causou o warning
+      # original, só que mascarada em vez de corrigida.
       # Instância só em http local (sem TLS) — cookie seguro quebraria o login.
       - N8N_SECURE_COOKIE=false
     volumes:

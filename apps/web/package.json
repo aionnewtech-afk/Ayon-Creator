@@ -3,9 +3,9 @@
   "version": "0.13.1",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3010",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3010",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test"
