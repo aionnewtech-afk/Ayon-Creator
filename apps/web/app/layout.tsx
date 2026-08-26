@@ -9,6 +9,10 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 export const metadata: Metadata = {
   title: appConfig.name,
   description: appConfig.description,
+  // ★ Achado real (pedido direto do usuário — "eu quero que siga a
+  // identidade visual da Ayon, inclusive que tenha a logo"): ícone real da
+  // marca (public/icon.png, recortado do brand board enviado).
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

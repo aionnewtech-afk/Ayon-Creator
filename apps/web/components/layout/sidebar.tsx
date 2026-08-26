@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hasMinimumRole } from "@ayon/core";
@@ -19,7 +20,29 @@ export function Sidebar({ role }: SidebarProps) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card md:flex">
       <div className="flex h-16 items-center px-6">
-        <span className="text-base font-semibold text-foreground">{appConfig.name}</span>
+        {/* ★ Achado real (pedido direto do usuário — "eu quero que siga a
+            identidade visual da Ayon, inclusive que tenha a logo" — depois
+            "seguem as logos com fundo transparente pra fundo branco e
+            preto"): 2 arquivos reais (transparentes), 1 por tema — nunca um
+            só tentando servir os dois (o texto "AYON" fica ilegível no tema
+            errado, confirmado visualmente comparando os 2). `dark:` troca
+            sozinho, sem JS. */}
+        <Image
+          src="/logo-horizontal-light.png"
+          alt={appConfig.name}
+          width={2172}
+          height={724}
+          className="h-9 w-auto dark:hidden"
+          priority
+        />
+        <Image
+          src="/logo-horizontal-dark.png"
+          alt={appConfig.name}
+          width={2172}
+          height={724}
+          className="hidden h-9 w-auto dark:block"
+          priority
+        />
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
         {visibleItems.map((item) => {

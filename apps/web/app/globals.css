@@ -3,8 +3,11 @@
 @tailwind utilities;
 
 /*
- * Paleta neutra (zinc) — placeholder deliberado até a fase de sistema visual
- * (ux-design.md §10.3, ainda não iniciada). Trocável sem retrabalho estrutural.
+ * ★ Identidade visual Ayon (pedido direto do usuário — "eu quero que siga a
+ * identidade visual da Ayon"): fundo preto, dourado metálico como cor de
+ * marca/ação, prata como neutro — o app é dark-first (ThemeProvider,
+ * `defaultTheme="dark"`), light continua disponível mas nunca é a
+ * experiência principal da marca.
  */
 @layer base {
   :root {
@@ -12,40 +15,43 @@
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 40 65% 47%;
+    --primary-foreground: 20 20% 8%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 40 65% 94%;
+    --accent-foreground: 40 65% 20%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --ring: 40 65% 47%;
     --radius: 0.5rem;
+
+    /* Gradiente prata→dourado (ícone/wordmark Ayon) — `text-brand-gradient` abaixo. */
+    --brand-gradient: linear-gradient(135deg, #e3e6ea 0%, #c7ccd4 22%, #b98f4a 55%, #e8c377 78%, #c9a227 100%);
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 6.5%;
+    --card-foreground: 0 0% 96%;
+    --primary: 40 65% 55%;
+    --primary-foreground: 20 25% 9%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 40 30% 16%;
+    --accent-foreground: 40 65% 75%;
+    --destructive: 0 62.8% 40%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 40 65% 55%;
   }
 }
 
@@ -55,5 +61,15 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* ★ Gradiente da marca (prata→dourado) pra texto — logo/wordmark e títulos de destaque, nunca corpo de texto comum (legibilidade). */
+  .text-brand-gradient {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }
