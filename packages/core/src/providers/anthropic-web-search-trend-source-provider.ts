@@ -2,10 +2,11 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseLlmJson } from "../shared/llm-json";
 import { buildTemporalContextBlock } from "../shared/temporal-context";
-import type {
-  TrendCandidateSearchRequest,
-  TrendCandidateSearchResult,
-  TrendSourceProvider,
+import {
+  TREND_CATEGORIES,
+  type TrendCandidateSearchRequest,
+  type TrendCandidateSearchResult,
+  type TrendSourceProvider,
 } from "./trend-source-provider";
 
 /**
@@ -29,7 +30,7 @@ export class AnthropicWebSearchTrendSourceProvider implements TrendSourceProvide
   async findCandidates(request: TrendCandidateSearchRequest): Promise<TrendCandidateSearchResult> {
     const response = await this.client.messages.create({
       model: this.providerKey,
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
       messages: [{ role: "user", content: buildUserMessage(request) }],
@@ -47,6 +48,7 @@ export class AnthropicWebSearchTrendSourceProvider implements TrendSourceProvide
         title: candidate.title,
         summary: candidate.summary,
         sourceUrl: candidate.source_url,
+        category: candidate.category,
       })),
       providerKey: this.providerKey,
     };
@@ -60,13 +62,21 @@ const CandidateSearchResponseSchema = z.object({
         title: z.string().min(1),
         summary: z.string().min(1),
         source_url: z.string().nullable().default(null),
+        category: z.enum(TREND_CATEGORIES),
       }),
     )
-    .max(10),
+    .max(20),
 });
 
+/** ★ Mesmo pedido/categorias de gemini-web-search-trend-source-provider.ts — ver lá o comentário completo sobre a motivação. Mantido em paridade para a troca de fornecedor (LLM_PROVIDER) continuar reversível sem perder a categorização. */
 const SYSTEM_PROMPT =
-  'Você é o Trend Source Provider da Ayon Creator. Sua única função é pesquisar na web tendências atuais e genuinamente relevantes para o nicho de negócio informado, usando a ferramenta de busca disponível. Não avalie se a tendência combina com a marca especificamente — isso é responsabilidade do Intelligence Hub, não sua. Priorize sinais recentes e verificáveis (notícias, dados de comportamento de consumo, movimentos de mercado do nicho) sobre especulação. Se a busca não revelar nada genuinamente relevante ao nicho, retorne uma lista vazia — nunca invente uma tendência para preencher a resposta. Depois de pesquisar, responda SOMENTE com um JSON estrito, sem texto antes ou depois: {"candidates": [{"title": "título curto da tendência", "summary": "do que se trata e por que é relevante para este nicho agora, 2-3 frases", "source_url": "URL da fonte mais relevante, ou null se não houver uma única fonte clara"}]}. No máximo 6 candidatos.';
+  'Você é o Trend Source Provider da Ayon Creator. Sua função é pesquisar na web, usando a ferramenta de busca disponível, sinais atuais e genuinamente relevantes para o nicho de negócio informado, organizados em 5 categorias fixas:\n' +
+  '- "noticias": notícias reais e recentes diretamente relacionadas ao negócio/nicho do usuário.\n' +
+  '- "pesquisas": pesquisas, dados e estatísticas de mercado/comportamento de consumo relevantes ao nicho.\n' +
+  '- "redes_sociais": (1) assuntos/formatos/desafios em alta agora nas redes sociais (Instagram, TikTok, etc.) que conectam com o nicho, E (2) termos/consultas de busca em alta relacionados ao nicho (estilo Google Trends — o que as pessoas estão pesquisando agora sobre esse assunto). Inclua sinais dos dois tipos quando encontrar.\n' +
+  '- "eventos": eventos e datas com significância real **em qualquer parte do mundo, não só no Brasil** — datas comemorativas/religiosas globais (ex.: Semana Santa, Natal, Ano Novo Chinês), grandes eventos esportivos/culturais internacionais (ex.: Copa do Mundo, Olimpíadas, um festival internacional relevante), sazonalidade global (ex.: verão no hemisfério norte) — só inclua um evento se ele tiver relação real com o nicho, nunca liste uma data só porque existe, e nunca restrinja a busca a um único país por padrão.\n' +
+  '- "geral": qualquer outra tendência genuína do nicho que não se encaixa nas categorias acima.\n' +
+  'Pesquise cada categoria separadamente, buscando sinais realmente atuais (não invente, não use senso comum desatualizado do seu treinamento — se a busca não confirmar algo recente, não inclua). Não avalie se o sinal combina com a marca especificamente — isso é responsabilidade do Intelligence Hub, não sua. Uma categoria pode ficar vazia (nunca invente um candidato só para preencher todas as 5). Depois de pesquisar, responda SOMENTE com um JSON estrito, sem texto antes ou depois: {"candidates": [{"title": "título curto", "summary": "do que se trata e por que é relevante para este nicho agora, 2-3 frases", "source_url": "URL da fonte mais relevante, ou null se não houver uma única fonte clara", "category": "noticias|pesquisas|redes_sociais|eventos|geral"}]}. No máximo 4 candidatos por categoria, no máximo 16 no total.';
 
 /**
  * Achado real, sprint de estabilização: "Buscar novidades" sempre trazia as

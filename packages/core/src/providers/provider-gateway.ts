@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProviderTier } from "@ayon/types";
+import { HeygenAccountPoolRepository } from "../repositories/heygen-account-pool.repository";
 import { ProviderConfigRepository } from "../repositories/provider-config.repository";
 import { AnthropicLlmProvider } from "./anthropic-llm-provider";
 import { AnthropicWebSearchTrendSourceProvider } from "./anthropic-web-search-trend-source-provider";
 import { ElevenLabsVoiceProvider } from "./elevenlabs-voice-provider";
 import { FakeLlmProvider } from "./fake-llm-provider";
+import { GeminiImageMediaProvider, type GeminiImageMediaContext } from "./gemini-image-media-provider";
+import { GeminiLlmProvider } from "./gemini-llm-provider";
+import { GeminiVeoVideoProvider, type GeminiVeoVideoContext } from "./gemini-veo-video-provider";
+import { GeminiWebSearchTrendSourceProvider } from "./gemini-web-search-trend-source-provider";
+import type { AvatarProvider } from "./avatar-provider";
+import { HeyGenAvatarProvider } from "./heygen-avatar-provider";
 import type { LlmProvider } from "./llm-provider";
 import type { MediaProvider } from "./media-provider";
 import { PexelsMediaProvider } from "./pexels-media-provider";
@@ -40,6 +47,34 @@ export async function resolveLlmProvider(
     throw new Error(`Nenhum provider_config ativo para (capability=llm, tier=${tier}).`);
   }
 
+  // ★ Troca temporária de fornecedor (conta Anthropic sem créditos, conta
+  // Gemini com créditos disponíveis) — `LLM_PROVIDER=gemini` desvia a
+  // capacidade `llm` (especialistas, Coordinator, geração de texto/roteiro,
+  // segmentação de cena, voz da marca, brief visual, ranking/coordinator do
+  // Trend Engine, Learning Engine) para o Gemini via sua camada de
+  // compatibilidade OpenAI — nunca toca `provider_configs` (`config` acima
+  // continua sendo a checagem de existência de configuração ativa, igual
+  // para os dois fornecedores). `resolveTrendSourceProvider` abaixo tem seu
+  // próprio branch (busca web — a API nativa do Gemini, não a camada
+  // OpenAI-compatible, que não expõe a ferramenta de busca). Reversível:
+  // remover a variável (ou voltar para "anthropic") restaura o comportamento
+  // original exatamente como antes, sem nenhum efeito colateral.
+  if (process.env.LLM_PROVIDER === "gemini") {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      throw new Error(
+        "GEMINI_API_KEY não configurada — necessária quando LLM_PROVIDER=gemini (ver README/`.env.local.example`).",
+      );
+    }
+    // ★ Achado real (validação direta na API): "gemini-2.5-flash"/"gemini-2.0-flash"
+    // retornam 404 ("no longer available to new users"/"no longer available")
+    // para esta conta — "gemini-3-flash-preview" testado e confirmado
+    // funcionando (JSON estrito, baixo custo). Ver `.env.local.example` para
+    // trocar sem editar código.
+    const geminiModel = process.env.GEMINI_MODEL ?? "gemini-3-flash-preview";
+    return new GeminiLlmProvider(geminiModel, geminiApiKey, db);
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -64,6 +99,24 @@ export async function resolveTrendSourceProvider(
 
   if (!config) {
     throw new Error(`Nenhum provider_config ativo para (capability=trend_source, tier=${tier}).`);
+  }
+
+  // ★ Troca temporária de fornecedor (conta Anthropic sem créditos) — busca
+  // web via API **nativa** do Gemini (`GeminiWebSearchTrendSourceProvider`),
+  // não a camada OpenAI-compatible usada em `resolveLlmProvider` acima (essa
+  // não expõe busca/grounding — achado real, "Invalid tool type" testado
+  // direto na API para toda variante tentada). Mesmo prompt/schema/
+  // comportamento do adapter Anthropic, só o transporte muda. Reversível do
+  // mesmo jeito: remover `LLM_PROVIDER` (ou voltar para "anthropic").
+  if (process.env.LLM_PROVIDER === "gemini") {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      throw new Error(
+        "GEMINI_API_KEY não configurada — necessária quando LLM_PROVIDER=gemini (ver README/`.env.local.example`).",
+      );
+    }
+    const geminiModel = process.env.GEMINI_MODEL ?? "gemini-3-flash-preview";
+    return new GeminiWebSearchTrendSourceProvider(geminiModel, geminiApiKey);
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -116,6 +169,118 @@ export async function resolveMediaProvider(db: SupabaseClient<Database>, tier: P
   }
 
   return new PexelsMediaProvider(config.provider_key, apiKey, db);
+}
+
+/**
+ * Resolve o adapter de GERAÇÃO de foto (não busca) para feed/stories/thumbnail
+ * — achado real, pedido direto do usuário: fotos de banco (Pexels) "nada a
+ * ver com o que pedi", queria fotos criadas pelo Gemini. Deliberadamente
+ * **fora** de `resolveMediaProvider` acima: aquela função também resolve o
+ * Media Provider do vídeo (`searchMedia`, Pexels, intocado por pedido
+ * explícito do usuário) — uma capacidade `media` só via `provider_configs`
+ * trocaria os dois de uma vez. Aqui o desvio é só por variável de ambiente
+ * (`IMAGE_GENERATION_PROVIDER=gemini`), nunca toca `provider_configs`;
+ * retorna `null` quando desligado (comportamento padrão: `selectPhotoCandidates`
+ * cai de volta no Pexels via `resolveMediaProvider`, 100% reversível).
+ */
+export function resolveImageGenerationMediaProvider(
+  serviceRoleDb: SupabaseClient<Database>,
+  context: GeminiImageMediaContext,
+): MediaProvider | null {
+  if (process.env.IMAGE_GENERATION_PROVIDER !== "gemini") return null;
+
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey) {
+    throw new Error(
+      "GEMINI_API_KEY não configurada — necessária quando IMAGE_GENERATION_PROVIDER=gemini (ver README/`.env.local.example`).",
+    );
+  }
+
+  // ★ Achado real (validação direta na API): "gemini-2.5-flash-image" ("Nano
+  // Banana") gera imagens fotorrealistas reais, aspect ratio 9:16/1:1
+  // controlável via `generationConfig.imageConfig.aspectRatio`.
+  const geminiImageModel = process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image";
+  return new GeminiImageMediaProvider(geminiImageModel, geminiApiKey, serviceRoleDb, context);
+}
+
+/**
+ * Resolve o adapter de GERAÇÃO de vídeo (Veo) — 3ª camada do fallback
+ * híbrido de cenas de vídeo (`video-pipeline-scenes.ts`), pedido direto do
+ * usuário depois de validar um teste real pago (Veo 3.1 Lite, aprovado
+ * "adorei"). Env var própria (`VIDEO_GENERATION_PROVIDER`, nunca
+ * `IMAGE_GENERATION_PROVIDER`) — perfis de custo (cobra por segundo,
+ * diferente da imagem quase gratuita) e latência (até ~6min por geração)
+ * completamente diferentes, nunca devem ficar acoplados no mesmo toggle.
+ * Retorna `null` quando desligado (padrão — 100% reversível).
+ */
+export function resolveVeoVideoProvider(
+  serviceRoleDb: SupabaseClient<Database>,
+  context: GeminiVeoVideoContext,
+): GeminiVeoVideoProvider | null {
+  if (process.env.VIDEO_GENERATION_PROVIDER !== "gemini") return null;
+
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey) {
+    throw new Error(
+      "GEMINI_API_KEY não configurada — necessária quando VIDEO_GENERATION_PROVIDER=gemini (ver README/`.env.local.example`).",
+    );
+  }
+
+  // ★ Achado real (validação direta na API, `ListModels`): "veo-3.1-generate-preview"
+  // (Standard, $0.40/s), "veo-3.1-fast-generate-preview" (Fast, $0.10-0.12/s)
+  // e "veo-3.1-lite-generate-preview" (Lite, $0.05-0.08/s) — Lite escolhido
+  // explicitamente pelo usuário (custo mais baixo), testado real (~5min de
+  // geração, qualidade aprovada).
+  const geminiVideoModel = process.env.GEMINI_VIDEO_MODEL ?? "veo-3.1-lite-generate-preview";
+  return new GeminiVeoVideoProvider(geminiVideoModel, geminiApiKey, serviceRoleDb, context);
+}
+
+/**
+ * Resolve o Avatar Provider (HeyGen) — "digital twin" do porta-voz da marca
+ * (`production_mode = "ai_avatar"`, pedido direto do usuário — "iniciar o
+ * avatar do porta voz da empresa"). Sem tier/`provider_configs` por ora
+ * (único fornecedor, achado real: HeyGen é o único com API pública de
+ * clonagem de avatar por consentimento avaliada).
+ *
+ * ★ Achado real (pedido direto do usuário — "então a api pra múltiplos
+ * criadores você resolve né?"): a HeyGen limita 1 "avatar group" por
+ * conta/chave de API (visto ao vivo, erro real: "limit of 1 verified avatar
+ * group slots") — 1 única `HEYGEN_API_KEY` global significava que só a
+ * PRIMEIRA organização do sistema inteiro conseguiria ter avatar. Modelo
+ * escolhido (o criador paga a Ayon direto, custo da HeyGen embutido no
+ * plano — nunca "traga sua própria chave"): a Ayon mantém um pool de contas
+ * HeyGen reais (`heygen_account_pool`, migration 0026), 1 conta por
+ * organização, atribuída na hora (`claim_heygen_account`, atômico).
+ *
+ * Fallback pra `HEYGEN_API_KEY` (`.env`) só quando o pool está **vazio de
+ * verdade** (0 linhas — "nunca configurado ainda", preserva o
+ * comportamento anterior a esta migração sem exigir setup manual pra
+ * continuar testando localmente). Pool com linhas mas sem nenhuma
+ * disponível pra esta organização é um erro explícito — nunca cai de volta
+ * pra `.env` nesse caso, porque isso reintroduziria silenciosamente o mesmo
+ * bug de 2 organizações compartilhando a mesma conta/teto.
+ */
+export async function resolveAvatarProvider(
+  serviceRoleDb: SupabaseClient<Database>,
+  organizationId: string,
+): Promise<AvatarProvider | null> {
+  const pool = new HeygenAccountPoolRepository(serviceRoleDb);
+  const poolSize = await pool.count();
+
+  if (poolSize === 0) {
+    const heygenApiKey = process.env.HEYGEN_API_KEY;
+    if (!heygenApiKey) return null;
+    return new HeyGenAvatarProvider("heygen", heygenApiKey, serviceRoleDb, organizationId);
+  }
+
+  const claimedApiKey = await pool.claimForOrganization(organizationId);
+  if (!claimedApiKey) {
+    throw new Error(
+      "Sem contas HeyGen disponíveis no pool pra atribuir a esta organização — adicione mais contas em `heygen_account_pool`.",
+    );
+  }
+
+  return new HeyGenAvatarProvider("heygen", claimedApiKey, serviceRoleDb, organizationId);
 }
 
 /**

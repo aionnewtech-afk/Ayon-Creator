@@ -25,12 +25,31 @@ const nextConfig = {
     // Hardening (Missão H1, docs/hardening-plan.md item 5.3b): o default do
     // Next.js é 1MB — nenhum upload real (KB até 10MB, own_media até 20MB)
     // passava disso. Nunca foi pego em validação porque todo teste de
-    // upload usou arquivos sintéticos minúsculos. 20MB cobre o maior limite
-    // aceito hoje (own_media); a Server Action de cada rota ainda valida seu
-    // próprio teto específico (10MB para KB, 20MB para own_media).
+    // upload usou arquivos sintéticos minúsculos.
+    //
+    // ★ Achado real (pedido direto do usuário — "iniciar o avatar do porta
+    // voz da empresa"): vídeo de treinamento do avatar (HeyGen) sobe até
+    // 200MB (`MAX_AVATAR_VIDEO_SIZE_BYTES`, identity-actions.ts) — real,
+    // visto ao vivo: com o limite antigo de 20MB, o upload falhava "por
+    // baixo" (fora do try/catch da Server Action, a requisição nem chega a
+    // executar o código) e o botão ficava preso em "Enviando..." pra
+    // sempre, sem nenhum erro visível. 200MB cobre o maior teto aceito hoje
+    // (avatar); a Server Action de cada rota ainda valida seu próprio teto
+    // específico (10MB para KB, 20MB para own_media, 200MB para avatar).
     serverActions: {
-      bodySizeLimit: "20mb",
+      bodySizeLimit: "200mb",
     },
+    // ★ Achado real (mesmo pedido — visto ao vivo com um vídeo de 80MB):
+    // `serverActions.bodySizeLimit` acima só cobre o limite da própria
+    // Server Action — o `middleware.ts` (checagem de sessão, roda em TODA
+    // rota) tem um teto SEPARADO e independente, 10MB por padrão, sem
+    // relação com o de cima. Acima do teto do middleware, o corpo da
+    // requisição é truncado nos primeiros 10MB (nunca falha ali mesmo) e só
+    // estoura como "Unexpected end of form" quando a Server Action tenta
+    // interpretar o multipart cortado — daí o erro genérico de rede no
+    // cliente, sem nenhum erro vindo do código da action. Precisa dos DOIS
+    // limites configurados, nunca só um.
+    middlewareClientMaxBodySize: "200mb",
   },
 };
 

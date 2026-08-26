@@ -4,7 +4,7 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { resolveLlmProvider } from "../providers/provider-gateway";
 import { parseLlmJson } from "../shared/llm-json";
 import type { KnownFieldsSnapshot } from "../brand-brain/onboarding-prompt";
-import type { TrendCandidate } from "../providers/trend-source-provider";
+import { type TrendCandidate, type TrendCategory } from "../providers/trend-source-provider";
 import { buildTrendRankingCoordinatorMessage } from "./trend-ranking-prompts";
 import type { SpecialistOpinionResult } from "../intelligence-hub/run-specialist-panel";
 
@@ -20,7 +20,7 @@ const TrendCoordinatorResponseSchema = z.object({
         source_url: z.string().nullable().default(null),
       }),
     )
-    .max(10),
+    .max(20),
   overall_rationale: z.string().min(1),
 });
 
@@ -29,6 +29,7 @@ export interface RankedTrend {
   summary: string;
   rationale: string;
   sourceUrl: string | null;
+  category: TrendCategory;
 }
 
 export interface TrendCoordinatorResult {
@@ -76,17 +77,25 @@ export async function runTrendCoordinator(params: RunTrendCoordinatorParams): Pr
   const completion = await llmProvider.complete({
     system: params.coordinator.system_prompt,
     messages: [{ role: "user", content: userMessage }],
-    maxTokens: 1536,
+    // Bumped de 1536 — agora até 16 candidatos (5 categorias) em vez de 10,
+    // a resposta consolidada pode ficar maior.
+    maxTokens: 3072,
   });
 
   const parsed = TrendCoordinatorResponseSchema.parse(parseLlmJson(completion.text));
 
   return {
+    // ★ `category` resolvida em código a partir do candidato original (por
+    // título), nunca pedida de volta ao LLM no ranqueamento — mais confiável
+    // que confiar que o modelo ecoa o enum exatamente, e mais simples de
+    // validar. "geral" só como último recurso, se o título vier reescrito o
+    // suficiente para não bater com nenhum candidato original.
     rankings: parsed.rankings.map((ranking) => ({
       title: ranking.title,
       summary: ranking.summary,
       rationale: ranking.rationale,
       sourceUrl: ranking.source_url,
+      category: params.candidates.find((c) => c.title === ranking.title)?.category ?? "geral",
     })),
     overallRationale: parsed.overall_rationale,
     providerKey: completion.providerKey,

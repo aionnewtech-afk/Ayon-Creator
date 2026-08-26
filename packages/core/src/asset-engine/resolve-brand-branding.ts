@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
 import type { VideoBranding } from "../providers/video-render-provider";
-import { resolveFontUrl } from "./font-catalog";
+import { resolveFontFamily, resolveFontUrl } from "./font-catalog";
 
 const BRAND_MEDIA_BUCKET = "brand-media";
 /** Tempo suficiente para o Video Render Provider ainda buscar o arquivo pela URL durante a composição. */
@@ -36,5 +36,6 @@ export async function resolveBrandBranding(
     primaryColorHex: brand.primary_color_hex,
     secondaryColorHex: brand.secondary_color_hex,
     fontUrl: resolveFontUrl(brand.font_family) ?? null,
+    fontFamily: resolveFontFamily(brand.font_family) ?? null,
   };
 }

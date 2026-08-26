@@ -19,6 +19,10 @@ export interface RenderVideoContentPieceParams {
   contentPieceId: string;
   audioUrl: string;
   videoSources: VideoRenderSceneSource[];
+  /** ★ Achado real (pedido direto do usuário — "deixar opcional que o vídeo tenha a logo ou não"): `false` pula a logo mesmo cadastrada — escolha por geração, nunca um padrão novo da marca. Ausente mantém o comportamento de sempre (logo sempre que cadastrada). */
+  includeLogo?: boolean;
+  /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa... sutil e em algum dos cantos"): texto opcional sobreposto no vídeo inteiro — ausente não adiciona nada. */
+  watermarkText?: string;
 }
 
 export interface RenderVideoContentPieceResult {
@@ -51,7 +55,7 @@ export async function renderVideoContentPiece(
     audioUrl: params.audioUrl,
     videoSources: params.videoSources,
     aspectRatio: "9:16",
-    branding,
+    branding: { ...branding, includeLogo: params.includeLogo, watermarkText: params.watermarkText },
   });
 
   const videoResponse = await fetch(result.videoUrl);

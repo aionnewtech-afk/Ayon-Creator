@@ -22,6 +22,11 @@ export default async function CampanhaDetailPage(props: { params: Promise<{ id: 
       campaignTitle={result.campaignTitle}
       initialPackageReady={result.campaignStatus === "package_ready"}
       initialDownloadUrl={result.packageDownloadUrl}
+      avatarReady={session.brand.avatar_ready}
+      avatarName={session.brand.avatar_name}
+      avatarLooks={
+        (session.brand.avatar_looks as { lookId: string; name: string; status: string }[] | null) ?? []
+      }
     />
   );
 }

@@ -3,11 +3,19 @@ import type { LlmProvider } from "../providers/llm-provider";
 import { parseLlmJson } from "../shared/llm-json";
 
 const SYSTEM_PROMPT =
-  "Você extrai um termo de busca curto e específico (2-4 palavras, em português, sem jargão) para encontrar uma " +
-  "foto real correspondente ao tema de uma campanha, num banco de imagens de estoque — nunca uma paráfrase " +
-  "genérica do tema inteiro. Prefira um lugar/atração/atividade/público concretos. Não use termos abstratos de " +
-  "escritório/planejamento (como 'planejamento de viagem', 'agenda', 'mapa') — eles tendem a trazer fotos sem " +
-  "relação nenhuma com o assunto real. Responda só com um JSON no formato {\"searchQuery\": \"...\"}.";
+  // ★ Achado real (validação): o banco de imagens (Pexels) é indexado majoritariamente
+  // em inglês — a mesma busca em português retorna correspondência fraca por
+  // palavra-chave solta (ex.: "natal viagem em família" trouxe uma foto de uma rua
+  // chamada "Av. Boa Viagem", sem nenhuma relação com o tema real), enquanto o
+  // equivalente em inglês retorna fotos genuinamente relevantes (testado
+  // diretamente na API do Pexels). O texto da peça continua em português —
+  // só o termo de busca (nunca visto pelo usuário) muda de idioma.
+  "You extract a short, specific search term (2-4 words, in English, no jargon) to find a real photo matching " +
+  "the theme of a marketing campaign, in a stock photo database — never a generic paraphrase of the whole theme. " +
+  "Prefer a concrete place/attraction/activity/audience. Never use abstract office/planning terms (like 'travel " +
+  "planning', 'itinerary', 'map') — they tend to bring back photos with no relation to the real subject. The " +
+  "campaign theme you'll receive may be in Portuguese — always translate the concept into an English search term " +
+  "regardless. Reply ONLY with JSON in the format {\"searchQuery\": \"...\"}.";
 
 /**
  * Deriva um termo de busca curto para o Media Provider a partir do tema da
@@ -26,7 +34,12 @@ export async function derivePhotoSearchQuery(theme: string, llmProvider: LlmProv
     const result = await llmProvider.complete({
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: theme }],
-      maxTokens: 128,
+      // ★ Achado real (validação): 128 é pequeno demais para o Gemini 3 — o
+      // gasto residual de "pensamento" (mesmo com reasoning_effort: "low" em
+      // gemini-llm-provider.ts) cortava a resposta antes do JSON fechar,
+      // caindo sempre no fallback genérico em silêncio — causa real de
+      // "imagens sem relação com o tema" além da derivação de query em si.
+      maxTokens: 300,
     });
 
     const parsed = parseLlmJson(result.text) as { searchQuery?: string };

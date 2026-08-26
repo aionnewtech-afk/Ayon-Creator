@@ -111,6 +111,8 @@ export type ProductionMode = (typeof PRODUCTION_MODES)[number];
 export const CONTENT_PIECE_STATUSES = [
   "draft",
   "generating",
+  /** ★ Achado real (pedido direto do usuário — "será se não era bom a gente aprovar o prompt antes de gerar o vídeo?"): narração+seleção de cenas rodam primeiro, o usuário vê o plano (`content_pieces.pending_scene_plan`) e aprova antes do render de verdade acontecer. Só usado por `production_mode = licensed_stock_video`. */
+  "scenes_ready_for_review",
   "ready_for_review",
   "approved",
   "rejected",

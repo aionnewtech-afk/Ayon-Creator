@@ -52,6 +52,14 @@ export async function completePhotoPipelineSuccess(params: CompletePhotoPipeline
         media_provider_key: option.mediaProviderKey,
         video_render_provider_key: option.videoRenderProviderKey,
         tier: params.tier,
+        // ★ Achado real (pedido direto do usuário — "o carrossel só gera um
+        // e é mal feito") — presente só quando `option` veio de um
+        // carrossel real (várias lâminas); `jsonb` aditivo, sem migration.
+        ...(option.slideStoragePaths ? { slide_storage_paths: option.slideStoragePaths } : {}),
+        // ★ Achado real (pedido direto do usuário — "mostrar o prompt exato
+        // usado em cada peça gerada") — `jsonb` aditivo, sem migration.
+        ...(option.generationPrompt ? { generation_prompt: option.generationPrompt } : {}),
+        ...(option.slideGenerationPrompts ? { slide_generation_prompts: option.slideGenerationPrompts } : {}),
       },
     });
   }

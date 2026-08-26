@@ -13,7 +13,7 @@ function buildCandidatesBlock(candidates: TrendCandidate[]): string {
   if (candidates.length === 0) return "Nenhum candidato de tendência foi encontrado nesta busca.";
 
   return candidates
-    .map((candidate, index) => `${index + 1}. ${candidate.title} — ${candidate.summary}`)
+    .map((candidate, index) => `${index + 1}. [${candidate.category}] ${candidate.title} — ${candidate.summary}`)
     .join("\n");
 }
 

@@ -45,7 +45,12 @@ export async function selectBrandVoice(params: SelectBrandVoiceParams): Promise<
         "Responda só com um JSON no formato {\"voiceId\": \"...\"}, usando exatamente um dos ids do catálogo abaixo.\n\n" +
         `Catálogo:\n${catalogDescription}`,
       messages: [{ role: "user", content: brandContext }],
-      maxTokens: 100,
+      // ★ Achado real (validação): 100 é pequeno demais para o Gemini 3 — o
+      // gasto residual de "pensamento" (mesmo com reasoning_effort: "low" em
+      // gemini-llm-provider.ts) cortava a resposta antes do JSON fechar,
+      // caindo sempre no catálogo padrão em silêncio — a seleção "inteligente"
+      // nunca rodava de verdade, toda marca ficava com a voz genérica.
+      maxTokens: 300,
     });
 
     const parsed = parseLlmJson(result.text) as { voiceId?: string };

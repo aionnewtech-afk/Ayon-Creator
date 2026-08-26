@@ -16,6 +16,15 @@ import type { Database, PlatformAdminRole } from "@ayon/types";
  * mostrar/permitir na UI administrativa.
  */
 export async function isPlatformAdmin(db: SupabaseClient<Database>, userId: string): Promise<boolean> {
+  // ★ Achado real (validação real do pipeline de foto/vídeo): `pipeline_runs.actor_user_id`
+  // é nullable de propósito ("ações de sistema", docs/database.md) —
+  // `completePhotoPipelineSuccess`/`completeVideoPipelineSuccess` caem para
+  // `""` quando é `null` (o tipo de `actorUserId` no portão de crédito é
+  // `string`, não `string | null`). Sem essa guarda, `.eq("user_id", "")`
+  // batia numa coluna uuid e o Postgres lançava "invalid input syntax for
+  // type uuid" em vez de simplesmente responder "não é admin".
+  if (!userId) return false;
+
   const { data, error } = await db
     .from("platform_admins")
     .select("id")
@@ -28,6 +37,8 @@ export async function isPlatformAdmin(db: SupabaseClient<Database>, userId: stri
 }
 
 export async function isSuperAdmin(db: SupabaseClient<Database>, userId: string): Promise<boolean> {
+  if (!userId) return false;
+
   const { data, error } = await db
     .from("platform_admins")
     .select("id")

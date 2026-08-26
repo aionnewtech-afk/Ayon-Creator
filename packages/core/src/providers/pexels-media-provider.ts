@@ -34,7 +34,7 @@ export class PexelsMediaProvider implements MediaProvider {
     const payload = await this.fetchJson<PexelsVideoSearchResponse>(`${endpoint}?${params.toString()}`, endpoint, "searchMedia");
 
     return {
-      candidates: payload.videos.map((video) => toVideoCandidate(video, this.providerKey)),
+      candidates: payload.videos.map((video) => toVideoCandidate(video, this.providerKey, request.query)),
       providerKey: this.providerKey,
     };
   }
@@ -56,7 +56,7 @@ export class PexelsMediaProvider implements MediaProvider {
     const payload = await this.fetchJson<PexelsPhotoSearchResponse>(`${endpoint}?${params.toString()}`, endpoint, "searchPhotos");
 
     return {
-      candidates: payload.photos.map((photo) => toPhotoCandidate(photo, this.providerKey)),
+      candidates: payload.photos.map((photo) => toPhotoCandidate(photo, this.providerKey, request.query)),
       providerKey: this.providerKey,
     };
   }
@@ -138,7 +138,7 @@ function pickBestVideoFile(files: PexelsVideoFile[]): PexelsVideoFile {
   return chosen;
 }
 
-function toVideoCandidate(video: PexelsVideo, providerKey: string): MediaCandidate {
+function toVideoCandidate(video: PexelsVideo, providerKey: string, searchQuery?: string): MediaCandidate {
   const file = pickBestVideoFile(video.video_files);
   return {
     id: String(video.id),
@@ -148,10 +148,11 @@ function toVideoCandidate(video: PexelsVideo, providerKey: string): MediaCandida
     height: file.height,
     durationSeconds: video.duration,
     providerKey,
+    generationPrompt: searchQuery,
   };
 }
 
-function toPhotoCandidate(photo: PexelsPhoto, providerKey: string): MediaCandidate {
+function toPhotoCandidate(photo: PexelsPhoto, providerKey: string, searchQuery?: string): MediaCandidate {
   return {
     id: String(photo.id),
     previewUrl: photo.src.medium,
@@ -159,5 +160,6 @@ function toPhotoCandidate(photo: PexelsPhoto, providerKey: string): MediaCandida
     width: photo.width,
     height: photo.height,
     providerKey,
+    generationPrompt: searchQuery,
   };
 }

@@ -5,6 +5,7 @@ import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { BrandRepository } from "../repositories/brand.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
+import { sanitizeNarrationText } from "../shared/sanitize-narration-text";
 import { selectBrandVoice } from "./select-brand-voice";
 
 const CONTENT_OUTPUT_BUCKET = "content-output";
@@ -64,7 +65,10 @@ export async function narrateVideoContentPiece(
   const voiceRef = await resolveVoiceRef(params);
 
   const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
-  const result = await voiceProvider.synthesizeVoice({ script: primaryPiece.script, voiceRef });
+  // ★ Achado real: o roteiro chegava a incluir direções de cena entre
+  // parênteses (ex.: "(Cenário: ambiente aconchegante...)"), narradas em voz
+  // alta literalmente — ver sanitize-narration-text.ts.
+  const result = await voiceProvider.synthesizeVoice({ script: sanitizeNarrationText(primaryPiece.script), voiceRef });
 
   const audioBuffer = Buffer.from(result.audioBase64, "base64");
   const storagePath = `${params.organizationId}/${params.campaignId}/${params.contentPieceId}-narration.mp3`;

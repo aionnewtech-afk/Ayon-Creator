@@ -57,7 +57,19 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
 
       return {
         audioBase64: payload.audio_base64,
-        durationMs: Math.round(lastEndSeconds * 1000),
+        // ★ Achado real (pedido direto do usuário — "continua cortando o
+        // final da frase", depois do fix anterior já ter corrigido a
+        // sobra/falta na SOMA das cenas): a fonte da duração em si podia
+        // ficar levemente curta — `character_end_times_seconds.at(-1)` é o
+        // fim do ÚLTIMO CARACTERE alinhado, não necessariamente o fim real
+        // do áudio renderizado (pausa/respiração residual, arredondamento
+        // do próprio alinhamento do ElevenLabs). Shotstack corta o
+        // soundtrack no fim da trilha de vídeo — qualquer folga, por menor
+        // que seja, ainda cortava a cauda da narração. Margem de segurança
+        // fixa: pior caso é ~0.4s de último frame parado a mais no vídeo
+        // (imperceptível); melhor caso evita cortar a última palavra
+        // (defeito real, visível, já reportado 2x pelo usuário).
+        durationMs: Math.round(lastEndSeconds * 1000) + NARRATION_DURATION_SAFETY_MARGIN_MS,
         providerKey: this.providerKey,
       };
     } catch (error) {
@@ -83,6 +95,9 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     });
   }
 }
+
+/** Ver comentário em `synthesizeVoice` — folga contra imprecisão do timestamp de alinhamento do ElevenLabs, nunca a causa raiz original (já corrigida em `video-pipeline-scenes.ts`). */
+const NARRATION_DURATION_SAFETY_MARGIN_MS = 400;
 
 const ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";

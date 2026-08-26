@@ -9,6 +9,7 @@ import {
   logger,
   recordConsumption,
   runTrendDiscovery,
+  type TrendCategory,
 } from "@ayon/core";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -19,6 +20,7 @@ export interface RankedTrendView {
   summary: string;
   rationale: string;
   sourceUrl: string | null;
+  category: TrendCategory;
 }
 
 export interface RunTrendDiscoveryResult {

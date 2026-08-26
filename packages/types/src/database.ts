@@ -104,6 +104,20 @@ export interface Database {
           secondary_color_hex: string | null;
           font_family: string | null;
           visual_style: string | null;
+          /** ★ Achado real (pedido direto do usuário — "anexar umas artes pra ele entender a identidade visual da empresa"): até N imagens de referência (bucket `brand-media`, mesma policy da logo), usadas como entrada multimodal na geração de imagem (Gemini) para herdar paleta/tom real da marca. Migration 0022. */
+          reference_image_paths: string[];
+          /** ★ Achado real (pedido direto do usuário — "iniciar o avatar do porta voz da empresa"): "digital twin" HeyGen treinado a partir de vídeo real do porta-voz. Migration 0024 — todos nullable, ausentes até o 1º avatar ser criado. */
+          avatar_group_id: string | null;
+          avatar_look_id: string | null;
+          avatar_name: string | null;
+          avatar_training_video_path: string | null;
+          avatar_consent_status: string | null;
+          avatar_training_status: string | null;
+          avatar_ready: boolean;
+          /** ★ Achado real (pedido direto do usuário — troca de roupa por prompt não preservava identidade real): looks extras (ângulo/roupa diferente), cada um treinado de um vídeo real novo dentro do MESMO avatar_group já consentido. Migration 0025 — `avatar_look_id`/`avatar_name` continuam sendo o look principal/original. */
+          avatar_looks: { lookId: string; name: string; status: string }[];
+          /** ★ Achado real (pedido direto do usuário — "se eu usar um avatar ele precisa ser a voz do clone e ele narrar todo o vídeo"): `voice_id` clonado junto do treinamento do rosto (HeyGen, `defaultVoiceId`) — reaproveitado como narração da peça inteira quando alguma cena vira avatar. Migration 0027. */
+          avatar_voice_id: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -121,6 +135,16 @@ export interface Database {
           secondary_color_hex?: string | null;
           font_family?: string | null;
           visual_style?: string | null;
+          reference_image_paths?: string[];
+          avatar_group_id?: string | null;
+          avatar_look_id?: string | null;
+          avatar_name?: string | null;
+          avatar_training_video_path?: string | null;
+          avatar_consent_status?: string | null;
+          avatar_training_status?: string | null;
+          avatar_ready?: boolean;
+          avatar_looks?: { lookId: string; name: string; status: string }[];
+          avatar_voice_id?: string | null;
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["brands"]["Insert"]>;
@@ -595,6 +619,8 @@ export interface Database {
           selected_version_id: string | null;
           approved_by: string | null;
           approved_at: string | null;
+          /** ★ Achado real (pedido direto do usuário — aprovar o plano de cenas antes do render): plano de vídeo aprovável (áudio + cenas + texto de cada trecho), gravado por `planVideoContentPiece`. Migration 0023. */
+          pending_scene_plan: Record<string, unknown> | null;
           created_at: string;
         };
         Insert: {
@@ -610,6 +636,7 @@ export interface Database {
           selected_version_id?: string | null;
           approved_by?: string | null;
           approved_at?: string | null;
+          pending_scene_plan?: Record<string, unknown> | null;
         };
         Update: Partial<Database["public"]["Tables"]["content_pieces"]["Insert"]>;
         Relationships: [];
@@ -848,6 +875,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["learning_insights"]["Insert"]>;
         Relationships: [];
       };
+      heygen_account_pool: {
+        Row: {
+          id: string;
+          api_key: string;
+          label: string | null;
+          organization_id: string | null;
+          assigned_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          api_key: string;
+          label?: string | null;
+          organization_id?: string | null;
+          assigned_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["heygen_account_pool"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -858,6 +904,12 @@ export interface Database {
           p_base_slug: string;
         };
         Returns: { already_provisioned: boolean; organization_id: string }[];
+      };
+      claim_heygen_account: {
+        Args: {
+          p_organization_id: string;
+        };
+        Returns: string | null;
       };
     };
     Enums: Record<string, never>;

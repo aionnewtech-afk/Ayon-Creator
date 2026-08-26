@@ -2,9 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Sparkles, TrendingUp } from "lucide-react";
+import { BarChart3, CalendarHeart, Newspaper, Share2, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
+import { TREND_CATEGORIES, TREND_CATEGORY_LABELS, type TrendCategory } from "@ayon/core";
 import { Button, buttonVariants, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState } from "@ayon/ui";
 import { runTrendDiscoveryAction, type RankedTrendView } from "./actions";
+
+/** ★ Pedido direto do usuário — blocos separados por tipo de sinal, pra "engajar" mais do que uma lista só. */
+const CATEGORY_ICONS: Record<TrendCategory, LucideIcon> = {
+  noticias: Newspaper,
+  pesquisas: BarChart3,
+  redes_sociais: Share2,
+  eventos: CalendarHeart,
+  geral: Sparkles,
+};
 
 export interface TrendResearchView {
   id: string;
@@ -23,7 +33,7 @@ type Mode = "idle" | "loading";
 export function TrendList({ brandName, canTrigger, initialTrendResearch }: TrendListProps) {
   const [mode, setMode] = useState<Mode>("idle");
   const [trendResearch, setTrendResearch] = useState<TrendResearchView | null>(initialTrendResearch);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedTitle, setSelectedTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
 
@@ -31,7 +41,7 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
     setMode("loading");
     setError(null);
     setBlocked(false);
-    setSelectedIndex(null);
+    setSelectedTitle(null);
 
     const response = await runTrendDiscoveryAction();
 
@@ -99,20 +109,23 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
     );
   }
 
-  const selected = selectedIndex !== null ? trendResearch?.rankings[selectedIndex] : undefined;
+  const selected = selectedTitle ? trendResearch?.rankings.find((r) => r.title === selectedTitle) : undefined;
 
   if (selected && trendResearch) {
     return (
       <div className="mx-auto max-w-2xl space-y-6 py-8">
         <button
           type="button"
-          onClick={() => setSelectedIndex(null)}
+          onClick={() => setSelectedTitle(null)}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← Voltar para a lista
         </button>
 
         <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {TREND_CATEGORY_LABELS[selected.category]}
+          </p>
           <h1 className="text-xl font-semibold text-foreground">{selected.title}</h1>
           <p className="text-muted-foreground">{selected.summary}</p>
         </div>
@@ -177,17 +190,35 @@ export function TrendList({ brandName, canTrigger, initialTrendResearch }: Trend
           description="A equipe de especialistas não encontrou nenhuma tendência que realmente combine com a marca agora. Tente buscar de novo daqui a alguns dias."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {trendResearch?.rankings.map((ranking, index) => (
-            <button key={ranking.title} type="button" onClick={() => setSelectedIndex(index)} className="text-left">
-              <Card className="h-full transition-colors hover:border-primary">
-                <CardHeader>
-                  <CardTitle className="text-base">{ranking.title}</CardTitle>
-                  <CardDescription>{ranking.summary}</CardDescription>
-                </CardHeader>
-              </Card>
-            </button>
-          ))}
+        <div className="space-y-8">
+          {TREND_CATEGORIES.map((category) => {
+            const items = trendResearch?.rankings.filter((r) => r.category === category) ?? [];
+            if (items.length === 0) return null;
+
+            const Icon = CATEGORY_ICONS[category];
+            return (
+              <div key={category} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    {TREND_CATEGORY_LABELS[category]}
+                  </h2>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {items.map((ranking) => (
+                    <button key={ranking.title} type="button" onClick={() => setSelectedTitle(ranking.title)} className="text-left">
+                      <Card className="h-full transition-colors hover:border-primary">
+                        <CardHeader>
+                          <CardTitle className="text-base">{ranking.title}</CardTitle>
+                          <CardDescription>{ranking.summary}</CardDescription>
+                        </CardHeader>
+                      </Card>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -7,6 +7,8 @@ import { updateBrandIdentityAction } from "./identity-actions";
 
 const FONT_SUGGESTIONS = ["Poppins", "Montserrat", "Playfair Display", "Lato", "Nunito"];
 const STYLE_SUGGESTIONS = ["moderno", "elegante", "minimalista", "corporativo", "jovem"];
+/** Mesmo teto de `identity-actions.ts` (`MAX_REFERENCE_IMAGES`) — só pra desabilitar o input aqui quando já no limite, a validação real acontece no server action. */
+const MAX_REFERENCE_IMAGES = 4;
 
 export interface IdentityFormProps {
   logoUrl: string | null;
@@ -17,6 +19,8 @@ export interface IdentityFormProps {
   voiceId: string | null;
   /** ★ Sprint de estabilização — aviso quando a(s) cor(es) cadastrada(s) parecem não bater com as cores predominantes da logo enviada. Só um alerta: a Ayon nunca altera isso sozinha. */
   colorMismatchWarning?: string | null;
+  /** ★ Achado real (pedido direto do usuário — "anexar umas artes pra ele entender a identidade visual"): até `MAX_REFERENCE_IMAGES` peças de referência (URL assinada + caminho de storage, pra remoção) usadas como entrada visual na geração de imagem (Gemini). */
+  referenceImages: { path: string; url: string }[];
 }
 
 /**
@@ -34,6 +38,7 @@ export function IdentityForm({
   visualStyle,
   voiceId,
   colorMismatchWarning,
+  referenceImages,
 }: IdentityFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +80,36 @@ export function IdentityForm({
           <p className="text-xs text-muted-foreground">Sem logo cadastrada — o conteúdo gerado se adapta automaticamente.</p>
         )}
         <Input id="identity-logo" name="logo" type="file" accept="image/*" />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="identity-reference-images">Referências visuais (opcional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Anexe até {MAX_REFERENCE_IMAGES} peças (anúncios, artes) no estilo que você gosta — a Ayon usa elas como
+          referência de paleta e tom visual ao gerar fotos e vídeos automaticamente.
+        </p>
+        {referenceImages.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {referenceImages.map((ref) => (
+              <label key={ref.path} className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={ref.url} alt="Referência visual" className="h-20 w-20 rounded-md border border-border object-cover" />
+                <span className="flex items-center gap-1">
+                  <input type="checkbox" name="removeReferencePaths" value={ref.path} />
+                  remover
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+        <Input
+          id="identity-reference-images"
+          name="referenceImages"
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
+        />
       </div>
 
       {colorMismatchWarning ? (

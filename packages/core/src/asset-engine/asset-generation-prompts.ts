@@ -17,7 +17,13 @@ const FORMAT_INSTRUCTIONS: Record<ContentPieceFormat, string> = {
   email:
     "Formato: e-mail de marketing. Inclua um assunto (linha separada, prefixado por 'Assunto:') e o corpo do e-mail. Direto, sem enrolação, terminando com uma ação clara.",
   script:
-    "Formato: roteiro do vídeo principal da campanha. Estruturado por cena/bloco (ex.: 'Abertura:', 'Desenvolvimento:', 'Fechamento:'), pensado para ser falado em vídeo, não lido como texto corrido.",
+    // ★ Achado real: este texto vai DIRETO para o Voice Provider (ElevenLabs)
+    // como narração, sem nenhuma edição humana no meio — a instrução antiga
+    // ("Estruturado por cena/bloco, ex.: 'Abertura:'") levava o LLM a incluir
+    // rótulos de cena e direções de cenário entre parênteses/colchetes
+    // (ex.: "(Cenário: ambiente aconchegante...)"), que a narração então lia
+    // em voz alta literalmente. Formato agora pede só o texto falado puro.
+    "Formato: texto de narração do vídeo principal da campanha, sintetizado por voz de IA sem nenhuma edição humana depois. Escreva SOMENTE as palavras exatas que serão faladas em voz alta, como um texto corrido e natural — nunca inclua rótulo de cena/bloco, indicação de cenário, direção visual, nome de personagem ou qualquer texto entre parênteses/colchetes (nunca algo como '(Cenário: ...)', '[Abertura]', 'Visual:', 'Locução:'), porque tudo isso seria narrado literalmente. Use quebra de parágrafo só para marcar uma pausa natural na fala, nunca para separar 'cenas'.",
   teleprompter:
     "Formato: versão para teleprompter do roteiro da campanha. Frases curtas, pontuação que indica pausas naturais, linguagem falada (nunca formal/escrita) — precisa ser fácil de ler em voz alta sem tropeçar.",
   // Formatos visuais (own_media, MVP) não passam por geração de texto — nunca chamados com estas instruções.

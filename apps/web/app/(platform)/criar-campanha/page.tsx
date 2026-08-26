@@ -36,5 +36,15 @@ export default async function CriarCampanhaPage(
     );
   }
 
-  return <CampaignStrategyFlow brandName={session.brand.name} initialObjective={searchParams.tema} />;
+  return (
+    <CampaignStrategyFlow
+      brandName={session.brand.name}
+      initialObjective={searchParams.tema}
+      avatarReady={session.brand.avatar_ready}
+      avatarName={session.brand.avatar_name}
+      avatarLooks={
+        (session.brand.avatar_looks as { lookId: string; name: string; status: string }[] | null) ?? []
+      }
+    />
+  );
 }

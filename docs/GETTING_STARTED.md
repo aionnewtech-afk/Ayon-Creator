@@ -61,6 +61,7 @@ dívida técnica conhecida, `docs/hardening-plan.md` item 2.2). Modelo completo 
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Conectar ao projeto Supabase (nuvem) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Operações internas (Provider Gateway, webhooks) |
 | `ANTHROPIC_API_KEY` | Todo o "cérebro" do produto — onboarding, Intelligence Hub, geração de texto |
+| `LLM_PROVIDER` / `GEMINI_API_KEY` / `GEMINI_MODEL` | Troca temporária de fornecedor LLM para o Gemini (`LLM_PROVIDER=gemini`) — ex.: conta Anthropic sem créditos. Trend Engine continua na Anthropic (busca web nativa) |
 | `MERCADO_PAGO_ACCESS_TOKEN` / `MERCADO_PAGO_WEBHOOK_SECRET` | Assinatura de plano e compra de créditos (§8) |
 | `ELEVENLABS_API_KEY` | Narração do vídeo automático |
 | `PEXELS_API_KEY` | Banco de cenas do vídeo automático |

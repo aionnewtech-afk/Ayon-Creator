@@ -25,8 +25,24 @@ export const FONT_CATALOG: FontCatalogEntry[] = [
   { family: "Nunito", ttfUrl: "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf" },
 ];
 
-export function resolveFontUrl(fontFamily: string | null | undefined): string | undefined {
+function findCatalogEntry(fontFamily: string | null | undefined): FontCatalogEntry | undefined {
   if (!fontFamily) return undefined;
   const normalized = fontFamily.trim().toLowerCase();
-  return FONT_CATALOG.find((entry) => entry.family.toLowerCase() === normalized)?.ttfUrl;
+  return FONT_CATALOG.find((entry) => entry.family.toLowerCase() === normalized);
+}
+
+export function resolveFontUrl(fontFamily: string | null | undefined): string | undefined {
+  return findCatalogEntry(fontFamily)?.ttfUrl;
+}
+
+/**
+ * ★ Achado real (redesenho da composição de imagem — headline/subheadline/CTA
+ * como texto real, não `title` legado): o Shotstack precisa do nome exato da
+ * família embutida na fonte para os assets `text` usarem a fonte customizada
+ * (`TextFont.family`) — nunca basta a URL do TTF sozinha. Devolve o nome
+ * canônico do catálogo (não o texto livre que o usuário digitou em
+ * `brands.font_family`, que pode ter capitalização diferente).
+ */
+export function resolveFontFamily(fontFamily: string | null | undefined): string | undefined {
+  return findCatalogEntry(fontFamily)?.family;
 }

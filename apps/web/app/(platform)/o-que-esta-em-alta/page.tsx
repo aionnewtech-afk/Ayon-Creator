@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { TrendingUp } from "lucide-react";
-import { TrendResearchRepository, hasMinimumRole } from "@ayon/core";
+import { TREND_CATEGORIES, TrendResearchRepository, hasMinimumRole } from "@ayon/core";
 import { EmptyState } from "@ayon/ui";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import type { RankedTrendView } from "./actions";
 import { TrendList, type TrendResearchView } from "./trend-list";
 
 /**
@@ -38,7 +39,7 @@ export default async function OQueEstaEmAltaPage() {
     latest && latest.status === "completed"
       ? {
           id: latest.id,
-          rankings: ((latest.summary as { rankings?: unknown[] } | null)?.rankings ?? []) as TrendResearchView["rankings"],
+          rankings: normalizeRankings((latest.summary as { rankings?: unknown[] } | null)?.rankings),
           overallRationale:
             ((latest.summary as { overall_rationale?: string } | null)?.overall_rationale) ?? "",
         }
@@ -51,4 +52,27 @@ export default async function OQueEstaEmAltaPage() {
       initialTrendResearch={initialTrendResearch}
     />
   );
+}
+
+/**
+ * ★ `trend_research.summary` é jsonb livre — pesquisas salvas antes da
+ * categorização (achado real, pedido de blocos por tipo de sinal) não têm
+ * `category` nenhuma. Nunca deixa a tela quebrar com uma categoria
+ * inválida/ausente — cai em "geral" (sempre existe como bloco na UI).
+ */
+function normalizeRankings(raw: unknown[] | undefined): RankedTrendView[] {
+  if (!raw) return [];
+  return raw.map((item) => {
+    const ranking = item as Partial<RankedTrendView>;
+    const category = TREND_CATEGORIES.includes(ranking.category as (typeof TREND_CATEGORIES)[number])
+      ? (ranking.category as RankedTrendView["category"])
+      : "geral";
+    return {
+      title: ranking.title ?? "",
+      summary: ranking.summary ?? "",
+      rationale: ranking.rationale ?? "",
+      sourceUrl: ranking.sourceUrl ?? null,
+      category,
+    };
+  });
 }

@@ -26,9 +26,19 @@ export interface CampaignStrategyFlowProps {
   brandName: string;
   /** Pré-preenchido ao vir de uma tendência selecionada (TREND-2 → CAMP-1, Fluxo 2). */
   initialObjective?: string;
+  /** ★ Achado real (pedido direto do usuário — "em que momento ele vai dar a opção de gerar vídeo de avatar?"): quando pronto, a peça de vídeo ganha um 2º jeito de gerar, ao lado do banco de vídeo licenciado. */
+  avatarReady: boolean;
+  avatarName: string | null;
+  avatarLooks: { lookId: string; name: string; status: string }[];
 }
 
-export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignStrategyFlowProps) {
+export function CampaignStrategyFlow({
+  brandName,
+  initialObjective,
+  avatarReady,
+  avatarName,
+  avatarLooks,
+}: CampaignStrategyFlowProps) {
   const [mode, setMode] = useState<Mode>("form");
   const [objective, setObjective] = useState(initialObjective ?? "");
   const [result, setResult] = useState<StrategyResult | null>(null);
@@ -80,7 +90,15 @@ export function CampaignStrategyFlow({ brandName, initialObjective }: CampaignSt
   }
 
   if (mode === "approved" && contentPieces) {
-    return <ContentPackageReview brandName={brandName} initialContentPieces={contentPieces} />;
+    return (
+      <ContentPackageReview
+        brandName={brandName}
+        initialContentPieces={contentPieces}
+        avatarReady={avatarReady}
+        avatarName={avatarName}
+        avatarLooks={avatarLooks}
+      />
+    );
   }
 
   if (mode === "results" && result) {

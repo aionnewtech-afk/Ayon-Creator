@@ -115,6 +115,14 @@ port = 54324
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
+# ★ Achado real (pedido direto do usuário — "iniciar o avatar do porta voz
+# da empresa"): tentei subir isso pra 500MiB pra caber o vídeo de
+# treinamento do avatar (HeyGen), mas o `supabase config push` recusou —
+# 50MiB é um TETO DO PLANO GRATUITO do projeto Supabase, não uma
+# configuração livre (erro real: "upgrade the project to a paid plan to
+# unlock higher file size limits"). Mantido em 50MiB (o real teto vigente)
+# pra `config.toml` não ficar dessincronizado do remoto — só sobe de
+# verdade se o projeto for pra um plano pago.
 file_size_limit = "50MiB"
 
 # Uncomment to configure local storage buckets
@@ -143,9 +151,13 @@ max_catalogs = 2
 # Analytics Buckets is available to Supabase Pro plan.
 # [storage.analytics.buckets.my-warehouse]
 
-# Store vector embeddings in S3 for large and durable datasets
+# Store vector embeddings in S3 for large e durable datasets
+# ★ Achado real: `enabled = true` (default gerado por `supabase init` numa
+# versão mais nova da CLI) bloqueava `supabase config push` inteiro com 402
+# "upgrade to a paid tier to enable vector buckets" — este projeto nunca usou
+# vector buckets, desligado pra não travar nenhum outro push de config.
 [storage.vector]
-enabled = true
+enabled = false
 max_buckets = 10
 max_indexes = 5
 

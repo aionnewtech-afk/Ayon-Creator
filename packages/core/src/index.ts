@@ -30,6 +30,7 @@ export * from "./repositories/platform-admin.repository";
 export * from "./repositories/admin-audit-log.repository";
 export * from "./repositories/provider-call-log.repository";
 export * from "./repositories/feature-flag.repository";
+export * from "./repositories/heygen-account-pool.repository";
 export * from "./platform-admin/is-platform-admin";
 export * from "./platform-admin/require-platform-admin";
 export * from "./platform-admin/record-admin-action";
@@ -48,14 +49,20 @@ export * from "./platform-admin/get-platform-admins-overview";
 export * from "./provisioning/initial-provisioning";
 export * from "./providers/llm-provider";
 export * from "./providers/anthropic-llm-provider";
+export * from "./providers/gemini-llm-provider";
 export * from "./providers/trend-source-provider";
 export * from "./providers/anthropic-web-search-trend-source-provider";
+export * from "./providers/gemini-web-search-trend-source-provider";
 export * from "./providers/voice-provider";
 export * from "./providers/elevenlabs-voice-provider";
 export * from "./providers/media-provider";
 export * from "./providers/pexels-media-provider";
+export * from "./providers/gemini-image-media-provider";
 export * from "./providers/video-render-provider";
 export * from "./providers/shotstack-video-render-provider";
+export * from "./providers/gemini-veo-video-provider";
+export * from "./providers/avatar-provider";
+export * from "./providers/heygen-avatar-provider";
 export * from "./providers/provider-gateway";
 export * from "./providers/log-provider-call";
 export * from "./brand-brain/onboarding-themes";
@@ -70,6 +77,7 @@ export * from "./brand-brain/onboarding-conversation-engine";
 export * from "./shared/llm-json";
 export * from "./shared/temporal-context";
 export * from "./shared/fetch-with-retry";
+export * from "./shared/sanitize-narration-text";
 export * from "./intelligence-hub/intelligence-hub-prompts";
 export * from "./intelligence-hub/run-specialist-panel";
 export * from "./intelligence-hub/run-coordinator";
@@ -87,8 +95,13 @@ export * from "./asset-engine/video-pipeline-scenes";
 export * from "./asset-engine/video-pipeline-render";
 export * from "./asset-engine/video-pipeline-complete";
 export * from "./asset-engine/video-pipeline-trigger";
+export * from "./asset-engine/video-pipeline-plan";
+export * from "./asset-engine/video-pipeline-scene-edit";
+export * from "./asset-engine/brand-avatar";
+export * from "./asset-engine/video-pipeline-avatar";
 export * from "./asset-engine/voice-catalog";
 export * from "./asset-engine/select-brand-voice";
+export * from "./asset-engine/rewrite-script-for-duration";
 export * from "./asset-engine/segment-script";
 export * from "./asset-engine/font-catalog";
 export * from "./asset-engine/resolve-brand-branding";
@@ -126,6 +139,10 @@ export * from "./knowledge-base/knowledge-source-labels";
 // motivo: `jszip` gera `nodebuffer` (Node-only). Quem precisar (Server
 // Action de montagem do pacote) importa direto o arquivo:
 // `@ayon/core/src/asset-engine/build-content-package`.
+// `./asset-engine/build-scene-clips-package` fica FORA do barrel pelo mesmo
+// motivo (mesma dependência, `jszip`/`nodebuffer`) — pedido direto do
+// usuário ("baixar todas as cenas"). Importa direto:
+// `@ayon/core/src/asset-engine/build-scene-clips-package`.
 // `./shared/verify-n8n-webhook-secret` fica FORA do barrel pelo mesmo motivo
 // (Missão 9, achado real durante a validação de build) — usa `node:crypto`
 // (`timingSafeEqual`), e o build do Next.js quebra ao tentar empacotar um

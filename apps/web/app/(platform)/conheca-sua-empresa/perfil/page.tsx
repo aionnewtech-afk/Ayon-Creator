@@ -10,6 +10,7 @@ import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { SynthesisFieldCard } from "../conversa/synthesis-field-card";
 import { updateBrandBrainFieldAction } from "../actions";
+import { AvatarSection } from "./avatar-section";
 import { IdentityForm } from "./identity-form";
 
 const BRAND_MEDIA_BUCKET = "brand-media";
@@ -62,7 +63,7 @@ async function buildColorMismatchWarning(
 export default async function PerfilDaMarcaPage() {
   const session = await getCurrentSession();
 
-  if (!session?.brand) {
+  if (!session?.brand || !session.organization) {
     redirect("/painel");
   }
 
@@ -86,6 +87,15 @@ export default async function PerfilDaMarcaPage() {
 
   const colorMismatchWarning = await buildColorMismatchWarning(db, session.brand);
 
+  const referenceImages = (
+    await Promise.all(
+      (session.brand.reference_image_paths ?? []).map(async (path) => {
+        const { data } = await db.storage.from(BRAND_MEDIA_BUCKET).createSignedUrl(path, 3600);
+        return data?.signedUrl ? { path, url: data.signedUrl } : null;
+      }),
+    )
+  ).filter((ref): ref is { path: string; url: string } => ref !== null);
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 py-8">
       <div className="space-y-1">
@@ -103,6 +113,19 @@ export default async function PerfilDaMarcaPage() {
         visualStyle={session.brand.visual_style}
         voiceId={profile.default_voice_ref}
         colorMismatchWarning={colorMismatchWarning}
+        referenceImages={referenceImages}
+      />
+
+      <AvatarSection
+        avatarName={session.brand.avatar_name}
+        avatarLookId={session.brand.avatar_look_id}
+        avatarConsentStatus={session.brand.avatar_consent_status}
+        avatarTrainingStatus={session.brand.avatar_training_status}
+        avatarReady={session.brand.avatar_ready}
+        hasAvatarInProgress={Boolean(session.brand.avatar_group_id)}
+        avatarLooks={
+          (session.brand.avatar_looks as { lookId: string; name: string; status: string }[] | null) ?? []
+        }
       />
 
       <div className="space-y-3">

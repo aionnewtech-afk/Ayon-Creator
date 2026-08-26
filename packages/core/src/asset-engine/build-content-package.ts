@@ -54,16 +54,25 @@ export async function buildContentPackage(params: {
         continue;
       }
 
-      const { data, error } = await params.db.storage.from(CONTENT_OUTPUT_BUCKET).download(latestVersion.output_storage_path);
-      if (error || !data) {
-        logger.warn("asset_engine.package_download_failed", { contentPieceId: piece.id, format: piece.format });
-        continue;
-      }
+      // ★ Achado real (pedido direto do usuário — "o carrossel só gera um e é
+      // mal feito") — `output_storage_path` sozinho é só a capa de um
+      // carrossel real; todas as lâminas vivem em
+      // `generation_metadata.slide_storage_paths` (photo-pipeline-complete.ts).
+      const slidePaths = (latestVersion.generation_metadata as { slide_storage_paths?: string[] } | null)?.slide_storage_paths;
+      const storagePaths = slidePaths?.length ? slidePaths : [latestVersion.output_storage_path];
 
-      const rawFileName = latestVersion.output_storage_path.split("/").pop() ?? piece.format;
-      const idPrefix = `${piece.id}-`;
-      const fileName = rawFileName.startsWith(idPrefix) ? rawFileName.slice(idPrefix.length) : rawFileName;
-      zip.file(fileName, await data.arrayBuffer());
+      for (const storagePath of storagePaths) {
+        const { data, error } = await params.db.storage.from(CONTENT_OUTPUT_BUCKET).download(storagePath);
+        if (error || !data) {
+          logger.warn("asset_engine.package_download_failed", { contentPieceId: piece.id, format: piece.format });
+          continue;
+        }
+
+        const rawFileName = storagePath.split("/").pop() ?? piece.format;
+        const idPrefix = `${piece.id}-`;
+        const fileName = rawFileName.startsWith(idPrefix) ? rawFileName.slice(idPrefix.length) : rawFileName;
+        zip.file(fileName, await data.arrayBuffer());
+      }
     }
 
     const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
