@@ -995,7 +995,13 @@ export async function uploadReplacementSceneAction(
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const storagePath = `${session.organization.id}/${piece.campaign_id}/${contentPieceId}-scene-${sceneIndex}-${Date.now()}-${file.name}`;
+    // ★ Achado real: nome original do arquivo (ex.: "Oktober Ab _48 (1).mp4",
+    // com espaços e parênteses) ia direto pro storage path, e o Shotstack
+    // rejeitava a signed URL resultante com "not accessible (bad request)".
+    // Extensão segura, sem o nome original.
+    const rawExtension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    const extension = rawExtension || (assetType === "video" ? "mp4" : "jpg");
+    const storagePath = `${session.organization.id}/${piece.campaign_id}/${contentPieceId}-scene-${sceneIndex}-${Date.now()}.${extension}`;
     const { error: uploadError } = await db.storage
       .from(CONTENT_OUTPUT_BUCKET)
       .upload(storagePath, buffer, { contentType: file.type, upsert: true });
@@ -1256,7 +1262,12 @@ export async function uploadContentPieceMediaAction(
     if (!piece) return { ok: false, error: FRIENDLY_ERROR };
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const storagePath = `${session.organization.id}/${piece.campaign_id}/${contentPieceId}-${file.name}`;
+    // Mesmo problema do upload de cena (ver nota acima): nome original do
+    // arquivo pode ter espaços/parênteses e quebrar quem for buscar a signed
+    // URL depois. Extensão segura, sem o nome original.
+    const rawExtension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    const extension = rawExtension || "bin";
+    const storagePath = `${session.organization.id}/${piece.campaign_id}/${contentPieceId}-${Date.now()}.${extension}`;
 
     const { error: uploadError } = await db.storage.from(CONTENT_OUTPUT_BUCKET).upload(storagePath, buffer, {
       contentType: file.type,
