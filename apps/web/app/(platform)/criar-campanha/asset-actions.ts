@@ -1007,7 +1007,12 @@ export async function uploadReplacementSceneAction(
       .upload(storagePath, buffer, { contentType: file.type, upsert: true });
     if (uploadError) throw uploadError;
 
-    const { data: signed, error: signError } = await db.storage.from(CONTENT_OUTPUT_BUCKET).createSignedUrl(storagePath, 3600);
+    // ★ Achado real (produção — Railway): essa URL fica em `pending_scene_plan` até a aprovação final, que pode
+    // levar horas — 1h expirava antes do render e o Shotstack falhava com "not accessible". 7 dias, mesmo TTL
+    // usado nos outros pontos que alimentam o plano pendente (video-pipeline-narrate.ts, gemini-veo-video-provider.ts).
+    const { data: signed, error: signError } = await db.storage
+      .from(CONTENT_OUTPUT_BUCKET)
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
     if (signError || !signed) throw signError ?? new Error("Falha ao gerar link do arquivo enviado.");
 
     const tier = session.brand.provider_tier ?? session.organization.provider_tier;

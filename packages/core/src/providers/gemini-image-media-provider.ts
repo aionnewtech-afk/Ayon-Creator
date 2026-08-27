@@ -9,8 +9,14 @@ const GEMINI_NATIVE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta
 /** Mesmo bucket privado usado por `photo-pipeline-compose.ts` para o resultado final — evita criar bucket/migration novos só para o estágio intermediário. */
 const GENERATED_MEDIA_BUCKET = "content-output";
 
-/** ★ Achado real (validação direta na API): o Video Render Provider (Shotstack) busca `backgroundImageUrl` sobre HTTP — o bucket é privado, então precisa de uma signed URL, não do path bruto. 1h é a mesma margem já usada em `asset-actions.ts` para o mesmo tipo de link efêmero. */
-const SIGNED_URL_TTL_SECONDS = 3600;
+/**
+ * ★ Achado real (validação direta na API): o Video Render Provider (Shotstack) busca `backgroundImageUrl` sobre HTTP — o bucket é privado, então precisa de uma signed URL, não do path bruto.
+ * ★ Achado real (produção — Railway): 1h não é suficiente. Essa URL fica gravada em `pending_scene_plan` e só é
+ * consumida quando o usuário aprova o plano na revisão manual — que pode levar horas. Signed URL expirada vira
+ * "This URL is not accessible (bad request)" no Shotstack. 7 dias cobre qualquer revisão realista (mesmo TTL já
+ * usado em `video-pipeline-scene-edit.ts` para o mesmo cenário).
+ */
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 interface GeminiImagePart {
   text?: string;

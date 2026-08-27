@@ -6,7 +6,8 @@ import { fetchWithRetry } from "../shared/fetch-with-retry";
 
 const GEMINI_NATIVE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const VIDEO_BUCKET = "content-output";
-const SIGNED_URL_TTL_SECONDS = 3600;
+/** ★ Achado real (produção — Railway): essa URL fica em `pending_scene_plan` até a revisão manual ser aprovada, o que pode levar horas — 1h expirava antes do render, causando "This URL is not accessible" no Shotstack. 7 dias, mesmo TTL de `video-pipeline-scene-edit.ts`. */
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 /** ★ Achado real (validação direta na API): 8/6/4 são os únicos valores aceitos, e precisam ser NÚMERO JSON — string (`"4"`) é rejeitada com 400 ("value type... needs to be a number"), apesar da doc pública mostrar os valores entre aspas. 4 é o mais próximo do corte rápido (MAX_CLIP_SECONDS=3) sem custo/tempo extra do que 6-8s renderizados só pra serem cortados. */
 const VEO_DURATION_SECONDS = 4;

@@ -9,8 +9,13 @@ import { sanitizeNarrationText } from "../shared/sanitize-narration-text";
 import { selectBrandVoice } from "./select-brand-voice";
 
 const CONTENT_OUTPUT_BUCKET = "content-output";
-/** Tempo suficiente para as etapas seguintes (cenas + composição) ainda buscarem o áudio pela URL. */
-const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60;
+/**
+ * ★ Achado real (produção — Railway): essa URL vai para `pending_scene_plan` e só é usada quando o usuário aprova
+ * o plano na revisão manual, que pode levar horas. 1h expirava antes da renderização de verdade rodar, e o
+ * Shotstack falhava com "This URL is not accessible (bad request)" ao buscar a narração. 7 dias cobre qualquer
+ * revisão realista (mesmo TTL já usado em `video-pipeline-scene-edit.ts` para o mesmo cenário).
+ */
+const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export interface NarrateVideoContentPieceParams {
   /** Client de sessão (RLS) ou service role (rota interna acionada pelo n8n, sem sessão de usuário) — grava no Storage. */
