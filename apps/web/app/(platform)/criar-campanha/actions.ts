@@ -8,6 +8,8 @@ import {
   ContentPieceRepository,
   InactiveSubscriptionError,
   InsufficientCreditsError,
+  SpecialistOpinionRepository,
+  SpecialistRepository,
   ensureSufficientCredits,
   generateTextPiece,
   hasMinimumRole,
@@ -140,6 +142,73 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
     });
     return { ok: false, error: FRIENDLY_ERROR };
   }
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "quero que as alterações nas
+ * campanhas sejam salvas automaticamente, pra quando eu retomar não começar
+ * do zero"): a estratégia consolidada (opiniões + consolidação) já ficava
+ * gravada em `campaigns.strategy_summary`/`specialist_opinions` desde
+ * sempre — o que faltava era um jeito de reabrir ESSA tela específica depois
+ * de sair. Sem isso, a única forma de "recuperar" uma campanha em
+ * `ready_for_review` sem peças ainda era digitar o objetivo de novo do zero
+ * (nova sessão do Intelligence Hub, novo custo em créditos). Usado por
+ * `/campanhas/[id]` quando a campanha ainda não tem `content_pieces`.
+ */
+export async function getCampaignStrategyForResumeAction(campaignId: string): Promise<CreateCampaignStrategyResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) {
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const campaignRepository = new CampaignRepository(db);
+
+  const campaign = await campaignRepository.findById(campaignId);
+  if (!campaign || campaign.brand_id !== session.brand.id) {
+    return { ok: false, error: "Campanha não encontrada." };
+  }
+  if (campaign.status !== "ready_for_review" || !campaign.strategy_summary) {
+    return { ok: false, error: "Essa campanha não tem uma estratégia pendente de aprovação." };
+  }
+
+  const opinionRepository = new SpecialistOpinionRepository(db);
+  const rows = await opinionRepository.findBySessionId(campaign.intelligence_hub_session_id);
+  const specialistRepository = new SpecialistRepository(serviceRoleDb);
+  const specialists = await specialistRepository.findByIds(rows.map((row) => row.specialist_id));
+  const nameById = new Map(specialists.map((specialist) => [specialist.id, specialist.name]));
+
+  const strategySummary = campaign.strategy_summary as {
+    executive_summary?: string | null;
+    consolidated_strategy?: string;
+    rationale?: string;
+    divergences?: string | null;
+  };
+
+  return {
+    ok: true,
+    campaignId: campaign.id,
+    // ★ Especialistas que falharam na sessão original não geram linha em
+    // `specialist_opinions` (runSpecialistPanel só grava as respostas com
+    // sucesso) — ao retomar, só reaparecem os que responderam, mesmo
+    // espírito de "falha parcial nunca bloqueia" já aplicado no resto do
+    // fluxo.
+    opinions: rows.map((row) => {
+      const opinion = row.opinion as { opinion?: string; rationale?: string } | null;
+      return {
+        specialistId: row.specialist_id,
+        specialistName: nameById.get(row.specialist_id) ?? "Especialista",
+        failed: false,
+        opinion: opinion?.opinion ?? null,
+        rationale: opinion?.rationale ?? null,
+      };
+    }),
+    executiveSummary: strategySummary.executive_summary ?? null,
+    consolidatedStrategy: strategySummary.consolidated_strategy ?? "",
+    rationale: strategySummary.rationale ?? "",
+    divergences: strategySummary.divergences ?? null,
+  };
 }
 
 export interface ApproveCampaignStrategyResult {

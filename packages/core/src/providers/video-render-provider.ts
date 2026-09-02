@@ -48,6 +48,15 @@ export interface VideoRenderSceneSource {
   segmentIndex?: number;
   /** ★ Achado real (pedido direto do usuário — "mostrar o prompt exato usado em cada peça gerada"): prompt de geração (Veo/Gemini image) ou termo de busca (Pexels) usado pra achar esta cena específica. */
   generationPrompt?: string;
+  /**
+   * ★ Achado real (pedido direto do usuário — "incluir a oportunidade de
+   * incluir um vídeo e recortar a cena que quero"): sem isso, um vídeo
+   * enviado pelo próprio usuário sempre tocava a partir do segundo 0 da fonte
+   * — sem jeito de escolher qual trecho do arquivo virava a cena. Segundos a
+   * pular do início do arquivo-fonte antes de tocar `lengthSeconds` (só se
+   * aplica a `assetType === "video"`; Shotstack `VideoAsset.trim`).
+   */
+  trimSeconds?: number;
 }
 
 /**

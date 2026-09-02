@@ -106,6 +106,8 @@ export interface ApplySceneCandidateParams extends SceneEditParams {
   assetType?: "video" | "image";
   durationSeconds?: number;
   generationPrompt?: string;
+  /** Segundos a pular do início do vídeo-fonte antes de tocar (upload manual — "recortar a cena que quero"). Nunca reaproveitado de uma cena anterior: sempre explícito nesta chamada, mesmo quando ausente. */
+  trimSeconds?: number;
 }
 
 /**
@@ -128,6 +130,7 @@ export async function applySceneCandidate(params: ApplySceneCandidateParams): Pr
     assetType: params.assetType,
     lengthSeconds,
     generationPrompt: params.generationPrompt,
+    trimSeconds: params.trimSeconds,
   };
 
   reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
@@ -371,6 +374,8 @@ export async function replaceVideoSceneWithAvatar(params: SceneEditParams): Prom
 export interface ReplaceVideoSceneWithUploadParams extends SceneEditParams {
   url: string;
   assetType: "video" | "image";
+  /** ★ Achado real (pedido direto do usuário — "incluir a oportunidade de incluir um vídeo e recortar a cena que quero"): ponto (em segundos) onde a UI de recorte (client-side) posicionou o início do trecho escolhido dentro do arquivo enviado. Ignorado para `assetType === "image"`. */
+  trimSeconds?: number;
 }
 
 /**
@@ -382,7 +387,12 @@ export interface ReplaceVideoSceneWithUploadParams extends SceneEditParams {
  * curto que o slot pode congelar no último frame no render final.
  */
 export async function replaceVideoSceneWithUpload(params: ReplaceVideoSceneWithUploadParams): Promise<void> {
-  await applySceneCandidate({ ...params, url: params.url, assetType: params.assetType });
+  await applySceneCandidate({
+    ...params,
+    url: params.url,
+    assetType: params.assetType,
+    trimSeconds: params.assetType === "video" ? params.trimSeconds : undefined,
+  });
 }
 
 /** Remove 1 cena do plano — nunca a última restante (não dá pra ter um vídeo sem nenhuma cena). Sobra de duração vai pra última cena (`reconcilePlanTimeline`), a trilha de vídeo nunca fica mais curta que a narração. */

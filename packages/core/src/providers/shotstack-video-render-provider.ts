@@ -459,7 +459,7 @@ function buildVideoTimeline(request: VideoRenderRequest) {
               transition: { in: transitionType, out: transitionType },
             }
           : {
-              asset: { type: "video", src: source.url, volume: 0 },
+              asset: { type: "video", src: source.url, volume: 0, trim: source.trimSeconds ?? 0 },
               start: source.startSeconds,
               length: source.lengthSeconds,
               fit: "cover",

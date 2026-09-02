@@ -986,6 +986,18 @@ export async function uploadReplacementSceneAction(
   const assetType = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : null;
   if (!assetType) return { ok: false, error: "Esse tipo de arquivo não é aceito aqui. Envie uma imagem ou um vídeo." };
 
+  // ★ Achado real (pedido direto do usuário — "incluir a oportunidade de incluir um vídeo e recortar a cena que
+  // quero"): a UI de recorte (client-side) manda o ponto escolhido em segundos; sem isso a cena sempre tocava do
+  // início do arquivo enviado.
+  const rawTrimSeconds = formData.get("trimSeconds");
+  const trimSeconds =
+    assetType === "video" && typeof rawTrimSeconds === "string" && rawTrimSeconds.trim() !== ""
+      ? Number(rawTrimSeconds)
+      : undefined;
+  if (trimSeconds !== undefined && (!Number.isFinite(trimSeconds) || trimSeconds < 0)) {
+    return { ok: false, error: "Ponto de recorte inválido." };
+  }
+
   const db = await createClient();
   const serviceRoleDb = createServiceRoleClient();
   const contentPieceRepository = new ContentPieceRepository(db);
@@ -1025,6 +1037,7 @@ export async function uploadReplacementSceneAction(
       sceneIndex,
       url: signed.signedUrl,
       assetType,
+      trimSeconds,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);

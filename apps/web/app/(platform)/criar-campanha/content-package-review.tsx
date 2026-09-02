@@ -1159,6 +1159,22 @@ function VideoScenePlanReview({
   const [aiPromptDraft, setAiPromptDraft] = useState("");
   const [aiPromptLoading, setAiPromptLoading] = useState(false);
 
+  // ★ Achado real (pedido direto do usuário — "incluir a oportunidade de
+  // incluir um vídeo e recortar a cena que quero"): antes, um vídeo enviado
+  // sempre virava a cena a partir do segundo 0 do arquivo — sem jeito de
+  // escolher o trecho. Vídeo (nunca imagem) abre esse picker antes de
+  // enviar: o usuário assiste o arquivo local (object URL, nada sobe ainda),
+  // escolhe o ponto de início arrastando o próprio player, e só then o
+  // upload + `trimSeconds` seguem pro server action.
+  const [trimPicker, setTrimPicker] = useState<{
+    index: number;
+    file: File;
+    objectUrl: string;
+    trimStart: number;
+    sceneLengthSeconds: number;
+  } | null>(null);
+  const trimPickerVideoRef = useRef<HTMLVideoElement | null>(null);
+
   // ★ Achado real (pedido direto do usuário — "tem como a gente assistir as
   // cenas com a narração antes de editar e de baixar, porque só nas
   // figurinhas pequenas não dá pra ter muita noção"): prévia client-side —
@@ -1207,6 +1223,7 @@ function VideoScenePlanReview({
     setQueryDraft("");
     setSearchCandidates(null);
     setAiPromptOpenFor(null);
+    handleCancelTrim();
   }
 
   async function handleSearch(index: number) {
@@ -1260,11 +1277,40 @@ function VideoScenePlanReview({
     handleResult(await replaceSceneWithAvatarAction(pieceId, index));
   }
 
-  async function handleUpload(index: number, file: File) {
+  async function handleUpload(index: number, file: File, trimSeconds?: number) {
     setBusy(true);
     const formData = new FormData();
     formData.set("file", file);
+    if (trimSeconds !== undefined) formData.set("trimSeconds", String(trimSeconds));
     handleResult(await uploadReplacementSceneAction(pieceId, index, formData));
+  }
+
+  /** Vídeo abre o picker de recorte antes de enviar; imagem sobe direto (não há o que recortar). */
+  function handleFileSelected(index: number, file: File) {
+    if (!file.type.startsWith("video/")) {
+      void handleUpload(index, file);
+      return;
+    }
+    const sceneLengthSeconds = plan.scenes[index]?.lengthSeconds ?? 3;
+    setTrimPicker({ index, file, objectUrl: URL.createObjectURL(file), trimStart: 0, sceneLengthSeconds });
+  }
+
+  function handleCancelTrim() {
+    if (trimPicker) URL.revokeObjectURL(trimPicker.objectUrl);
+    setTrimPicker(null);
+  }
+
+  function handleUseCurrentTimeAsTrimStart() {
+    if (!trimPicker || !trimPickerVideoRef.current) return;
+    setTrimPicker({ ...trimPicker, trimStart: trimPickerVideoRef.current.currentTime });
+  }
+
+  function handleConfirmTrim() {
+    if (!trimPicker) return;
+    const { index, file, trimStart, objectUrl } = trimPicker;
+    URL.revokeObjectURL(objectUrl);
+    setTrimPicker(null);
+    void handleUpload(index, file, trimStart);
   }
 
   async function handleDelete(index: number) {
@@ -1539,7 +1585,7 @@ function VideoScenePlanReview({
                 disabled={busy}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) handleUpload(selectedIndex, file);
+                  if (file) handleFileSelected(selectedIndex, file);
                   event.target.value = "";
                 }}
               />
@@ -1549,6 +1595,33 @@ function VideoScenePlanReview({
               Remover cena
             </Button>
           </div>
+
+          {trimPicker && trimPicker.index === selectedIndex ? (
+            <div className="space-y-2 rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Assista e escolha de onde o recorte começa — a cena vai durar{" "}
+                {trimPicker.sceneLengthSeconds.toFixed(1)}s a partir desse ponto.
+              </p>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={trimPickerVideoRef} src={trimPicker.objectUrl} controls className="w-full rounded-md bg-black" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleUseCurrentTimeAsTrimStart}>
+                  Usar o ponto atual como início
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Início escolhido: {trimPicker.trimStart.toFixed(1)}s
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={busy} onClick={handleConfirmTrim}>
+                  Usar esse recorte
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={handleCancelTrim}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           {busy ? <p className="text-xs text-muted-foreground">Processando...</p> : null}
         </div>

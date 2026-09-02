@@ -29,6 +29,15 @@ export class SpecialistRepository {
     return data ?? [];
   }
 
+  /** Nome/dados de especialistas específicos, por id — usado para reidratar opiniões já gravadas (ex.: retomar a revisão de uma estratégia pendente sem rodar o painel de novo). */
+  async findByIds(ids: string[]): Promise<SpecialistRow[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.db.from("specialists").select("*").in("id", ids);
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   /** O Coordinator ativo — assume-se um único registro com este papel. */
   async findCoordinator(): Promise<SpecialistRow | null> {
     const { data, error } = await this.db
