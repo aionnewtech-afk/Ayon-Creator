@@ -18,6 +18,7 @@ import {
   learnedPreferencesTextFromProfile,
   logger,
   recordConsumption,
+  redoCampaignStrategySession,
   runCampaignStrategySession,
 } from "@ayon/core";
 import { TEXT_ONLY_CONTENT_PIECE_FORMATS } from "@ayon/types";
@@ -211,6 +212,113 @@ export async function getCampaignStrategyForResumeAction(campaignId: string): Pr
   };
 }
 
+/**
+ * ★ Achado real (pedido direto do usuário — "os textos são muito genéricos
+ * ... quando aprovo a campanha não consigo mais voltar pra revisar... quero
+ * poder redigitar a pesquisa/estratégia"): antes, a única forma de mudar o
+ * objetivo era criar uma campanha nova do zero, mesmo já tendo aprovado e
+ * gerado peças — o `campaigns.id`/`content_pieces` da tentativa anterior
+ * ficavam órfãos. Reprocessa a MESMA campanha com um objetivo ajustado
+ * (nova sessão do Intelligence Hub, nova cobrança em créditos, mesmo padrão
+ * de `createCampaignStrategyAction`) e devolve pro mesmo painel de revisão
+ * (`StrategyReviewPanel`). Se a campanha já tinha `content_pieces`,
+ * `approveCampaignStrategyAction` detecta isso e regenera os formatos
+ * textuais em vez de duplicar as 9 peças.
+ */
+export async function redoCampaignStrategyAction(campaignId: string, objective: string): Promise<CreateCampaignStrategyResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) {
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode redigitar a estratégia." };
+  }
+
+  const trimmedObjective = objective.trim();
+  if (!trimmedObjective) {
+    return { ok: false, error: "Conte pra mim qual é o objetivo ajustado dessa campanha." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const campaignRepository = new CampaignRepository(db);
+
+  const campaign = await campaignRepository.findById(campaignId);
+  if (!campaign || campaign.brand_id !== session.brand.id) {
+    return { ok: false, error: "Campanha não encontrada." };
+  }
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+
+    const { costCredits } = await ensureSufficientCredits({
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      actorUserId: session.user.id,
+      triggerReason: CAMPAIGN_STRATEGY_TRIGGER_REASON,
+      tier,
+    });
+
+    const result = await redoCampaignStrategySession({
+      db,
+      serviceRoleDb,
+      tier,
+      brandId: session.brand.id,
+      brandName: session.brand.name,
+      objective: trimmedObjective,
+      campaignId,
+    });
+
+    await recordConsumption({
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      actorUserId: session.user.id,
+      costCredits,
+      intelligenceHubSessionId: result.sessionId,
+      description: `Estratégia de campanha (redigitada) — ${session.brand.name}`,
+    });
+
+    revalidatePath("/campanhas");
+
+    return {
+      ok: true,
+      campaignId: result.campaignId,
+      opinions: result.opinions.map((opinion) => ({
+        specialistId: opinion.specialistId,
+        specialistName: opinion.specialistName,
+        failed: opinion.failed,
+        opinion: opinion.opinion,
+        rationale: opinion.rationale,
+      })),
+      executiveSummary: result.executiveSummary,
+      consolidatedStrategy: result.consolidatedStrategy,
+      rationale: result.rationale,
+      divergences: result.divergences,
+    };
+  } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para redigitar essa estratégia. Compre mais créditos em Configurações.",
+      };
+    }
+
+    logger.error("intelligence_hub.campaign_strategy_redo_failed", {
+      campaignId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
 export interface ApproveCampaignStrategyResult {
   ok: boolean;
   error?: string;
@@ -264,18 +372,35 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
 
   await campaignRepository.update(campaignId, { status: "generating" });
 
-  const pieces = await initializeCampaignContentPieces(db, campaignId, campaign.intelligence_hub_session_id);
+  // ★ Achado real (pedido direto do usuário — "quero poder redigitar a
+  // pesquisa/estratégia" depois de já ter aprovado uma vez): aprovar de novo
+  // depois de um `redoCampaignStrategyAction` NÃO pode recriar as 9 peças —
+  // duplicaria vídeo/fotos/textos já existentes. Peças já existentes só têm
+  // os formatos textuais regenerados com a estratégia nova; a peça primária
+  // passa a apontar pra sessão nova (é dela que `generateTextPiece` e o
+  // roteiro do vídeo dependem).
+  const existingPieces = await contentPieceRepository.findByCampaignId(campaignId);
+  let pieces = existingPieces;
 
-  // ★ Sprint de estabilização — achado real: uma campanha real ficou com
-  // status `ready_for_review` e zero `content_pieces` (nenhum jeito de o
-  // usuário perceber ou recuperar — a tela de revisão simplesmente ficava
-  // vazia, sem erro nenhum). O fluxo nunca verificava se a criação das 9
-  // peças realmente persistiu antes de avançar o status da campanha —
-  // "nenhuma etapa inicia antes da anterior estar concluída e persistida".
-  if (pieces.length === 0) {
-    await campaignRepository.update(campaignId, { status: "failed" });
-    logger.error("asset_engine.content_pieces_not_persisted", { campaignId });
-    return { ok: false, error: "Não conseguimos preparar as peças desta campanha agora. Tenta de novo em instantes?" };
+  if (existingPieces.length === 0) {
+    pieces = await initializeCampaignContentPieces(db, campaignId, campaign.intelligence_hub_session_id);
+
+    // ★ Sprint de estabilização — achado real: uma campanha real ficou com
+    // status `ready_for_review` e zero `content_pieces` (nenhum jeito de o
+    // usuário perceber ou recuperar — a tela de revisão simplesmente ficava
+    // vazia, sem erro nenhum). O fluxo nunca verificava se a criação das 9
+    // peças realmente persistiu antes de avançar o status da campanha —
+    // "nenhuma etapa inicia antes da anterior estar concluída e persistida".
+    if (pieces.length === 0) {
+      await campaignRepository.update(campaignId, { status: "failed" });
+      logger.error("asset_engine.content_pieces_not_persisted", { campaignId });
+      return { ok: false, error: "Não conseguimos preparar as peças desta campanha agora. Tenta de novo em instantes?" };
+    }
+  } else {
+    const primary = pieces.find((piece) => piece.is_primary);
+    if (primary) {
+      await contentPieceRepository.update(primary.id, { intelligence_hub_session_id: campaign.intelligence_hub_session_id });
+    }
   }
 
   for (const piece of pieces) {

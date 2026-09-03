@@ -3,20 +3,17 @@
 import { useState } from "react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ayon/ui";
 import { approveCampaignStrategyAction, type SpecialistOpinionView } from "./actions";
-import { ContentPackageReview } from "./content-package-review";
 import type { ContentPieceView } from "./asset-actions";
 
 export interface StrategyReviewPanelProps {
-  brandName: string;
   campaignId: string;
   opinions: SpecialistOpinionView[];
   executiveSummary: string | null;
   consolidatedStrategy: string;
   rationale: string;
   divergences: string | null;
-  avatarReady: boolean;
-  avatarName: string | null;
-  avatarLooks: { lookId: string; name: string; status: string }[];
+  /** ★ Refatorado pra `CampaignWorkspace` decidir o que acontece depois de aprovar (nunca mais renderiza `ContentPackageReview` sozinho — evita import circular com o "Redigitar estratégia" que fica em `CampaignWorkspace`). */
+  onApproved: (contentPieces: ContentPieceView[]) => void;
 }
 
 /**
@@ -29,42 +26,26 @@ export interface StrategyReviewPanelProps {
  * aprovar depois de sair no meio do caminho, sem digitar o objetivo de novo.
  */
 export function StrategyReviewPanel({
-  brandName,
   campaignId,
   opinions,
   executiveSummary,
   consolidatedStrategy,
   rationale,
   divergences,
-  avatarReady,
-  avatarName,
-  avatarLooks,
+  onApproved,
 }: StrategyReviewPanelProps) {
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [contentPieces, setContentPieces] = useState<ContentPieceView[] | null>(null);
 
   async function handleApprove() {
     setApproving(true);
     const response = await approveCampaignStrategyAction(campaignId);
     setApproving(false);
     if (response.ok && response.contentPieces) {
-      setContentPieces(response.contentPieces);
+      onApproved(response.contentPieces);
     } else {
       setError(response.error ?? "Não consegui aprovar agora. Tenta de novo?");
     }
-  }
-
-  if (contentPieces) {
-    return (
-      <ContentPackageReview
-        brandName={brandName}
-        initialContentPieces={contentPieces}
-        avatarReady={avatarReady}
-        avatarName={avatarName}
-        avatarLooks={avatarLooks}
-      />
-    );
   }
 
   return (

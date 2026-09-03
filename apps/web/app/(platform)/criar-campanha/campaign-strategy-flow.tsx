@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, Textarea } from "@ayon/ui";
 import { createCampaignStrategyAction, type SpecialistOpinionView } from "./actions";
-import { StrategyReviewPanel } from "./strategy-review-panel";
+import { CampaignWorkspace } from "./campaign-workspace";
 
 interface StrategyResult {
   campaignId: string;
@@ -71,17 +71,20 @@ export function CampaignStrategyFlow({
 
   if (mode === "results" && result) {
     return (
-      <StrategyReviewPanel
+      <CampaignWorkspace
         brandName={brandName}
         campaignId={result.campaignId}
-        opinions={result.opinions}
-        executiveSummary={result.executiveSummary}
-        consolidatedStrategy={result.consolidatedStrategy}
-        rationale={result.rationale}
-        divergences={result.divergences}
         avatarReady={avatarReady}
         avatarName={avatarName}
         avatarLooks={avatarLooks}
+        initialMode="strategy"
+        initialStrategy={{
+          opinions: result.opinions,
+          executiveSummary: result.executiveSummary,
+          consolidatedStrategy: result.consolidatedStrategy,
+          rationale: result.rationale,
+          divergences: result.divergences,
+        }}
       />
     );
   }

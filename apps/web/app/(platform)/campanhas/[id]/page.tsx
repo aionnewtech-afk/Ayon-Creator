@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@ayon/ui";
 import { getCurrentSession } from "@/lib/session";
-import { ContentPackageReview } from "../../criar-campanha/content-package-review";
-import { StrategyReviewPanel } from "../../criar-campanha/strategy-review-panel";
+import { CampaignWorkspace } from "../../criar-campanha/campaign-workspace";
 import { getCampaignContentPiecesAction } from "../../criar-campanha/asset-actions";
 import { getCampaignStrategyForResumeAction } from "../../criar-campanha/actions";
 
@@ -24,15 +23,17 @@ export default async function CampanhaDetailPage(props: { params: Promise<{ id: 
 
   if (result.contentPieces && result.contentPieces.length > 0) {
     return (
-      <ContentPackageReview
+      <CampaignWorkspace
         brandName={session.brand.name}
+        campaignId={id}
+        avatarReady={session.brand.avatar_ready}
+        avatarName={session.brand.avatar_name}
+        avatarLooks={avatarLooks}
+        initialMode="content"
         initialContentPieces={result.contentPieces}
         campaignTitle={result.campaignTitle}
         initialPackageReady={result.campaignStatus === "package_ready"}
         initialDownloadUrl={result.packageDownloadUrl}
-        avatarReady={session.brand.avatar_ready}
-        avatarName={session.brand.avatar_name}
-        avatarLooks={avatarLooks}
       />
     );
   }
@@ -46,17 +47,20 @@ export default async function CampanhaDetailPage(props: { params: Promise<{ id: 
   const strategy = await getCampaignStrategyForResumeAction(id);
   if (strategy.ok && strategy.campaignId && strategy.opinions && strategy.consolidatedStrategy && strategy.rationale) {
     return (
-      <StrategyReviewPanel
+      <CampaignWorkspace
         brandName={session.brand.name}
         campaignId={strategy.campaignId}
-        opinions={strategy.opinions}
-        executiveSummary={strategy.executiveSummary ?? null}
-        consolidatedStrategy={strategy.consolidatedStrategy}
-        rationale={strategy.rationale}
-        divergences={strategy.divergences ?? null}
         avatarReady={session.brand.avatar_ready}
         avatarName={session.brand.avatar_name}
         avatarLooks={avatarLooks}
+        initialMode="strategy"
+        initialStrategy={{
+          opinions: strategy.opinions,
+          executiveSummary: strategy.executiveSummary ?? null,
+          consolidatedStrategy: strategy.consolidatedStrategy,
+          rationale: strategy.rationale,
+          divergences: strategy.divergences ?? null,
+        }}
       />
     );
   }
