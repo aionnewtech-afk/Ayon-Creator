@@ -100,18 +100,28 @@ export class HeyGenAvatarProvider implements AvatarProvider {
 
   async generateAvatarVideo(params: {
     avatarId: string;
-    script: string;
+    script?: string;
     voiceId?: string;
     voiceLocale?: string;
+    audioUrl?: string;
     aspectRatio?: string;
     background?: { type: "color"; value: string } | { type: "image"; url: string };
   }): Promise<{ videoId: string }> {
     const payload = (await this.request("POST", "/v3/videos", {
       type: "avatar",
       avatar_id: params.avatarId,
-      script: params.script,
-      ...(params.voiceId ? { voice_id: params.voiceId } : {}),
-      ...(params.voiceLocale ? { voice_settings: { locale: params.voiceLocale } } : {}),
+      // ★ Achado real (pedido direto do usuário — "a voz clonada do HeyGen
+      // não é parecida... inclua minha voz do ElevenLabs"): `audio_url` é
+      // mutuamente exclusivo com `script`/`voice_id`/`voice_settings`
+      // (documentado — "Mutually exclusive with script"); só um dos dois
+      // ramos entra no corpo, nunca os dois.
+      ...(params.audioUrl
+        ? { audio_url: params.audioUrl }
+        : {
+            script: params.script,
+            ...(params.voiceId ? { voice_id: params.voiceId } : {}),
+            ...(params.voiceLocale ? { voice_settings: { locale: params.voiceLocale } } : {}),
+          }),
       ...(params.background ? { background: params.background } : {}),
       // ★ Achado real (visto ao vivo — sem este campo, a HeyGen renderiza no
       // engine "Avatar IV/V" por padrão, confirmado no próprio dashboard do

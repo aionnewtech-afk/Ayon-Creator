@@ -65,12 +65,21 @@ export interface AvatarProvider {
    * `voiceLocale` dá uma dica de idioma/sotaque pra síntese de voz — este
    * produto é pt-BR único (achado real de `select-brand-voice.ts`), então o
    * chamador sempre passa `"pt-BR"` por padrão.
+   *
+   * ★ Achado real (pedido direto do usuário — "a voz clonada do HeyGen não é
+   * parecida... inclua minha voz do ElevenLabs"): `audioUrl` substitui
+   * `script`/`voiceId`/`voiceLocale` por completo — a HeyGen só faz o
+   * lip-sync sobre um áudio já pronto (narração gerada pelo Voice Provider
+   * de sempre, ElevenLabs), em vez de sintetizar a fala com a própria voz
+   * clonada dela. Documentado (`audio_url`/`audio_asset_id`, mutuamente
+   * exclusivo com `script`) — nunca os dois juntos.
    */
   generateAvatarVideo(params: {
     avatarId: string;
-    script: string;
+    script?: string;
     voiceId?: string;
     voiceLocale?: string;
+    audioUrl?: string;
     aspectRatio?: string;
     background?: { type: "color"; value: string } | { type: "image"; url: string };
   }): Promise<{ videoId: string }>;

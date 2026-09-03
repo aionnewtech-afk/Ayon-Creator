@@ -3,7 +3,8 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ensureSufficientCredits, recordConsumption } from "../billing/credit-gate";
 import type { AvatarProvider } from "../providers/avatar-provider";
 import type { MediaCandidate } from "../providers/media-provider";
-import { resolveAvatarProvider, resolveLlmProvider, resolveMediaProvider } from "../providers/provider-gateway";
+import { resolveAvatarProvider, resolveLlmProvider, resolveMediaProvider, resolveVoiceProvider } from "../providers/provider-gateway";
+import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { BrandRepository } from "../repositories/brand.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
@@ -163,25 +164,67 @@ export async function generateAvatarVideoForContentPiece(params: GenerateAvatarV
       effectiveAvatarId = variant.lookId;
     }
 
+    // ★ Achado real (pedido direto do usuário — "a voz clonada do HeyGen não
+    // é parecida... quero que a voz do meu avatar seja a voz do ElevenLabs"):
+    // `voiceId` explícito (usuário escolheu na hora, por geração) sempre
+    // vence. Sem escolha explícita, prefere a voz da marca já configurada em
+    // `brand_brain_profiles.default_voice_ref` (mesma voz ElevenLabs usada em
+    // `licensed_stock_video`/`narrateVideoContentPiece` — nunca duas vozes
+    // diferentes pra mesma marca) em vez da clonagem própria da HeyGen. Só
+    // cai na clonagem da HeyGen (`script`/sem `voiceId`) quando a marca ainda
+    // não tem nenhuma voz configurada.
+    const sanitizedScript = sanitizeNarrationText(effectiveScript);
+    let audioUrl: string | undefined;
+
+    if (!params.voiceId) {
+      const brandBrainProfile = await new BrandBrainRepository(params.db).findByBrandId(brand.id);
+      const defaultVoiceRef = brandBrainProfile?.default_voice_ref;
+
+      if (defaultVoiceRef) {
+        await pipelineRunRepository.update(pipelineRun.id, { stage: "narrating" });
+        const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
+        const synthesized = await voiceProvider.synthesizeVoice({ script: sanitizedScript, voiceRef: defaultVoiceRef });
+        const audioBuffer = Buffer.from(synthesized.audioBase64, "base64");
+        const audioStoragePath = `${params.organizationId}/${params.campaignId}/${params.contentPieceId}-avatar-audio.mp3`;
+
+        const { error: audioUploadError } = await params.db.storage
+          .from(CONTENT_OUTPUT_BUCKET)
+          .upload(audioStoragePath, audioBuffer, { contentType: "audio/mpeg", upsert: true });
+        if (audioUploadError) throw audioUploadError;
+
+        const { data: signedAudio, error: signAudioError } = await params.db.storage
+          .from(CONTENT_OUTPUT_BUCKET)
+          .createSignedUrl(audioStoragePath, 60 * 60);
+        if (signAudioError || !signedAudio) throw signAudioError ?? new Error("Falha ao gerar link do áudio do avatar.");
+
+        audioUrl = signedAudio.signedUrl;
+      }
+    }
+
     await pipelineRunRepository.update(pipelineRun.id, { stage: "generating_avatar_video" });
 
     const { videoId } = await avatarProvider.generateAvatarVideo({
       avatarId: effectiveAvatarId,
-      // ★ Mesmo achado real de video-pipeline-narrate.ts: o roteiro pode
-      // incluir direções de cena entre parênteses, narradas em voz alta
-      // literalmente se não sanitizado.
-      script: sanitizeNarrationText(effectiveScript),
-      // `voiceId` ausente usa a voz clonada padrão do próprio avatar
-      // (`default_voice_id`, achado real da criação do digital twin) —
-      // nunca uma voz genérica do catálogo curado (que é só pro caminho
-      // `licensed_stock_video`), a não ser que o usuário escolha outra.
-      voiceId: params.voiceId,
-      // ★ Achado real (pedido direto do usuário — "minha voz ficou com um
-      // sotaque estranho"): produto é pt-BR único (mesmo achado de
-      // `select-brand-voice.ts`) — sempre passa a dica de idioma, nunca
-      // deixa a síntese assumir um sotaque default (provavelmente en-US, a
-      // língua original do treinamento do modelo).
-      voiceLocale: "pt-BR",
+      // ★ Presente só quando NÃO usamos `audioUrl` — os dois são mutuamente
+      // exclusivos pro fornecedor (ver heygen-avatar-provider.ts).
+      ...(audioUrl
+        ? { audioUrl }
+        : {
+            // ★ Mesmo achado real de video-pipeline-narrate.ts: o roteiro pode
+            // incluir direções de cena entre parênteses, narradas em voz alta
+            // literalmente se não sanitizado.
+            script: sanitizedScript,
+            // `voiceId` ausente (e sem `default_voice_ref` configurado) usa a
+            // voz clonada padrão do próprio avatar (`default_voice_id`,
+            // achado real da criação do digital twin).
+            voiceId: params.voiceId,
+            // ★ Achado real (pedido direto do usuário — "minha voz ficou com
+            // um sotaque estranho"): produto é pt-BR único (mesmo achado de
+            // `select-brand-voice.ts`) — sempre passa a dica de idioma, nunca
+            // deixa a síntese assumir um sotaque default (provavelmente
+            // en-US, a língua original do treinamento do modelo).
+            voiceLocale: "pt-BR",
+          }),
       // ★ Achado real (pedido direto do usuário — "tem como eu mudar o
       // cenário?" / depois "ambientes tipo aeroporto, escritório, praia"):
       // confirmado na documentação da HeyGen que o fundo pode ser
@@ -226,6 +269,8 @@ export async function generateAvatarVideoForContentPiece(params: GenerateAvatarV
         avatar_id: effectiveAvatarId,
         avatar_name: effectiveAvatarName,
         voice_id: params.voiceId ?? null,
+        // ★ Achado real (pedido direto do usuário — voz do avatar via ElevenLabs em vez da clonagem própria da HeyGen).
+        voice_provider_key: audioUrl ? "elevenlabs" : "heygen",
         background_color_hex: params.backgroundColorHex ?? null,
         background_image_url: params.backgroundImageUrl ?? null,
         outfit_prompt: params.outfitPrompt?.trim() || null,

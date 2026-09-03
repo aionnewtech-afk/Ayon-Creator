@@ -6,9 +6,11 @@ import {
   resolveLlmProvider,
   resolveMediaProvider,
   resolveVeoVideoProvider,
+  resolveVoiceProvider,
 } from "../providers/provider-gateway";
 import type { MediaCandidate } from "../providers/media-provider";
 import type { VideoRenderSceneSource } from "../providers/video-render-provider";
+import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { BrandRepository } from "../repositories/brand.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
@@ -287,31 +289,39 @@ export async function replaceVideoSceneWithAvatar(params: SceneEditParams): Prom
   if (!avatarProvider) throw new AvatarProviderUnavailableError();
 
   // ★ Achado real (pedido direto do usuário — "se eu usar um avatar ele
-  // precisa ser a voz do clone e ele narrar todo o vídeo"): na 1ª cena que
-  // vira avatar neste plano, troca a narração INTEIRA pra voz clonada do
-  // avatar (mesma voz do clipe visível) — nunca uma cena com voz clonada e
-  // outra com a voz genérica de sempre no mesmo vídeo. Cenas seguintes que
-  // também virarem avatar reaproveitam a narração já trocada (checagem
-  // abaixo). Nunca bloqueia a troca da cena em si — qualquer falha aqui só
-  // mantém a narração de antes, mesmo espírito defensivo de sempre.
+  // precisa ser a voz do clone e ele narrar todo o vídeo", depois "a voz
+  // clonada do HeyGen não é parecida... quero minha voz do ElevenLabs"): na
+  // 1ª cena que vira avatar neste plano, troca a narração INTEIRA pra usar a
+  // mesma voz do clipe visível — nunca uma cena com uma voz e outra com a
+  // voz genérica de sempre no mesmo vídeo. Prefere `default_voice_ref`
+  // (ElevenLabs, `brand_brain_profiles` — mesma voz já usada em
+  // `licensed_stock_video`) sobre a clonagem própria da HeyGen
+  // (`brand.avatar_voice_id`); só cai na HeyGen quando a marca não tem
+  // nenhuma voz ElevenLabs configurada ainda. Cenas seguintes que também
+  // virarem avatar reaproveitam a narração já trocada (checagem abaixo).
+  // Nunca bloqueia a troca da cena em si — qualquer falha aqui só mantém a
+  // narração de antes, mesmo espírito defensivo de sempre.
   const alreadyUsesAvatarVoice = videoSources.some((source) => source.assetType === "avatar");
-  if (!alreadyUsesAvatarVoice && brand.avatar_voice_id) {
+  const brandBrainProfile = await new BrandBrainRepository(params.db).findByBrandId(brand.id);
+  const defaultVoiceRef = brandBrainProfile?.default_voice_ref;
+  /** ★ Só existe quando `defaultVoiceRef` está configurado — a mesma síntese ElevenLabs do trecho vira o `audio_url` que dirige o lip-sync do clipe abaixo (melhor batimento boca/áudio que deixar a HeyGen sintetizar por conta própria). */
+  let sceneAudioUrl: string | undefined;
+
+  if (!alreadyUsesAvatarVoice && defaultVoiceRef) {
     try {
       const primaryPiece = await new ContentPieceRepository(params.db).findPrimaryByCampaignId(params.campaignId);
       if (primaryPiece?.script) {
-        const narration = await avatarProvider.synthesizeSpeech({
-          voiceId: brand.avatar_voice_id,
-          text: sanitizeNarrationText(primaryPiece.script),
+        const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
+        const narration = await voiceProvider.synthesizeVoice({
+          script: sanitizeNarrationText(primaryPiece.script),
+          voiceRef: defaultVoiceRef,
         });
 
-        const audioResponse = await fetch(narration.audioUrl);
-        if (!audioResponse.ok) throw new Error(`Falha ao baixar a narração com voz clonada (${audioResponse.status}).`);
-        const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
-
-        const narrationStoragePath = `${brand.organization_id}/${params.campaignId}/${params.contentPieceId}-narration-avatar-voice.wav`;
+        const narrationBuffer = Buffer.from(narration.audioBase64, "base64");
+        const narrationStoragePath = `${brand.organization_id}/${params.campaignId}/${params.contentPieceId}-narration-avatar-voice.mp3`;
         const { error: narrationUploadError } = await params.db.storage
           .from(SCENE_EDIT_OUTPUT_BUCKET)
-          .upload(narrationStoragePath, audioBuffer, { contentType: "audio/wav", upsert: true });
+          .upload(narrationStoragePath, narrationBuffer, { contentType: "audio/mpeg", upsert: true });
         if (narrationUploadError) throw narrationUploadError;
 
         const { data: narrationSignedUrl, error: narrationSignedUrlError } = await params.db.storage
@@ -322,19 +332,49 @@ export async function replaceVideoSceneWithAvatar(params: SceneEditParams): Prom
         }
 
         plan.audioUrl = narrationSignedUrl.signedUrl;
-        plan.audioDurationMs = narration.durationSeconds * 1000;
+        plan.audioDurationMs = narration.durationMs;
       }
     } catch {
       // Defensivo: nunca deixa a troca de cena falhar por causa da
       // narração — a cena vira avatar do mesmo jeito, só continua narrada
-      // pela voz genérica de antes.
+      // pela voz de antes.
+    }
+  }
+
+  if (defaultVoiceRef) {
+    try {
+      const voiceProvider = await resolveVoiceProvider(params.serviceRoleDb, params.tier);
+      const sceneAudio = await voiceProvider.synthesizeVoice({
+        script: sanitizeNarrationText(segment.text),
+        voiceRef: defaultVoiceRef,
+      });
+      const sceneAudioBuffer = Buffer.from(sceneAudio.audioBase64, "base64");
+      const sceneAudioStoragePath = `${brand.organization_id}/${params.campaignId}/${params.contentPieceId}-scene-${params.sceneIndex}-avatar-audio.mp3`;
+
+      const { error: sceneAudioUploadError } = await params.db.storage
+        .from(SCENE_EDIT_OUTPUT_BUCKET)
+        .upload(sceneAudioStoragePath, sceneAudioBuffer, { contentType: "audio/mpeg", upsert: true });
+      if (sceneAudioUploadError) throw sceneAudioUploadError;
+
+      const { data: sceneAudioSignedUrl, error: sceneAudioSignedUrlError } = await params.db.storage
+        .from(SCENE_EDIT_OUTPUT_BUCKET)
+        .createSignedUrl(sceneAudioStoragePath, 60 * 60 * 24 * 7);
+      if (sceneAudioSignedUrlError || !sceneAudioSignedUrl?.signedUrl) {
+        throw sceneAudioSignedUrlError ?? new Error("Não consegui gerar o link do áudio da cena com o avatar.");
+      }
+
+      sceneAudioUrl = sceneAudioSignedUrl.signedUrl;
+    } catch {
+      // Defensivo: sem áudio pronto, cai no `script` de sempre (voz clonada
+      // da HeyGen) — nunca bloqueia a troca da cena.
     }
   }
 
   const { videoId } = await avatarProvider.generateAvatarVideo({
     avatarId: brand.avatar_look_id,
-    script: sanitizeNarrationText(segment.text),
-    voiceLocale: "pt-BR",
+    ...(sceneAudioUrl
+      ? { audioUrl: sceneAudioUrl }
+      : { script: sanitizeNarrationText(segment.text), voiceLocale: "pt-BR" }),
     aspectRatio: "9:16",
   });
 
