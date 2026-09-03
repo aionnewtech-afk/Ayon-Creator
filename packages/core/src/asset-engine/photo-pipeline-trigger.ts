@@ -3,8 +3,9 @@ import type { Database, ProviderTier } from "@ayon/types";
 import { ensureSufficientCredits } from "../billing/credit-gate";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
-import { fetchWithRetry } from "../shared/fetch-with-retry";
-import { N8nDispatchError } from "./video-pipeline-trigger";
+import { composePhotoContentPiece } from "./photo-pipeline-compose";
+import { completePhotoPipelineSuccess } from "./photo-pipeline-complete";
+import { selectPhotoCandidates } from "./photo-pipeline-select";
 
 const IMAGE_GENERATION_TRIGGER_REASON = "image_generation";
 
@@ -19,7 +20,7 @@ export interface TriggerPhotoGenerationParams {
   campaignId: string;
   tier: ProviderTier;
   contentPieceId: string;
-  /** Nicho/tema informado pelo usuário ao regenerar (ex.: "praia", "shows") — repassado ao n8n, ver `selectPhotoCandidates`. */
+  /** Nicho/tema informado pelo usuário ao regenerar (ex.: "praia", "shows") — repassado direto pra `selectPhotoCandidates`. */
   nicheOverride?: string | null;
 }
 
@@ -28,11 +29,21 @@ export interface TriggerPhotoGenerationResult {
 }
 
 /**
- * Dispara o pipeline assíncrono de geração de foto (Fluxo 15, passo 1) —
- * mesmo desenho do Fluxo 13 (vídeo, `video-pipeline-trigger.ts`), reaproveitado
- * para `stories`/`carousel`/`thumbnail`. Cobrança em créditos por rodada
- * (não por candidato) — `related_pipeline_run_id` (idempotente) já garante
- * 1 cobrança por rodada, mesmo padrão do vídeo.
+ * Dispara o pipeline de geração de foto (Fluxo 15) para `stories`/`carousel`/
+ * `thumbnail`. Cobrança em créditos por rodada (não por candidato).
+ *
+ * ★ Achado real (produção — "carrossel e storie não geram quando clico,
+ * nada acontece"): até aqui, esta função só disparava um webhook pro n8n
+ * (`N8N_WEBHOOK_URL`/`N8N_WEBHOOK_SECRET`) e esperava ele chamar de volta as
+ * rotas internas `/api/pipeline/photo/{select,compose}` — só que o n8n nunca
+ * foi provisionado (variáveis vazias, tanto local quanto em produção), então
+ * TODA geração de foto falhava silenciosamente na primeira etapa. O vídeo já
+ * tinha passado por essa mesma migração antes (ver comentário em
+ * `video-pipeline-plan.ts`, "o pipeline de vídeo até aqui era 100%
+ * orquestrado pelo n8n") — mesmo tratamento aqui: roda
+ * `selectPhotoCandidates`→`composePhotoContentPiece`→`completePhotoPipelineSuccess`
+ * diretamente, síncrono, sem n8n. As rotas `/api/pipeline/photo/*` continuam
+ * existindo (não fazem mal, só deixam de ser chamadas por ninguém).
  */
 export async function triggerPhotoGeneration(
   params: TriggerPhotoGenerationParams,
@@ -54,35 +65,43 @@ export async function triggerPhotoGeneration(
     entity_type: "content_piece",
     entity_id: params.contentPieceId,
     engine: "asset_engine",
-    status: "queued",
+    status: "running",
     actor_user_id: params.actorUserId,
   });
 
-  const webhookUrl = process.env.N8N_WEBHOOK_URL;
-  const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (!webhookUrl || !webhookSecret) {
-    const reason = "N8N_WEBHOOK_URL/N8N_WEBHOOK_SECRET não configuradas — provisione o n8n antes de disparar o pipeline.";
-    await pipelineRunRepository.update(pipelineRun.id, { status: "failed", error: reason, finished_at: new Date().toISOString() });
-    await contentPieceRepository.update(params.contentPieceId, { status: "failed" });
-    throw new N8nDispatchError(reason);
-  }
-
   try {
-    const response = await fetchWithRetry(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-ayon-webhook-secret": webhookSecret },
-      body: JSON.stringify({
-        kind: "photo",
-        contentPieceId: params.contentPieceId,
-        campaignId: params.campaignId,
-        pipelineRunId: pipelineRun.id,
-        organizationId: params.organizationId,
-        tier: params.tier,
-        nicheOverride: params.nicheOverride ?? null,
-      }),
+    await pipelineRunRepository.update(pipelineRun.id, { stage: "selecting_photos" });
+    const selectResult = await selectPhotoCandidates({
+      db: params.db,
+      serviceRoleDb: params.serviceRoleDb,
+      tier: params.tier,
+      campaignId: params.campaignId,
+      contentPieceId: params.contentPieceId,
+      nicheOverride: params.nicheOverride ?? null,
     });
-    if (!response.ok) throw new Error(`n8n respondeu ${response.status}`);
+
+    await pipelineRunRepository.update(pipelineRun.id, { stage: "rendering" });
+    const options = await composePhotoContentPiece({
+      db: params.db,
+      serviceRoleDb: params.serviceRoleDb,
+      tier: params.tier,
+      organizationId: params.organizationId,
+      campaignId: params.campaignId,
+      contentPieceId: params.contentPieceId,
+      format: selectResult.format,
+      candidates: selectResult.candidates,
+    });
+
+    await completePhotoPipelineSuccess({
+      serviceRoleDb: params.serviceRoleDb,
+      organizationId: params.organizationId,
+      contentPieceId: params.contentPieceId,
+      pipelineRunId: pipelineRun.id,
+      tier: params.tier,
+      options,
+    });
+
+    return { pipelineRunId: pipelineRun.id };
   } catch (error) {
     await pipelineRunRepository.update(pipelineRun.id, {
       status: "failed",
@@ -90,8 +109,6 @@ export async function triggerPhotoGeneration(
       finished_at: new Date().toISOString(),
     });
     await contentPieceRepository.update(params.contentPieceId, { status: "failed" });
-    throw new N8nDispatchError(error);
+    throw error;
   }
-
-  return { pipelineRunId: pipelineRun.id };
 }
