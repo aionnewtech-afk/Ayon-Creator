@@ -1,5 +1,23 @@
 import path from "node:path";
 
+/**
+ * ★ Achado real (build quebrou em produção — "TypeError: Invalid URL" com
+ * `input: 'web-production-abe7.up.railway.app'"): `NEXT_PUBLIC_APP_URL` no
+ * Railway veio SEM protocolo (só o host bruto, ex.: preenchida a partir de
+ * `RAILWAY_PUBLIC_DOMAIN`, que não inclui `https://`) — `new URL(...)` exige
+ * protocolo e lança em vez de aceitar um host bruto. Aceita as duas formas:
+ * URL completa (extrai `.host`) ou host puro (usado como está, só removendo
+ * um protocolo/caminho acidental).
+ */
+function extractHost(value) {
+  if (!value) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return value.replace(/^https?:\/\//, "").split("/")[0];
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@ayon/ui", "@ayon/core", "@ayon/types"],
@@ -52,9 +70,7 @@ const nextConfig = {
       // navegação comum (só a Server Action tem essa checagem extra).
       // Deriva de `NEXT_PUBLIC_APP_URL` (já configurada no Railway) em vez
       // de hardcoded — sobrevive a trocar de domínio sem editar código.
-      allowedOrigins: process.env.NEXT_PUBLIC_APP_URL
-        ? [new URL(process.env.NEXT_PUBLIC_APP_URL).host]
-        : undefined,
+      allowedOrigins: extractHost(process.env.NEXT_PUBLIC_APP_URL) ? [extractHost(process.env.NEXT_PUBLIC_APP_URL)] : undefined,
     },
     // ★ Achado real (mesmo pedido — visto ao vivo com um vídeo de 80MB):
     // `serverActions.bodySizeLimit` acima só cobre o limite da própria
