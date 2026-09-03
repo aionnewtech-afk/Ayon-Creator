@@ -38,6 +38,23 @@ const nextConfig = {
     // específico (10MB para KB, 20MB para own_media, 200MB para avatar).
     serverActions: {
       bodySizeLimit: "200mb",
+      // ★ Achado real (produção — Railway, "quando faço login dá 'a
+      // aplicação encontrou um erro' / 'An unexpected response was received
+      // from the server', mas atualizar a página mostra que entrou mesmo
+      // assim"): o Next.js compara o header `Origin` da requisição da
+      // Server Action contra a lista de origens permitidas — documentado
+      // como necessário configurar explicitamente quando a app roda atrás
+      // de um proxy/domínio gerenciado por terceiros (exatamente o caso do
+      // Railway, que termina TLS e repassa pro processo Next.js). Sem isso,
+      // o Next aceita silenciosamente só o host que ELE PRÓPRIO enxerga na
+      // requisição — que pode não bater 1:1 com o domínio público conforme
+      // o proxy repassa os headers, mesmo a app respondendo normal pra
+      // navegação comum (só a Server Action tem essa checagem extra).
+      // Deriva de `NEXT_PUBLIC_APP_URL` (já configurada no Railway) em vez
+      // de hardcoded — sobrevive a trocar de domínio sem editar código.
+      allowedOrigins: process.env.NEXT_PUBLIC_APP_URL
+        ? [new URL(process.env.NEXT_PUBLIC_APP_URL).host]
+        : undefined,
     },
     // ★ Achado real (mesmo pedido — visto ao vivo com um vídeo de 80MB):
     // `serverActions.bodySizeLimit` acima só cobre o limite da própria
