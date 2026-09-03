@@ -91,6 +91,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
       tier,
       brandId: session.brand.id,
       brandName: session.brand.name,
+      niche: session.brand.niche,
       objective: trimmedObjective,
       actorUserId: session.user.id,
     });
@@ -265,6 +266,7 @@ export async function redoCampaignStrategyAction(campaignId: string, objective: 
       tier,
       brandId: session.brand.id,
       brandName: session.brand.name,
+      niche: session.brand.niche,
       objective: trimmedObjective,
       campaignId,
     });

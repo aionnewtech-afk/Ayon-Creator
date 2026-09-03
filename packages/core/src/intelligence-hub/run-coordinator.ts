@@ -34,6 +34,8 @@ export interface RunCoordinatorParams {
   learnedPreferencesText?: string;
   objective: string;
   opinions: SpecialistOpinionResult[];
+  /** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): mesmo bloco de `researchCampaignObjective` repassado ao painel de especialistas — o Coordinator precisa dele pra não "resumir" os fatos concretos até virarem genéricos. */
+  researchNotes?: string;
 }
 
 /**
@@ -58,6 +60,7 @@ export async function runCoordinator(params: RunCoordinatorParams): Promise<Coor
       opinion: opinion.opinion,
       rationale: opinion.rationale,
     })),
+    researchNotes: params.researchNotes,
   });
 
   const completion = await llmProvider.complete({

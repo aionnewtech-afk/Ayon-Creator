@@ -2,10 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProviderTier } from "@ayon/types";
 import { HeygenAccountPoolRepository } from "../repositories/heygen-account-pool.repository";
 import { ProviderConfigRepository } from "../repositories/provider-config.repository";
+import { AnthropicCampaignResearchProvider } from "./anthropic-campaign-research-provider";
 import { AnthropicLlmProvider } from "./anthropic-llm-provider";
 import { AnthropicWebSearchTrendSourceProvider } from "./anthropic-web-search-trend-source-provider";
+import type { CampaignResearchProvider } from "./campaign-research-provider";
 import { ElevenLabsVoiceProvider } from "./elevenlabs-voice-provider";
 import { FakeLlmProvider } from "./fake-llm-provider";
+import { GeminiCampaignResearchProvider } from "./gemini-campaign-research-provider";
 import { GeminiImageMediaProvider, type GeminiImageMediaContext } from "./gemini-image-media-provider";
 import { GeminiLlmProvider } from "./gemini-llm-provider";
 import { GeminiVeoVideoProvider, type GeminiVeoVideoContext } from "./gemini-veo-video-provider";
@@ -127,6 +130,40 @@ export async function resolveTrendSourceProvider(
   }
 
   return new AnthropicWebSearchTrendSourceProvider(config.provider_key, apiKey);
+}
+
+/**
+ * Resolve a pesquisa de campo pra estratégia de campanha (pedido direto do
+ * usuário — "a pesquisa tem que de fato valer a pena") — reaproveita o MESMO
+ * `provider_config` de `trend_source` (é literalmente o mesmo mecanismo,
+ * busca web nativa com grounding, só muda o prompt/schema pro caso de uso).
+ * Evita uma migration nova só pra registrar mais uma capability idêntica.
+ *
+ * ★ Diferente de `resolveTrendSourceProvider`: NUNCA lança erro — pesquisa é
+ * um reforço opcional da estratégia, nunca um requisito (Trend Engine já é
+ * 100% dependente de busca, essa não é). Sem `provider_config`/chave de API
+ * configurada, `null` sinaliza "pula a pesquisa, segue sem ela" pra quem
+ * chamar (`runStrategyForCampaign`).
+ */
+export async function resolveCampaignResearchProvider(
+  db: SupabaseClient<Database>,
+  tier: ProviderTier,
+): Promise<CampaignResearchProvider | null> {
+  const repository = new ProviderConfigRepository(db);
+  const config = await repository.findActive("trend_source", tier);
+  if (!config) return null;
+
+  if (process.env.LLM_PROVIDER === "gemini") {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) return null;
+    const geminiModel = process.env.GEMINI_MODEL ?? "gemini-3-flash-preview";
+    return new GeminiCampaignResearchProvider(geminiModel, geminiApiKey);
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  return new AnthropicCampaignResearchProvider(config.provider_key, apiKey);
 }
 
 /**

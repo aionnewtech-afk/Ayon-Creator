@@ -41,13 +41,21 @@ export function buildBrandContextBlock(brandName: string, knownFields: KnownFiel
 const BREVITY_INSTRUCTION =
   "Seja objetivo: opinion em no máximo 2-3 frases diretas (sem repetir o objetivo do usuário), rationale em no máximo 1-2 frases.";
 
+/** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): quando `researchCampaignObjective` encontra fatos reais, os especialistas/Coordinator precisam citá-los de verdade, não só saber que existem. */
+function buildResearchBlock(researchNotes?: string): string {
+  return researchNotes
+    ? `\n\n${researchNotes}\n\nUse esses fatos concretos na sua resposta (cite nomes/dados reais) — nunca ignore a pesquisa em favor de generalidades.`
+    : "";
+}
+
 export function buildSpecialistUserMessage(params: {
   brandName: string;
   knownFields: KnownFieldsSnapshot[];
   learnedPreferencesText?: string;
   objective: string;
+  researchNotes?: string;
 }): string {
-  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nDê sua opinião especializada sobre esse objetivo de campanha, seguindo as regras do seu papel. ${BREVITY_INSTRUCTION}`;
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"${buildResearchBlock(params.researchNotes)}\n\nDê sua opinião especializada sobre esse objetivo de campanha, seguindo as regras do seu papel. ${BREVITY_INSTRUCTION}`;
 }
 
 export interface SuccessfulOpinionForCoordinator {
@@ -62,11 +70,21 @@ export function buildCoordinatorUserMessage(params: {
   learnedPreferencesText?: string;
   objective: string;
   opinions: SuccessfulOpinionForCoordinator[];
+  researchNotes?: string;
 }): string {
   const opinionsText =
     params.opinions.length === 0
       ? "Nenhum especialista respondeu com sucesso desta vez."
       : params.opinions.map((o) => `- ${o.specialistName}: "${o.opinion}" (justificativa: ${o.rationale})`).join("\n");
 
-  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em uma única estratégia coerente para esta campanha. ${BREVITY_INSTRUCTION}\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"executive_summary": "1 frase direta, o essencial da estratégia para quem só vai ler isso", "consolidated_strategy": "a estratégia final, 3-5 frases objetivas", "rationale": "por que essa síntese, citando as opiniões dos especialistas e o Brand Brain, no máximo 2-3 frases", "divergences": "descrição objetiva de divergências resolvidas entre especialistas, ou null se convergiram"}.`;
+  // ★ Achado real: o ponto de falha real não é a pesquisa existir, é o
+  // Coordinator "resumir" os fatos concretos até sumirem — "5 destinos reais"
+  // vira "destinos incríveis" na consolidação. `consolidated_strategy`
+  // precisa preservar nomes/dados citados pelos especialistas, não só a
+  // vibe.
+  const researchInstruction = params.researchNotes
+    ? " A pesquisa real trazida pelos especialistas tem fatos concretos (nomes, dados) — preserve-os em `consolidated_strategy`, nunca resuma até virarem genéricos."
+    : "";
+
+  return `${buildBrandContextBlock(params.brandName, params.knownFields, params.learnedPreferencesText)}\n\nObjetivo de campanha proposto pelo usuário:\n"${params.objective}"${buildResearchBlock(params.researchNotes)}\n\nOpiniões independentes dos especialistas:\n${opinionsText}\n\nConsolide isso em uma única estratégia coerente para esta campanha.${researchInstruction} ${BREVITY_INSTRUCTION}\n\nResponda SOMENTE em JSON, sem texto antes ou depois, exatamente neste formato: {"executive_summary": "1 frase direta, o essencial da estratégia para quem só vai ler isso", "consolidated_strategy": "a estratégia final, 3-5 frases objetivas", "rationale": "por que essa síntese, citando as opiniões dos especialistas e o Brand Brain, no máximo 2-3 frases", "divergences": "descrição objetiva de divergências resolvidas entre especialistas, ou null se convergiram"}.`;
 }

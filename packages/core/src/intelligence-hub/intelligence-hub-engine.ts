@@ -7,6 +7,7 @@ import { CampaignRepository } from "../repositories/campaign.repository";
 import { knownFieldsFromProfile, learnedPreferencesTextFromProfile } from "../brand-brain/onboarding-themes";
 import { runSpecialistPanel, type SpecialistOpinionResult } from "./run-specialist-panel";
 import { runCoordinator } from "./run-coordinator";
+import { researchCampaignObjective } from "./research-campaign-objective";
 
 export interface RunCampaignStrategySessionParams {
   /** Client de sessão (RLS) — grava campaigns/intelligence_hub_sessions/specialist_opinions. */
@@ -16,6 +17,8 @@ export interface RunCampaignStrategySessionParams {
   tier: ProviderTier;
   brandId: string;
   brandName: string;
+  /** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): repassado pra `researchCampaignObjective` dar contexto de nicho à busca. */
+  niche: string | null;
   objective: string;
   actorUserId: string;
 }
@@ -38,6 +41,7 @@ interface RunStrategyForCampaignParams {
   tier: ProviderTier;
   brandId: string;
   brandName: string;
+  niche: string | null;
   objective: string;
   campaignId: string;
 }
@@ -91,6 +95,19 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       throw new Error("Nenhum Coordinator ativo no Specialist Registry.");
     }
 
+    // ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato
+    // valer a pena, pesquisar 5 destinos... com o que se pode esperar em
+    // cada"): roda ANTES do painel — nunca bloqueia a sessão (retorna `null`
+    // sem provider configurado ou se a busca falhar), só enriquece o
+    // contexto de quem já ia rodar de qualquer jeito.
+    const researchNotes = await researchCampaignObjective({
+      serviceRoleDb: params.serviceRoleDb,
+      tier: params.tier,
+      objective: params.objective,
+      brandName: params.brandName,
+      niche: params.niche,
+    });
+
     const opinions = await runSpecialistPanel({
       db: params.db,
       serviceRoleDb: params.serviceRoleDb,
@@ -100,6 +117,7 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       knownFields,
       learnedPreferencesText,
       objective: params.objective,
+      researchNotes: researchNotes ?? undefined,
       specialists,
     });
 
@@ -112,6 +130,7 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       learnedPreferencesText,
       objective: params.objective,
       opinions,
+      researchNotes: researchNotes ?? undefined,
     });
 
     const consolidatedResult = {
@@ -171,6 +190,7 @@ export async function runCampaignStrategySession(
     tier: params.tier,
     brandId: params.brandId,
     brandName: params.brandName,
+    niche: params.niche,
     objective: params.objective,
     campaignId,
   });
@@ -199,6 +219,7 @@ export interface RedoCampaignStrategySessionParams {
   tier: ProviderTier;
   brandId: string;
   brandName: string;
+  niche: string | null;
   objective: string;
   campaignId: string;
 }
@@ -224,6 +245,7 @@ export async function redoCampaignStrategySession(
     tier: params.tier,
     brandId: params.brandId,
     brandName: params.brandName,
+    niche: params.niche,
     objective: params.objective,
     campaignId: params.campaignId,
   });

@@ -30,6 +30,8 @@ export interface RunSpecialistPanelParams {
   knownFields: KnownFieldsSnapshot[];
   learnedPreferencesText?: string;
   objective: string;
+  /** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): fatos reais de `researchCampaignObjective`, quando disponíveis — repassados pra cada especialista via `buildSpecialistUserMessage`. */
+  researchNotes?: string;
   specialists: SpecialistRow[];
 }
 
@@ -51,6 +53,7 @@ export async function runSpecialistPanel(params: RunSpecialistPanelParams): Prom
         knownFields: params.knownFields,
         learnedPreferencesText: params.learnedPreferencesText,
         objective: params.objective,
+        researchNotes: params.researchNotes,
       });
 
       const completion = await llmProvider.complete({
