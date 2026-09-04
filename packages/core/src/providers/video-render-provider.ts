@@ -83,6 +83,17 @@ export interface VideoBranding {
    * adiciona nada, nunca um padrão fixo.
    */
   watermarkText?: string | null;
+  /**
+   * ★ Achado real (pedido direto do usuário — item 7, "no formato Stories...
+   * marca menor por padrão, permitir alterar tamanho e movimentar"): ausente
+   * mantém o tamanho/canto de sempre (`LOGO_CLIP` em
+   * shotstack-video-render-provider.ts) — o vídeo nunca passa esses 2 campos,
+   * só a composição de foto (`composePhotoContentPiece`), que já usa um
+   * padrão menor que o do vídeo por decisão do usuário.
+   */
+  logoScale?: number | null;
+  /** Um dos presets do Shotstack (`bottomRight`, `topLeft`, `center`, etc.) — ausente mantém `bottomRight` de sempre. */
+  logoPosition?: string | null;
 }
 
 export interface VideoRenderRequest {
@@ -134,6 +145,16 @@ export interface ImageCompositionRequest {
    * `renderPanel` como sempre — nunca texto sem fundo nenhum atrás.
    */
   backgroundIncludesDesignedPanel?: boolean;
+  /**
+   * ★ Achado real (pedido direto do usuário — item 7, "aumentar/diminuir o
+   * tamanho da fonte"): multiplicador sobre os tamanhos-base de
+   * headline/subheadline/CTA (48/28/26px, `buildImageTimeline`) — ausente/`1`
+   * mantém os tamanhos de sempre. Um único fator pros 3 blocos (nunca 3
+   * controles separados): eles têm uma hierarquia de peso relativa
+   * proposital (headline > subheadline > CTA) que um ajuste independente por
+   * bloco quebraria.
+   */
+  fontScale?: number | null;
 }
 
 export interface ImageCompositionResult {

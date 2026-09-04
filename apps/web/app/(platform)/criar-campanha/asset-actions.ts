@@ -14,6 +14,7 @@ import {
   MissingScenePlanForVoiceSwapError,
   MissingScriptError,
   N8nDispatchError,
+  type PhotoVisualOverrides,
   PipelineRunRepository,
   AvatarNotReadyError,
   VoiceSwapNotSupportedError,
@@ -94,6 +95,8 @@ export interface ContentPieceView {
       generationPrompt?: string;
     }[];
   };
+  /** ★ Achado real (pedido direto do usuário — item 7, editor de Stories): ajustes atuais (texto/fonte/logo) — pré-preenche o painel de edição ao reabrir, em vez de sempre começar em branco. */
+  visualOverrides?: PhotoVisualOverrides | null;
 }
 
 export interface ContentPieceActionResult {
@@ -115,6 +118,7 @@ function toView(piece: Database["public"]["Tables"]["content_pieces"]["Row"]): C
     brandRationale: piece.brand_rationale,
     status: piece.status,
     selectedVersionId: piece.selected_version_id,
+    visualOverrides: piece.visual_overrides as PhotoVisualOverrides | null,
   };
 }
 
@@ -1313,6 +1317,73 @@ export async function generatePhotoContentPieceAction(contentPieceId: string, ni
       return { ok: false, error: "Não consegui iniciar a geração da imagem agora. Tenta de novo em instantes?" };
     }
     logger.error("asset_engine.photo_generate_failed", {
+      contentPieceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — item 7, "editor de Stories...
+ * permitir editar o texto direto no editor... alterar tamanho e movimentar a
+ * marca"): grava os ajustes (`content_pieces.visual_overrides`, lidos por
+ * `composePhotoContentPiece`) e já regenera com eles aplicados — mesmo
+ * `triggerPhotoGeneration` de `generatePhotoContentPieceAction`, nenhuma
+ * lógica de geração nova.
+ */
+export async function updateVisualOverridesAction(
+  contentPieceId: string,
+  overrides: PhotoVisualOverrides,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode ajustar o visual da peça." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.production_mode !== "licensed_stock_photo") {
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+
+  try {
+    await contentPieceRepository.update(contentPieceId, { visual_overrides: overrides as unknown as Record<string, unknown> });
+
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await triggerPhotoGeneration({
+      db,
+      serviceRoleDb,
+      organizationId: session.organization.id,
+      actorUserId: session.user.id,
+      campaignId: piece.campaign_id,
+      tier,
+      contentPieceId,
+    });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para gerar essa imagem. Compre mais créditos em Configurações.",
+      };
+    }
+    logger.error("asset_engine.photo_visual_overrides_failed", {
       contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

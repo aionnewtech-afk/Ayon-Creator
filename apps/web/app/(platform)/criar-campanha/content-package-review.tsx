@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from "@ayon/ui";
-import { VOICE_CATALOG } from "@ayon/core";
+import { VOICE_CATALOG, type PhotoVisualOverrides } from "@ayon/core";
 import { VoicePicker } from "@/components/voice-picker";
 import {
   applySceneCandidateAction,
@@ -29,6 +29,7 @@ import {
   setSceneDurationAction,
   suggestSceneAiPromptAction,
   swapVideoVoiceAction,
+  updateVisualOverridesAction,
   uploadContentPieceMediaAction,
   uploadReplacementSceneAction,
   type ContentPieceActionResult,
@@ -108,6 +109,14 @@ export function ContentPackageReview({
   const [draftScript, setDraftScript] = useState("");
   /** ★ Sprint de estabilização — nicho opcional por peça ao regenerar imagem (ex.: "praia", "shows"), achado real: busca automática ainda genérica demais para o gosto do usuário em alguns casos. */
   const [photoNicheDrafts, setPhotoNicheDrafts] = useState<Record<string, string>>({});
+  // ★ Achado real (pedido direto do usuário — item 7, "editor de Stories...
+  // editar o texto, aumentar/diminuir fonte, alterar tamanho e movimentar a
+  // marca"): painel próprio por peça, só pro formato Stories — controles
+  // numéricos/preset (a composição roda no Shotstack, servidor, não um
+  // canvas ao vivo no navegador — não dá pra arrastar direto sobre o
+  // preview real).
+  const [visualEditorOpenFor, setVisualEditorOpenFor] = useState<string | null>(null);
+  const [visualEditorDraft, setVisualEditorDraft] = useState<PhotoVisualOverrides>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -362,6 +371,17 @@ export function ContentPackageReview({
   async function handleGeneratePhoto(pieceId: string) {
     setLoadingId(pieceId);
     handleActionResult(await generatePhotoContentPieceAction(pieceId, photoNicheDrafts[pieceId]));
+  }
+
+  function openVisualEditor(piece: ContentPieceView) {
+    setVisualEditorOpenFor((current) => (current === piece.id ? null : piece.id));
+    setVisualEditorDraft(piece.visualOverrides ?? {});
+  }
+
+  async function handleSaveVisualOverrides(pieceId: string) {
+    setLoadingId(pieceId);
+    setVisualEditorOpenFor(null);
+    handleActionResult(await updateVisualOverridesAction(pieceId, visualEditorDraft));
   }
 
   async function handleSelectVersion(pieceId: string, versionId: string) {
@@ -1032,6 +1052,134 @@ export function ContentPackageReview({
                         envie seu próprio arquivo.
                       </p>
                     )}
+
+                    {/* ★ Achado real (pedido direto do usuário — item 7,
+                        "no formato Stories, melhorar o controle de
+                        elementos... marca menor por padrão, permitir
+                        alterar tamanho e movimentar; editar o texto,
+                        aumentar/diminuir a fonte"): só faz sentido pro
+                        formato Stories (ela escopou explicitamente a esse
+                        formato) — carrossel usa lâminas com texto próprio
+                        por lâmina, thumbnail é mais simples/estático. */}
+                    {piece.format === "stories" && piece.mediaUrl ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isLoading}
+                          onClick={() => openVisualEditor(piece)}
+                        >
+                          Editar texto e marca
+                        </Button>
+
+                        {visualEditorOpenFor === piece.id ? (
+                          <div className="space-y-3 rounded-md border border-border p-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Texto e marca desta peça — salvar gera de novo com esses ajustes
+                            </p>
+
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Título</label>
+                              <Input
+                                value={visualEditorDraft.titleText ?? ""}
+                                onChange={(event) =>
+                                  setVisualEditorDraft((prev) => ({ ...prev, titleText: event.target.value || null }))
+                                }
+                                placeholder="Deixe em branco pra usar o título gerado automaticamente"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Subtítulo</label>
+                              <Input
+                                value={visualEditorDraft.subheadlineText ?? ""}
+                                onChange={(event) =>
+                                  setVisualEditorDraft((prev) => ({ ...prev, subheadlineText: event.target.value || null }))
+                                }
+                                placeholder="Deixe em branco pra usar o gerado automaticamente"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Chamada para ação (CTA)</label>
+                              <Input
+                                value={visualEditorDraft.ctaTextOverride ?? ""}
+                                onChange={(event) =>
+                                  setVisualEditorDraft((prev) => ({ ...prev, ctaTextOverride: event.target.value || null }))
+                                }
+                                placeholder="Deixe em branco pra usar o gerado automaticamente"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground">Tamanho da fonte</label>
+                                <select
+                                  value={visualEditorDraft.fontScale?.toString() ?? ""}
+                                  onChange={(event) =>
+                                    setVisualEditorDraft((prev) => ({
+                                      ...prev,
+                                      fontScale: event.target.value ? Number(event.target.value) : null,
+                                    }))
+                                  }
+                                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                >
+                                  <option value="">Padrão</option>
+                                  <option value="0.75">Menor</option>
+                                  <option value="1.25">Maior</option>
+                                  <option value="1.5">Bem maior</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground">Tamanho da marca</label>
+                                <select
+                                  value={visualEditorDraft.logoScale?.toString() ?? ""}
+                                  onChange={(event) =>
+                                    setVisualEditorDraft((prev) => ({
+                                      ...prev,
+                                      logoScale: event.target.value ? Number(event.target.value) : null,
+                                    }))
+                                  }
+                                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                >
+                                  <option value="">Padrão (pequena)</option>
+                                  <option value="0.05">Bem pequena</option>
+                                  <option value="0.12">Média</option>
+                                  <option value="0.18">Grande</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Posição da marca</label>
+                              <select
+                                value={visualEditorDraft.logoPosition ?? ""}
+                                onChange={(event) =>
+                                  setVisualEditorDraft((prev) => ({ ...prev, logoPosition: event.target.value || null }))
+                                }
+                                className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                              >
+                                <option value="">Padrão (canto inferior direito)</option>
+                                <option value="topLeft">Canto superior esquerdo</option>
+                                <option value="topRight">Canto superior direito</option>
+                                <option value="bottomLeft">Canto inferior esquerdo</option>
+                                <option value="bottomRight">Canto inferior direito</option>
+                                <option value="top">Topo, centralizada</option>
+                                <option value="bottom">Base, centralizada</option>
+                                <option value="center">Centro</option>
+                              </select>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button size="sm" disabled={isLoading} onClick={() => handleSaveVisualOverrides(piece.id)}>
+                                {isLoading ? "Gerando..." : "Salvar e gerar de novo"}
+                              </Button>
+                              <Button size="sm" variant="ghost" disabled={isLoading} onClick={() => setVisualEditorOpenFor(null)}>
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
 
                     {piece.brandRationale ? (
                       <div className="rounded-md bg-secondary/60 px-4 py-3 text-secondary-foreground">

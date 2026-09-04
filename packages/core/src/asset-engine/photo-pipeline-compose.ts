@@ -4,11 +4,32 @@ import { resolveLlmProvider, resolveVideoRenderProvider } from "../providers/pro
 import type { MediaCandidate } from "../providers/media-provider";
 import { BrandRepository } from "../repositories/brand.repository";
 import { CampaignRepository } from "../repositories/campaign.repository";
+import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { resolveBrandBranding } from "./resolve-brand-branding";
 import { resolveVisualBrief } from "./resolve-visual-brief";
 import { PHOTO_DIMENSIONS } from "./photo-pipeline-select";
 
 const CONTENT_OUTPUT_BUCKET = "content-output";
+/** ★ Achado real (pedido direto do usuário — item 7, "a marca deve aparecer menor por padrão" no Stories): vídeo/carrossel/thumbnail continuam com o padrão de sempre (0.12, LOGO_CLIP) — só Stories muda o PADRÃO, nunca o teto (o usuário ainda pode aumentar via override). */
+const STORIES_DEFAULT_LOGO_SCALE = 0.08;
+
+/**
+ * ★ Achado real (pedido direto do usuário — item 7, "editor de Stories...
+ * permitir editar o texto... aumentar/diminuir a fonte... alterar tamanho e
+ * movimentar a marca"): ajustes por PEÇA (`content_pieces.visual_overrides`,
+ * migration 0028) — nunca por campanha (`campaigns.visual_brief`, que é
+ * compartilhado entre stories/carousel/thumbnail e não faz sentido reaplicar
+ * igual em proporções diferentes). Todo campo opcional/nulo cai no padrão de
+ * sempre.
+ */
+export interface PhotoVisualOverrides {
+  titleText?: string | null;
+  subheadlineText?: string | null;
+  ctaTextOverride?: string | null;
+  fontScale?: number | null;
+  logoScale?: number | null;
+  logoPosition?: string | null;
+}
 
 export interface ComposePhotoContentPieceParams {
   db: SupabaseClient<Database>;
@@ -52,7 +73,17 @@ export async function composePhotoContentPiece(
 ): Promise<ComposedPhotoOption[]> {
   const campaign = await new CampaignRepository(params.db).findById(params.campaignId);
   const brand = campaign ? await new BrandRepository(params.db).findById(campaign.brand_id) : null;
-  const branding = await resolveBrandBranding(params.db, brand);
+  const baseBranding = await resolveBrandBranding(params.db, brand);
+
+  const piece = await new ContentPieceRepository(params.db).findById(params.contentPieceId);
+  const overrides = (piece?.visual_overrides as PhotoVisualOverrides | null) ?? null;
+
+  const branding = {
+    ...baseBranding,
+    logoScale: overrides?.logoScale ?? (params.format === "stories" ? STORIES_DEFAULT_LOGO_SCALE : undefined),
+    logoPosition: overrides?.logoPosition ?? undefined,
+  };
+  const fontScale = overrides?.fontScale ?? undefined;
 
   const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier);
   const visualBrief = await resolveVisualBrief(params.db, params.campaignId, llmProvider);
@@ -71,6 +102,7 @@ export async function composePhotoContentPiece(
       subheadline: text.subheadline,
       ctaText: text.ctaText,
       branding,
+      fontScale,
       width: dimensions.width,
       height: dimensions.height,
       // ★ Achado real (pedido direto do usuário — "ou ele cria a imagem e
@@ -152,9 +184,9 @@ export async function composePhotoContentPiece(
     const { storagePath, videoRenderProviderKey } = await composeOne(
       candidate,
       {
-        title: visualBrief.shortTitle || null,
-        subheadline: visualBrief.subheadline || null,
-        ctaText: visualBrief.ctaText || null,
+        title: overrides?.titleText ?? (visualBrief.shortTitle || null),
+        subheadline: overrides?.subheadlineText ?? (visualBrief.subheadline || null),
+        ctaText: overrides?.ctaTextOverride ?? (visualBrief.ctaText || null),
       },
       `option-${index + 1}`,
     );

@@ -621,6 +621,8 @@ export interface Database {
           approved_at: string | null;
           /** ★ Achado real (pedido direto do usuário — aprovar o plano de cenas antes do render): plano de vídeo aprovável (áudio + cenas + texto de cada trecho), gravado por `planVideoContentPiece`. Migration 0023. */
           pending_scene_plan: Record<string, unknown> | null;
+          /** ★ Achado real (pedido direto do usuário — item 7, editor de Stories): ajustes visuais por peça (texto/fonte/logo) — `PhotoVisualOverrides`, `photo-pipeline-compose.ts`. Migration 0028. */
+          visual_overrides: Record<string, unknown> | null;
           created_at: string;
         };
         Insert: {
@@ -637,6 +639,7 @@ export interface Database {
           approved_by?: string | null;
           approved_at?: string | null;
           pending_scene_plan?: Record<string, unknown> | null;
+          visual_overrides?: Record<string, unknown> | null;
         };
         Update: Partial<Database["public"]["Tables"]["content_pieces"]["Insert"]>;
         Relationships: [];

@@ -339,8 +339,29 @@ const POLL_INTERVAL_MS = 3000;
 /** ~5 minutos de polling — suficiente para um vídeo curto (peça de campanha), nunca indefinido. */
 const MAX_POLL_ATTEMPTS = 100;
 
-/** Posição/tamanho discretos do clip de logo (arch. §14.1) — canto inferior direito, pequeno, com uma margem da borda. */
+/** Posição/tamanho discretos do clip de logo (arch. §14.1) — canto inferior direito, pequeno, com uma margem da borda. Vídeo nunca passa `logoScale`/`logoPosition` (ver `buildLogoClip`), então continua exatamente como sempre. */
 const LOGO_CLIP = { position: "bottomRight", offset: { x: -0.04, y: -0.04 }, scale: 0.12 };
+
+/**
+ * ★ Achado real (pedido direto do usuário — item 7, "no formato Stories...
+ * marca menor por padrão, permitir alterar tamanho e movimentar"): mesma
+ * margem de borda de `LOGO_CLIP`, mas o SINAL do offset depende de qual
+ * canto — "bottomRight" afasta a logo da borda direita/inferior (valores
+ * negativos), "topLeft" precisa do oposto (afasta das bordas
+ * esquerda/superior, valores positivos). Só usado quando `branding.logoPosition`
+ * vem preenchido (photo-pipeline-compose.ts); vídeo nunca usa isso.
+ */
+const LOGO_POSITION_OFFSETS: Record<string, { x: number; y: number }> = {
+  bottomRight: { x: -0.04, y: -0.04 },
+  bottomLeft: { x: 0.04, y: -0.04 },
+  topRight: { x: -0.04, y: 0.04 },
+  topLeft: { x: 0.04, y: 0.04 },
+  bottom: { x: 0, y: -0.04 },
+  top: { x: 0, y: 0.04 },
+  left: { x: 0.04, y: 0 },
+  right: { x: -0.04, y: 0 },
+  center: { x: 0, y: 0 },
+};
 
 interface ShotstackEnvelope<T> {
   success: boolean;
@@ -370,11 +391,15 @@ function toFonts(branding: VideoBranding | undefined) {
  */
 function buildLogoClip(branding: VideoBranding | undefined, length: number) {
   if (!branding?.logoUrl || branding.includeLogo === false) return null;
+
+  const position = branding.logoPosition ?? LOGO_CLIP.position;
   return {
     asset: { type: "image", src: branding.logoUrl },
     start: 0,
     length,
-    ...LOGO_CLIP,
+    position,
+    offset: LOGO_POSITION_OFFSETS[position] ?? LOGO_CLIP.offset,
+    scale: branding.logoScale ?? LOGO_CLIP.scale,
   };
 }
 
@@ -578,6 +603,7 @@ function buildImageTimeline(
 ) {
   const length = 1;
   const branding = request.branding;
+  const fontScale = request.fontScale && request.fontScale > 0 ? request.fontScale : 1;
 
   // ★ Achado real (pedido direto do usuário — "o storie precisa ser uma
   // peça, não só a foto com texto por cima"): offsets calculados em pixels
@@ -623,7 +649,7 @@ function buildImageTimeline(
           text: headlineText,
           width: request.width - IMAGE_PANEL_HORIZONTAL_PADDING * 2,
           height: IMAGE_HEADLINE_BLOCK_HEIGHT,
-          font: buildTextFont(branding, { color: panel.panelTextColor, size: 48, weight: 800 }),
+          font: buildTextFont(branding, { color: panel.panelTextColor, size: 48 * fontScale, weight: 800 }),
           // ★ Achado real: com painel visível atrás (PNG do `renderPanel` OU
           // já desenhado no `backgroundImageUrl` pelo Gemini), o texto fica
           // sem fundo próprio — o painel já resolve legibilidade. Sem
@@ -650,7 +676,7 @@ function buildImageTimeline(
           text: subheadlineText,
           width: request.width - IMAGE_PANEL_HORIZONTAL_PADDING * 2,
           height: IMAGE_SUBHEADLINE_BLOCK_HEIGHT,
-          font: buildTextFont(branding, { color: panel.panelTextColor, size: 28, weight: 400 }),
+          font: buildTextFont(branding, { color: panel.panelTextColor, size: 28 * fontScale, weight: 400 }),
           ...(panel.hasVisiblePanel ? {} : { background: { color: panel.panelTextColor === "#ffffff" ? "#111111" : "#ffffff" } }),
           alignment: { horizontal: "center", vertical: "top" },
         },
@@ -668,7 +694,7 @@ function buildImageTimeline(
           text: request.ctaText.trim(),
           width: IMAGE_CTA_BLOCK_WIDTH,
           height: IMAGE_CTA_BLOCK_HEIGHT,
-          font: buildTextFont(branding, { color: panel.pillTextColor, size: 26, weight: 700 }),
+          font: buildTextFont(branding, { color: panel.pillTextColor, size: 26 * fontScale, weight: 700 }),
           ...(panel.ctaScrimUrl ? {} : { background: { color: panel.pillColor } }),
           alignment: { horizontal: "center", vertical: "center" },
         },
