@@ -19,9 +19,11 @@ import {
   regenerateContentPieceAction,
   rejectContentPieceAction,
   replaceSceneWithAvatarAction,
+  reorderVideoScenesAction,
   searchAvatarBackgroundImagesAction,
   searchSceneCandidatesAction,
   selectContentPieceVersionAction,
+  setSceneDurationAction,
   suggestSceneAiPromptAction,
   uploadContentPieceMediaAction,
   uploadReplacementSceneAction,
@@ -1159,6 +1161,20 @@ function VideoScenePlanReview({
   const [aiPromptDraft, setAiPromptDraft] = useState("");
   const [aiPromptLoading, setAiPromptLoading] = useState(false);
 
+  // ★ Achado real (pedido direto do usuário — "permitir escolher a duração
+  // de cada cena individualmente"): rascunho local (string, pra aceitar
+  // digitação livre tipo "3." antes de virar número) só da cena selecionada
+  // — confirma com um botão explícito, nunca salva a cada tecla.
+  const [durationDraft, setDurationDraft] = useState("");
+
+  // ★ Achado real (pedido direto do usuário — "reorganizar cenas por
+  // arrastar e soltar... a nova ordem será utilizada na geração final"):
+  // Drag and Drop nativo do HTML5 (sem biblioteca nova) — `dragIndex` é a
+  // cena sendo arrastada, `dragOverIndex` só controla o destaque visual de
+  // onde ela cairia.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
   // ★ Achado real (pedido direto do usuário — "incluir a oportunidade de
   // incluir um vídeo e recortar a cena que quero"): antes, um vídeo enviado
   // sempre virava a cena a partir do segundo 0 do arquivo — sem jeito de
@@ -1223,7 +1239,39 @@ function VideoScenePlanReview({
     setQueryDraft("");
     setSearchCandidates(null);
     setAiPromptOpenFor(null);
+    setDurationDraft(plan.scenes[index]?.lengthSeconds.toFixed(1) ?? "");
     handleCancelTrim();
+  }
+
+  async function handleSetDuration(index: number) {
+    const lengthSeconds = Number(durationDraft.replace(",", "."));
+    if (!Number.isFinite(lengthSeconds) || lengthSeconds < 0.5 || busy) return;
+    setBusy(true);
+    handleResult(await setSceneDurationAction(pieceId, index, lengthSeconds));
+  }
+
+  function handleDragStart(index: number) {
+    setDragIndex(index);
+  }
+
+  function handleDragOver(event: React.DragEvent, index: number) {
+    event.preventDefault();
+    setDragOverIndex(index);
+  }
+
+  async function handleDrop(targetIndex: number) {
+    setDragOverIndex(null);
+    if (dragIndex === null || dragIndex === targetIndex || busy) {
+      setDragIndex(null);
+      return;
+    }
+    const order = plan.scenes.map((_, index) => index);
+    const [moved] = order.splice(dragIndex, 1);
+    order.splice(targetIndex, 0, moved!);
+    setDragIndex(null);
+    setBusy(true);
+    handleResult(await reorderVideoScenesAction(pieceId, order));
+    setSelectedIndex(null);
   }
 
   async function handleSearch(index: number) {
@@ -1434,14 +1482,26 @@ function VideoScenePlanReview({
         })}
       </div>
 
+      <p className="text-xs text-muted-foreground">Arraste uma cena pra reordenar.</p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {plan.scenes.map((scene, index) => (
           <button
             key={index}
             type="button"
+            draggable
             onClick={() => selectScene(index)}
-            className={`relative h-32 w-20 shrink-0 overflow-hidden rounded-md ${
+            onDragStart={() => handleDragStart(index)}
+            onDragOver={(event) => handleDragOver(event, index)}
+            onDragLeave={() => setDragOverIndex((current) => (current === index ? null : current))}
+            onDrop={() => void handleDrop(index)}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setDragOverIndex(null);
+            }}
+            className={`relative h-32 w-20 shrink-0 cursor-grab overflow-hidden rounded-md active:cursor-grabbing ${
               selectedIndex === index ? "ring-2 ring-primary ring-offset-2" : ""
+            } ${dragOverIndex === index && dragIndex !== index ? "ring-2 ring-dashed ring-foreground" : ""} ${
+              dragIndex === index ? "opacity-40" : ""
             }`}
           >
             {scene.assetType === "image" ? (
@@ -1456,6 +1516,9 @@ function VideoScenePlanReview({
                 Avatar
               </span>
             ) : null}
+            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              {scene.lengthSeconds.toFixed(1)}s
+            </span>
           </button>
         ))}
       </div>
@@ -1593,6 +1656,24 @@ function VideoScenePlanReview({
 
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => handleDelete(selectedIndex)}>
               Remover cena
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="scene-duration" className="text-xs text-muted-foreground">
+              Duração desta cena (segundos):
+            </label>
+            <input
+              id="scene-duration"
+              type="text"
+              inputMode="decimal"
+              value={durationDraft}
+              onChange={(event) => setDurationDraft(event.target.value)}
+              disabled={busy}
+              className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm"
+            />
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => handleSetDuration(selectedIndex)}>
+              Aplicar
             </Button>
           </div>
 

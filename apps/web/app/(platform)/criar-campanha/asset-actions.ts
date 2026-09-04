@@ -30,8 +30,10 @@ import {
   replaceVideoSceneWithAi,
   replaceVideoSceneWithAvatar,
   replaceVideoSceneWithUpload,
+  reorderVideoScenes,
   searchAvatarBackgroundImages,
   searchSceneCandidates,
+  setSceneDuration,
   suggestSceneAiPrompt,
   triggerPhotoGeneration,
   triggerVideoScenePlanning,
@@ -1079,6 +1081,71 @@ export async function deleteReplacementSceneAction(contentPieceId: string, scene
     logger.error("asset_engine.scene_delete_failed", {
       contentPieceId,
       sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "permitir escolher a duração de cada cena individualmente"): ajusta só a cena escolhida — `setSceneDuration` (core) já absorve a diferença na última cena, mesmo mecanismo de qualquer outra troca de cena. */
+export async function setSceneDurationAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  lengthSeconds: number,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode ajustar a duração das cenas." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await setSceneDuration({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, lengthSeconds });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_duration_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "reorganizar cenas por arrastar e soltar"): `newOrder` chega já calculado pelo cliente (índices atuais na ordem desejada) — esta action só valida a sessão/status e delega pro core. */
+export async function reorderVideoScenesAction(contentPieceId: string, newOrder: number[]): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode reordenar as cenas." };
+  }
+
+  const db = await createClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    await reorderVideoScenes({ db, contentPieceId, newOrder });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_reorder_failed", {
+      contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });
     return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };

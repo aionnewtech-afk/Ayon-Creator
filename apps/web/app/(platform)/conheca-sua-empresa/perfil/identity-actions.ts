@@ -7,6 +7,7 @@ import {
   BrandRepository,
   createBrandAvatar,
   createBrandAvatarUploadSlot,
+  findVoiceCatalogEntry,
   hasMinimumRole,
   listAllBrandAvatarLooks,
   logger,
@@ -14,6 +15,7 @@ import {
   refreshBrandAvatarStatus,
   regenerateBrandAvatarConsentLink,
   removeBrandAvatarLook,
+  resolveVoiceProvider,
   setDefaultBrandAvatarLook,
   VOICE_CATALOG,
 } from "@ayon/core";
@@ -493,6 +495,66 @@ export async function removeBrandAvatarLookAction(lookId: string): Promise<Remov
       reason: error instanceof Error ? error.message : String(error),
     });
     return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+const VOICE_PREVIEW_BUCKET = "content-output";
+/** Mesmo texto pra toda voz — só interessa comparar timbre/entonação entre as opções, nunca o conteúdo em si. */
+const VOICE_PREVIEW_SCRIPT = "Essa é uma amostra da minha voz. Veja se ela combina com o tom da sua marca.";
+
+export interface PreviewVoiceResult {
+  ok: boolean;
+  error?: string;
+  audioUrl?: string;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "adicionar um botão de prévia/
+ * ouvir... a pessoa consegue conhecer a voz antes de gerar o vídeo"): amostra
+ * fixa (mesmo texto pra toda voz) sintetizada 1x por `voiceId` e cacheada
+ * (`upsert: false` na checagem — se já existe, só assina de novo; nunca
+ * ressintetiza) — caminho compartilhado entre organizações (`_shared/...`,
+ * mesmo espírito de `renderScrim`/`renderPanel` em
+ * shotstack-video-render-provider.ts), já que a amostra é idêntica pra
+ * qualquer conta que peça a mesma voz.
+ */
+export async function previewVoiceAction(voiceId: string): Promise<PreviewVoiceResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!findVoiceCatalogEntry(voiceId)) return { ok: false, error: "Voz inválida — escolha uma opção da lista." };
+
+  const serviceRoleDb = createServiceRoleClient();
+  const storagePath = `_shared/voice-previews/${voiceId}.mp3`;
+
+  try {
+    const { data: existing } = await serviceRoleDb.storage.from(VOICE_PREVIEW_BUCKET).list("_shared/voice-previews", {
+      search: `${voiceId}.mp3`,
+    });
+
+    if (!existing || existing.length === 0) {
+      const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+      const voiceProvider = await resolveVoiceProvider(serviceRoleDb, tier);
+      const synthesized = await voiceProvider.synthesizeVoice({ script: VOICE_PREVIEW_SCRIPT, voiceRef: voiceId });
+      const audioBuffer = Buffer.from(synthesized.audioBase64, "base64");
+
+      const { error: uploadError } = await serviceRoleDb.storage
+        .from(VOICE_PREVIEW_BUCKET)
+        .upload(storagePath, audioBuffer, { contentType: "audio/mpeg", upsert: true });
+      if (uploadError) throw uploadError;
+    }
+
+    const { data: signed, error: signError } = await serviceRoleDb.storage
+      .from(VOICE_PREVIEW_BUCKET)
+      .createSignedUrl(storagePath, 60 * 60);
+    if (signError || !signed) throw signError ?? new Error("Falha ao gerar link da amostra de voz.");
+
+    return { ok: true, audioUrl: signed.signedUrl };
+  } catch (error) {
+    logger.error("brand.voice_preview_failed", {
+      voiceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: "Não consegui gerar a amostra dessa voz agora. Tenta de novo em instantes?" };
   }
 }
 

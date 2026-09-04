@@ -40,6 +40,13 @@ export const VOICE_CATALOG: VoiceCatalogEntry[] = [
   { voiceId: "N2lVS1w4EtoT3dr4eOWO", label: "Callum", description: "masculina, rouca, intensa — narrativa dramática, trailers" },
   { voiceId: "TX3LPaxmHKxFdv7VOQHJ", label: "Liam", description: "masculina, jovem, articulada — bom padrão neutro alternativo" },
   { voiceId: "Yko7PKHZNXotIFUBG7I9", label: "Matthew", description: "masculina, madura, tranquilizadora — audiobooks, conteúdo longo" },
+  // ★ Achado real (pedido direto do usuário — "a voz clonada do HeyGen não
+  // é parecida... quero que a voz do meu avatar seja a voz do ElevenLabs
+  // Andrei v1"): clone real do próprio usuário, não uma voz genérica do
+  // ElevenLabs — validado com síntese real (200, áudio real) antes de
+  // entrar aqui, mesmo critério de todo o catálogo. Também é a voz usada
+  // como driver do avatar (packages/core/src/asset-engine/video-pipeline-avatar.ts).
+  { voiceId: "hBpD5BQvGL6f0ezFX9b1", label: "Andrei v1", description: "clone de voz do usuário — porta-voz pessoal da marca" },
 ];
 
 export const DEFAULT_VOICE_CATALOG_ENTRY = VOICE_CATALOG[0]!;

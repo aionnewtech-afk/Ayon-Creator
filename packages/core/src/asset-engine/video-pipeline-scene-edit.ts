@@ -448,3 +448,67 @@ export async function deleteVideoScene(params: SceneEditParams): Promise<void> {
   reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
   await persistPlan(params.db, params.contentPieceId, plan);
 }
+
+/** Duração mínima de uma cena — abaixo disso o corte fica imperceptível/quebra o Shotstack (clipe de duração ~0). */
+const MIN_SCENE_LENGTH_SECONDS = 0.5;
+
+export interface SetSceneDurationParams extends SceneEditParams {
+  lengthSeconds: number;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "permitir escolher a duração de
+ * cada cena individualmente... nem todas as cenas precisam ter a mesma
+ * duração"): até aqui a duração de cada cena só saía do cálculo automático
+ * (corte proporcional ao trecho do roteiro, `video-pipeline-scenes.ts`) —
+ * sem nenhum jeito de ajustar 1 cena específica. Muda só a cena escolhida;
+ * `reconcilePlanTimeline` (já existente, usado por toda troca de cena)
+ * absorve a diferença na ÚLTIMA cena — a trilha de vídeo nunca dessincroniza
+ * da narração, mesmo mecanismo de sempre. Se a soma das durações escolhidas
+ * pelo usuário já bater com a narração, a última cena não muda em nada.
+ */
+export async function setSceneDuration(params: SetSceneDurationParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  if (!Number.isFinite(params.lengthSeconds) || params.lengthSeconds < MIN_SCENE_LENGTH_SECONDS) {
+    throw new Error(`A duração mínima de uma cena é ${MIN_SCENE_LENGTH_SECONDS}s.`);
+  }
+
+  scene.lengthSeconds = params.lengthSeconds;
+  reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
+export interface ReorderVideoScenesParams {
+  db: SupabaseClient<Database>;
+  contentPieceId: string;
+  /** Nova ordem, como índices ATUAIS (0-based) na ordem desejada — ex.: `[2, 0, 3, 1]` move a cena 3 (índice 2) pro início. Precisa conter cada índice de `videoSources` exatamente 1 vez. */
+  newOrder: number[];
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "reorganizar cenas por arrastar
+ * e soltar... a ordem definida pelo usuário deve ser respeitada na geração"):
+ * `reconcilePlanTimeline` já percorre `videoSources` sequencialmente pra
+ * recalcular `startSeconds` (nunca dependeu de `segmentIndex` pra isso) —
+ * só reordenar o array e chamar de novo já basta, nenhuma mudança no motor
+ * de reconciliação.
+ */
+export async function reorderVideoScenes(params: ReorderVideoScenesParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+
+  const isValidPermutation =
+    params.newOrder.length === videoSources.length &&
+    new Set(params.newOrder).size === videoSources.length &&
+    params.newOrder.every((index) => index >= 0 && index < videoSources.length);
+  if (!isValidPermutation) {
+    throw new Error("Nova ordem de cenas inválida.");
+  }
+
+  const reordered = params.newOrder.map((index) => videoSources[index]!);
+  videoSources.splice(0, videoSources.length, ...reordered);
+
+  reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
+  await persistPlan(params.db, params.contentPieceId, plan);
+}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, Input, Label } from "@ayon/ui";
 import { VOICE_CATALOG } from "@ayon/core";
+import { VoicePicker } from "@/components/voice-picker";
 import { updateBrandIdentityAction } from "./identity-actions";
 
 const FONT_SUGGESTIONS = ["Poppins", "Montserrat", "Playfair Display", "Lato", "Nunito"];
@@ -43,6 +44,7 @@ export function IdentityForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(voiceId);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,20 +152,9 @@ export function IdentityForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="identity-voice">Voz da marca</Label>
-        <select
-          id="identity-voice"
-          name="voiceId"
-          defaultValue={voiceId ?? ""}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <option value="">Automático (a Ayon escolhe pela marca)</option>
-          {VOICE_CATALOG.map((entry) => (
-            <option key={entry.voiceId} value={entry.voiceId}>
-              {entry.label} — {entry.description}
-            </option>
-          ))}
-        </select>
+        <Label>Voz da marca</Label>
+        <input type="hidden" name="voiceId" value={selectedVoiceId ?? ""} />
+        <VoicePicker options={VOICE_CATALOG} value={selectedVoiceId} onChange={setSelectedVoiceId} allowAutomatic />
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
