@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from "@ayon/ui";
+import { VOICE_CATALOG } from "@ayon/core";
+import { VoicePicker } from "@/components/voice-picker";
 import {
   applySceneCandidateAction,
   approveContentPieceAction,
@@ -25,6 +27,7 @@ import {
   selectContentPieceVersionAction,
   setSceneDurationAction,
   suggestSceneAiPromptAction,
+  swapVideoVoiceAction,
   uploadContentPieceMediaAction,
   uploadReplacementSceneAction,
   type ContentPieceActionResult,
@@ -114,6 +117,12 @@ export function ContentPackageReview({
   // geração (nunca um padrão fixo da marca) — cor de fundo, voz e prompt de
   // roupa/estilo, todos opcionais.
   const [avatarPanelOpenFor, setAvatarPanelOpenFor] = useState<string | null>(null);
+  // ★ Achado real (pedido direto do usuário — "criar uma opção para trocar
+  // somente a voz de um vídeo já gerado, sem precisar refazer todo o
+  // processo"): painel próprio (nunca reaproveita `avatarPanelOpenFor`,
+  // que é do fluxo de gerar/regerar inteiro) — só pergunta a voz nova.
+  const [voiceSwapOpenFor, setVoiceSwapOpenFor] = useState<string | null>(null);
+  const [voiceSwapDraft, setVoiceSwapDraft] = useState<string | null>(null);
   const [avatarVoices, setAvatarVoices] = useState<{ voiceId: string; name: string; gender?: string; language?: string }[] | null>(
     null,
   );
@@ -239,6 +248,18 @@ export function ContentPackageReview({
   async function handleReject(pieceId: string) {
     setLoadingId(pieceId);
     handleActionResult(await rejectContentPieceAction(pieceId));
+  }
+
+  function openVoiceSwapPanel(pieceId: string) {
+    setVoiceSwapOpenFor((current) => (current === pieceId ? null : pieceId));
+    setVoiceSwapDraft(null);
+  }
+
+  async function handleSwapVoice(pieceId: string) {
+    if (!voiceSwapDraft) return;
+    setLoadingId(pieceId);
+    setVoiceSwapOpenFor(null);
+    handleActionResult(await swapVideoVoiceAction(pieceId, voiceSwapDraft));
   }
 
   async function handleRegenerate(pieceId: string) {
@@ -676,12 +697,46 @@ export function ContentPackageReview({
                               Gerar com avatar ({avatarName})
                             </Button>
                           ) : null}
+                          {/* ★ Achado real (pedido direto do usuário — "criar
+                              uma opção para trocar somente a voz de um vídeo
+                              já gerado, sem precisar refazer todo o
+                              processo"): só faz sentido pro caminho de banco
+                              de vídeo licenciado — vídeo de avatar tem a voz
+                              junto do rosto (swapVideoVoiceAction recusa com
+                              uma mensagem clara se tentado mesmo assim). */}
+                          {piece.productionMode === "licensed_stock_video" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isLoading}
+                              onClick={() => openVoiceSwapPanel(piece.id)}
+                            >
+                              Trocar voz
+                            </Button>
+                          ) : null}
                           <Button size="sm" variant="ghost" disabled={isLoading} onClick={() => handleReject(piece.id)}>
                             Rejeitar
                           </Button>
                         </>
                       ) : null}
                     </div>
+
+                    {voiceSwapOpenFor === piece.id ? (
+                      <div className="space-y-3 rounded-md border border-border p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Trocar a voz — mantém roteiro, cenas, ordem, duração e marca/logo
+                        </p>
+                        <VoicePicker options={VOICE_CATALOG} value={voiceSwapDraft} onChange={setVoiceSwapDraft} />
+                        <div className="flex gap-2">
+                          <Button size="sm" disabled={isLoading || !voiceSwapDraft} onClick={() => handleSwapVoice(piece.id)}>
+                            {isLoading ? "Recompondo..." : "Confirmar troca de voz"}
+                          </Button>
+                          <Button size="sm" variant="ghost" disabled={isLoading} onClick={() => setVoiceSwapOpenFor(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {avatarPanelOpenFor === piece.id ? (
                       <div className="space-y-3 rounded-md border border-border p-3">

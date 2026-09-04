@@ -72,6 +72,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           voiceProviderKey: body.voiceProviderKey,
           mediaProviderKey: body.mediaProviderKey,
           videoRenderProviderKey: body.videoRenderProviderKey,
+          // ★ Rota nunca chamada de verdade hoje (vídeo roda direto, sem n8n
+          // — ver video-pipeline-plan.ts) — sem `videoSources` no payload
+          // aqui não teria como reconstruir a composição depois (troca de
+          // voz, video-pipeline-voice-swap.ts) se essa rota alguma vez
+          // voltasse a ser usada.
+          scenePlan: {
+            videoSources: Array.isArray(body.videoSources) ? body.videoSources : [],
+            includeLogo: body.includeLogo,
+            watermarkText: body.watermarkText,
+          },
         });
       }
     } else {

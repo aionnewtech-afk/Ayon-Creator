@@ -11,10 +11,12 @@ import {
   InactiveSubscriptionError,
   InsufficientCreditsError,
   LearningSignalRepository,
+  MissingScenePlanForVoiceSwapError,
   MissingScriptError,
   N8nDispatchError,
   PipelineRunRepository,
   AvatarNotReadyError,
+  VoiceSwapNotSupportedError,
   applySceneCandidate,
   approveVideoScenePlan,
   deleteVideoScene,
@@ -35,6 +37,7 @@ import {
   searchSceneCandidates,
   setSceneDuration,
   suggestSceneAiPrompt,
+  swapVideoVoice,
   triggerPhotoGeneration,
   triggerVideoScenePlanning,
 } from "@ayon/core";
@@ -452,6 +455,71 @@ export async function generateVideoContentPieceAction(
       return { ok: false, error: error.message };
     }
     logger.error("asset_engine.video_plan_failed", {
+      contentPieceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "criar uma opção para trocar
+ * somente a voz de um vídeo já gerado, sem precisar refazer todo o
+ * processo"): reaproveita as MESMAS cenas/ordem/duração/branding já
+ * renderizadas (`content_versions.generation_metadata.scene_plan`) — só
+ * re-narra e recompõe. Só existe pro caminho `licensed_stock_video`
+ * (avatar tem a voz junto do rosto, ver `VoiceSwapNotSupportedError`).
+ */
+export async function swapVideoVoiceAction(contentPieceId: string, voiceRef: string): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode trocar a voz do vídeo." };
+  }
+  if (!voiceRef.trim()) return { ok: false, error: "Escolha uma voz." };
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await swapVideoVoice({
+      db,
+      serviceRoleDb,
+      tier,
+      organizationId: session.organization.id,
+      actorUserId: session.user.id,
+      campaignId: piece.campaign_id,
+      contentPieceId,
+      voiceRef,
+    });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    if (error instanceof InactiveSubscriptionError) {
+      return {
+        ok: false,
+        blockedReason: "inactive_subscription",
+        error: "Sua assinatura não está ativa. Reative o plano em Configurações para continuar.",
+      };
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return {
+        ok: false,
+        blockedReason: "insufficient_credits",
+        error: "Créditos insuficientes para trocar a voz desse vídeo. Compre mais créditos em Configurações.",
+      };
+    }
+    if (error instanceof MissingScriptError || error instanceof MissingScenePlanForVoiceSwapError || error instanceof VoiceSwapNotSupportedError) {
+      return { ok: false, error: error.message };
+    }
+    logger.error("asset_engine.video_voice_swap_failed", {
       contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

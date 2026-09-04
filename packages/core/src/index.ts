@@ -101,6 +101,7 @@ export * from "./asset-engine/video-pipeline-complete";
 export * from "./asset-engine/video-pipeline-trigger";
 export * from "./asset-engine/video-pipeline-plan";
 export * from "./asset-engine/video-pipeline-scene-edit";
+export * from "./asset-engine/video-pipeline-voice-swap";
 export * from "./asset-engine/brand-avatar";
 export * from "./asset-engine/video-pipeline-avatar";
 export * from "./asset-engine/voice-catalog";

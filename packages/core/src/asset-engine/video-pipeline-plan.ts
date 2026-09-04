@@ -224,6 +224,11 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
       voiceProviderKey: plan.voiceProviderKey,
       mediaProviderKey: plan.mediaProviderKey,
       videoRenderProviderKey: renderResult.videoRenderProviderKey,
+      scenePlan: {
+        videoSources: plan.videoSources,
+        includeLogo: plan.includeLogo,
+        watermarkText: plan.watermarkText,
+      },
     });
 
     await contentPieceRepository.update(params.contentPieceId, { pending_scene_plan: null });

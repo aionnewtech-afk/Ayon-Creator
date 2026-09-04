@@ -1,12 +1,29 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProviderTier } from "@ayon/types";
 import { recordConsumption } from "../billing/credit-gate";
+import type { VideoRenderSceneSource } from "../providers/video-render-provider";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { ContentVersionRepository } from "../repositories/content-version.repository";
 import { CreditPricingRepository } from "../repositories/credit-pricing.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
 
 const VIDEO_GENERATION_TRIGGER_REASON = "video_generation";
+
+/**
+ * ★ Achado real (pedido direto do usuário — "criar uma opção para trocar
+ * somente a voz de um vídeo já gerado... manter cenas, ordem, duração,
+ * textos, marca/logo"): antes, `pending_scene_plan` (cenas, ordem, duração,
+ * branding) era descartado assim que o render terminava — sem ele salvo em
+ * algum lugar, trocar só a voz depois exigiria refazer a seleção de cenas do
+ * zero. Guardado aqui, dentro do próprio `content_versions.generation_metadata`
+ * (nenhuma migration nova), pra `swapVideoVoice` (video-pipeline-voice-swap.ts)
+ * reconstruir a MESMA composição, só com uma narração nova.
+ */
+export interface RenderedScenePlan {
+  videoSources: VideoRenderSceneSource[];
+  includeLogo?: boolean;
+  watermarkText?: string;
+}
 
 export interface CompleteVideoPipelineSuccessParams {
   /** Client de service role — webhook do n8n não tem sessão de usuário. */
@@ -19,6 +36,7 @@ export interface CompleteVideoPipelineSuccessParams {
   voiceProviderKey: string;
   mediaProviderKey: string;
   videoRenderProviderKey: string;
+  scenePlan: RenderedScenePlan;
 }
 
 /**
@@ -49,6 +67,7 @@ export async function completeVideoPipelineSuccess(params: CompleteVideoPipeline
       media_provider_key: params.mediaProviderKey,
       video_render_provider_key: params.videoRenderProviderKey,
       tier: params.tier,
+      scene_plan: params.scenePlan,
     },
   });
 

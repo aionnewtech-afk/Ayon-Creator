@@ -177,6 +177,7 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
         voiceProviderKey: narrateResult.voiceProviderKey,
         mediaProviderKey: scenesResult.mediaProviderKey,
         videoRenderProviderKey: renderResult.videoRenderProviderKey,
+        scenePlan: { videoSources: scenesResult.videoSources },
       });
 
       const { data: piece } = await db.from("content_pieces").select("*").eq("id", contentPieceId).single();
@@ -206,6 +207,7 @@ describe.skipIf(!hasAllEnv)("Pipeline de vídeo — narrate → scenes → rende
         voiceProviderKey: narrateResult.voiceProviderKey,
         mediaProviderKey: scenesResult.mediaProviderKey,
         videoRenderProviderKey: renderResult.videoRenderProviderKey,
+        scenePlan: { videoSources: scenesResult.videoSources },
       });
       const balanceAfterRetry = await getBalance(db, organizationId);
       expect(balanceAfterRetry).toBe(balanceAfter);
