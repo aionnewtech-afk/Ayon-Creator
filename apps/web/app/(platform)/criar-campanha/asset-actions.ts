@@ -20,6 +20,7 @@ import {
   applySceneCandidate,
   approveVideoScenePlan,
   deleteVideoScene,
+  duplicateVideoScene,
   ensureSufficientCredits,
   generateAvatarVideoForContentPiece,
   generateTextPiece,
@@ -1147,6 +1148,38 @@ export async function deleteReplacementSceneAction(contentPieceId: string, scene
     return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
   } catch (error) {
     logger.error("asset_engine.scene_delete_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "adicionar novas cenas... verificar se é possível adicionar/duplicar"): cópia entra logo depois da original — "adicionar cena" na prática é duplicar + trocar o visual da cópia pelos caminhos já existentes (buscar/gerar por IA/avatar/enviar arquivo), nenhuma ferramenta nova de "escolher visual" precisa existir. */
+export async function duplicateVideoSceneAction(contentPieceId: string, sceneIndex: number): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode adicionar cenas." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await duplicateVideoScene({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_duplicate_failed", {
       contentPieceId,
       sceneIndex,
       reason: error instanceof Error ? error.message : String(error),

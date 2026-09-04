@@ -18,6 +18,7 @@ import {
   generateVideoContentPieceAction,
   getContentPieceAction,
   listAvatarVoicesAction,
+  duplicateVideoSceneAction,
   regenerateContentPieceAction,
   rejectContentPieceAction,
   replaceSceneWithAvatarAction,
@@ -1423,6 +1424,14 @@ function VideoScenePlanReview({
     setSelectedIndex(null);
   }
 
+  /** ★ Achado real (pedido direto do usuário — "adicionar novas cenas"): a cópia entra logo depois da original — troca o visual dela pelos mesmos botões (buscar/IA/avatar/upload) de qualquer outra cena. */
+  async function handleDuplicate(index: number) {
+    if (busy) return;
+    setBusy(true);
+    handleResult(await duplicateVideoSceneAction(pieceId, index));
+    setSelectedIndex(index + 1);
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground">
@@ -1708,6 +1717,10 @@ function VideoScenePlanReview({
                 }}
               />
             </label>
+
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => handleDuplicate(selectedIndex)}>
+              Duplicar / adicionar cena
+            </Button>
 
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => handleDelete(selectedIndex)}>
               Remover cena

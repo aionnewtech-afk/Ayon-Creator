@@ -64,13 +64,32 @@ async function persistPlan(db: SupabaseClient<Database>, contentPieceId: string,
  * pra última cena (mesmo mecanismo já validado real do plano original);
  * `startSeconds` sempre recomputado do zero depois — nunca deixa um "buraco"
  * ou sobreposição entre cenas.
+ *
+ * ★ Achado real (pedido direto do usuário — "adicionar novas cenas"/
+ * "duplicar uma cena"): o caso simétrico (trilha de vídeo mais LONGA que a
+ * narração, ex.: depois de duplicar/inserir uma cena) nunca tinha sido
+ * tratado — a condição só cobria "curta demais". Sem isso, adicionar uma
+ * cena deixava o vídeo mudo tocando depois do fim da narração. Encolhe de
+ * trás pra frente (última cena primeiro), nunca deixa nenhuma abaixo de
+ * `MIN_SCENE_LENGTH_SECONDS`.
  */
 function reconcilePlanTimeline(videoSources: VideoRenderSceneSource[], totalDurationSeconds: number): void {
   const covered = videoSources.reduce((sum, s) => sum + s.lengthSeconds, 0);
-  const shortfall = totalDurationSeconds - covered;
-  if (shortfall > 0.01) {
-    videoSources[videoSources.length - 1]!.lengthSeconds += shortfall;
+  const diff = totalDurationSeconds - covered;
+
+  if (diff > 0.01) {
+    videoSources[videoSources.length - 1]!.lengthSeconds += diff;
+  } else if (diff < -0.01) {
+    let remaining = -diff;
+    for (let i = videoSources.length - 1; i >= 0 && remaining > 0.01; i--) {
+      const scene = videoSources[i]!;
+      const shrinkable = Math.max(0, scene.lengthSeconds - MIN_SCENE_LENGTH_SECONDS);
+      const shrinkBy = Math.min(shrinkable, remaining);
+      scene.lengthSeconds -= shrinkBy;
+      remaining -= shrinkBy;
+    }
   }
+
   let cursor = 0;
   for (const source of videoSources) {
     source.startSeconds = cursor;
@@ -445,6 +464,25 @@ export async function deleteVideoScene(params: SceneEditParams): Promise<void> {
   }
 
   videoSources.splice(params.sceneIndex, 1);
+  reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "adicionar novas cenas... verificar
+ * se é possível adicionar/duplicar"): não existia nenhum jeito de ADICIONAR
+ * uma cena — só trocar/remover uma já existente. Duplicar (cópia entra logo
+ * depois da original, mesmo trecho de roteiro/`segmentIndex` — faz sentido
+ * mostrar o mesmo momento da narração de 2 jeitos) já cobre os dois pedidos
+ * de uma vez: "adicionar cena" = duplicar uma + trocar o visual da cópia
+ * pelos mesmos caminhos já existentes (busca, IA, avatar, upload — nenhuma
+ * ferramenta nova precisa existir só pra isso).
+ */
+export async function duplicateVideoScene(params: SceneEditParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const source = requireScene(videoSources, params.sceneIndex);
+
+  videoSources.splice(params.sceneIndex + 1, 0, { ...source, startSeconds: 0 });
   reconcilePlanTimeline(videoSources, plan.audioDurationMs / 1000);
   await persistPlan(params.db, params.contentPieceId, plan);
 }
