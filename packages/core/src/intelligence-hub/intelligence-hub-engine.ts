@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ProviderTier } from "@ayon/types";
+import type { ContentStyle, Database, ProviderTier } from "@ayon/types";
 import { BrandBrainRepository } from "../repositories/brand-brain.repository";
 import { SpecialistRepository } from "../repositories/specialist.repository";
 import { IntelligenceHubSessionRepository } from "../repositories/intelligence-hub-session.repository";
@@ -21,6 +21,8 @@ export interface RunCampaignStrategySessionParams {
   niche: string | null;
   objective: string;
   actorUserId: string;
+  /** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional, com dicas, informações"): escolhido na criação da campanha, persistido em `campaigns.content_style`. */
+  contentStyle: ContentStyle;
 }
 
 export interface RunCampaignStrategySessionResult {
@@ -44,6 +46,7 @@ interface RunStrategyForCampaignParams {
   niche: string | null;
   objective: string;
   campaignId: string;
+  contentStyle: ContentStyle;
 }
 
 interface RunStrategyForCampaignResult {
@@ -53,6 +56,8 @@ interface RunStrategyForCampaignResult {
   consolidatedStrategy: string;
   rationale: string;
   divergences: string | null;
+  /** ★ Achado real (briefing detalhado virou roteiro genérico): devolvido pro chamador persistir em `campaigns.research_notes` — `generateTextPiece` precisa dele além do resumo do Coordinator. */
+  researchNotes: string | null;
 }
 
 /**
@@ -118,6 +123,7 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       learnedPreferencesText,
       objective: params.objective,
       researchNotes: researchNotes ?? undefined,
+      contentStyle: params.contentStyle,
       specialists,
     });
 
@@ -131,6 +137,7 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       objective: params.objective,
       opinions,
       researchNotes: researchNotes ?? undefined,
+      contentStyle: params.contentStyle,
     });
 
     const consolidatedResult = {
@@ -154,6 +161,7 @@ async function runStrategyForCampaign(params: RunStrategyForCampaignParams): Pro
       consolidatedStrategy: coordinatorResult.consolidatedStrategy,
       rationale: coordinatorResult.rationale,
       divergences: coordinatorResult.divergences,
+      researchNotes: researchNotes ?? null,
     };
   } catch (error) {
     await sessionRepository.update(session.id, { status: "failed" }).catch(() => undefined);
@@ -193,6 +201,7 @@ export async function runCampaignStrategySession(
     niche: params.niche,
     objective: params.objective,
     campaignId,
+    contentStyle: params.contentStyle,
   });
 
   await campaignRepository.create({
@@ -202,6 +211,9 @@ export async function runCampaignStrategySession(
     title: deriveCampaignTitle(params.objective),
     status: "ready_for_review",
     created_by: params.actorUserId,
+    objective: params.objective,
+    content_style: params.contentStyle,
+    research_notes: result.researchNotes,
     strategy_summary: {
       executive_summary: result.executiveSummary,
       consolidated_strategy: result.consolidatedStrategy,
@@ -222,6 +234,7 @@ export interface RedoCampaignStrategySessionParams {
   niche: string | null;
   objective: string;
   campaignId: string;
+  contentStyle: ContentStyle;
 }
 
 /**
@@ -248,10 +261,14 @@ export async function redoCampaignStrategySession(
     niche: params.niche,
     objective: params.objective,
     campaignId: params.campaignId,
+    contentStyle: params.contentStyle,
   });
 
   await campaignRepository.update(params.campaignId, {
     intelligence_hub_session_id: result.sessionId,
+    objective: params.objective,
+    content_style: params.contentStyle,
+    research_notes: result.researchNotes,
     strategy_summary: {
       executive_summary: result.executiveSummary,
       consolidated_strategy: result.consolidatedStrategy,

@@ -69,6 +69,10 @@ export const CAMPAIGN_STATUSES = [
 ] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
+/** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional, com dicas, informações"): escolhido na criação da campanha (`campaigns.content_style`, migration 0029) — influencia o tom do painel de especialistas e do roteiro final. */
+export const CONTENT_STYLES = ["comercial", "institucional"] as const;
+export type ContentStyle = (typeof CONTENT_STYLES)[number];
+
 export const SUBSCRIPTION_PLANS = ["starter", "pro", "business"] as const;
 export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 

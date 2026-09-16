@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button, Textarea } from "@ayon/ui";
+import type { ContentStyle } from "@ayon/types";
 import { createCampaignStrategyAction, type SpecialistOpinionView } from "./actions";
 import { CampaignWorkspace } from "./campaign-workspace";
+import { ContentStylePicker } from "./content-style-picker";
 
 interface StrategyResult {
   campaignId: string;
@@ -36,6 +38,7 @@ export function CampaignStrategyFlow({
 }: CampaignStrategyFlowProps) {
   const [mode, setMode] = useState<Mode>("form");
   const [objective, setObjective] = useState(initialObjective ?? "");
+  const [contentStyle, setContentStyle] = useState<ContentStyle>("comercial");
   const [result, setResult] = useState<StrategyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -49,7 +52,7 @@ export function CampaignStrategyFlow({
     setError(null);
     setBlocked(false);
 
-    const response = await createCampaignStrategyAction(trimmed);
+    const response = await createCampaignStrategyAction(trimmed, contentStyle);
 
     if (!response.ok || !response.campaignId || !response.opinions || !response.consolidatedStrategy || !response.rationale) {
       setError(response.error ?? "Algo deu errado. Tenta de novo?");
@@ -107,6 +110,7 @@ export function CampaignStrategyFlow({
           className="min-h-[120px]"
           disabled={mode === "loading"}
         />
+        <ContentStylePicker value={contentStyle} onChange={setContentStyle} disabled={mode === "loading"} />
         {error ? (
           <div className="text-sm text-destructive">
             <p>{error}</p>

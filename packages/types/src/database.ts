@@ -7,6 +7,7 @@
 import type {
   BrandStatus,
   CampaignStatus,
+  ContentStyle,
   ContentPackageStatus,
   ContentPieceFormat,
   ContentPieceStatus,
@@ -429,6 +430,12 @@ export interface Database {
           strategy_summary: Record<string, unknown> | null;
           status: CampaignStatus;
           visual_brief: Record<string, unknown> | null;
+          /** ★ Achado real (pedido direto do usuário — briefing detalhado virou roteiro genérico): objetivo bruto digitado pelo usuário, nunca resumido — `generateTextPiece` precisa dele pra não perder itens específicos (destinos, produtos) que `strategy_summary.consolidated_strategy` comprime. Migration 0029. */
+          objective: string | null;
+          /** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional"): escolhido na criação da campanha, influencia o tom do painel de especialistas e do roteiro final. Migration 0029. */
+          content_style: ContentStyle;
+          /** ★ Mesmo achado do `objective` acima — fatos concretos de `researchCampaignObjective`, quando disponíveis. Migration 0029. */
+          research_notes: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -440,6 +447,9 @@ export interface Database {
           title: string;
           strategy_summary?: Record<string, unknown> | null;
           status?: CampaignStatus;
+          objective?: string | null;
+          content_style?: ContentStyle;
+          research_notes?: string | null;
           visual_brief?: Record<string, unknown> | null;
           created_by?: string | null;
         };

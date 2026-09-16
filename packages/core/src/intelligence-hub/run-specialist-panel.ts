@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ProviderTier } from "@ayon/types";
+import type { ContentStyle, Database, ProviderTier } from "@ayon/types";
 import { SpecialistOpinionRepository } from "../repositories/specialist-opinion.repository";
 import { resolveLlmProvider } from "../providers/provider-gateway";
 import { parseLlmJson } from "../shared/llm-json";
@@ -32,6 +32,8 @@ export interface RunSpecialistPanelParams {
   objective: string;
   /** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): fatos reais de `researchCampaignObjective`, quando disponíveis — repassados pra cada especialista via `buildSpecialistUserMessage`. */
   researchNotes?: string;
+  /** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional"): repassado pra `buildSpecialistUserMessage` mudar o tom da opinião. */
+  contentStyle?: ContentStyle;
   specialists: SpecialistRow[];
 }
 
@@ -54,6 +56,7 @@ export async function runSpecialistPanel(params: RunSpecialistPanelParams): Prom
         learnedPreferencesText: params.learnedPreferencesText,
         objective: params.objective,
         researchNotes: params.researchNotes,
+        contentStyle: params.contentStyle,
       });
 
       const completion = await llmProvider.complete({

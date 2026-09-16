@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Button, Textarea } from "@ayon/ui";
+import type { ContentStyle } from "@ayon/types";
 import { redoCampaignStrategyAction, type SpecialistOpinionView } from "./actions";
 import { StrategyReviewPanel } from "./strategy-review-panel";
 import { ContentPackageReview } from "./content-package-review";
+import { ContentStylePicker } from "./content-style-picker";
 import type { ContentPieceView } from "./asset-actions";
 
 interface StrategyData {
@@ -61,6 +63,7 @@ export function CampaignWorkspace({
 
   const [redoOpen, setRedoOpen] = useState(false);
   const [redoDraft, setRedoDraft] = useState("");
+  const [redoContentStyle, setRedoContentStyle] = useState<ContentStyle>("comercial");
   const [redoLoading, setRedoLoading] = useState(false);
   const [redoError, setRedoError] = useState<string | null>(null);
 
@@ -70,7 +73,7 @@ export function CampaignWorkspace({
     setRedoLoading(true);
     setRedoError(null);
 
-    const result = await redoCampaignStrategyAction(campaignId, trimmed);
+    const result = await redoCampaignStrategyAction(campaignId, trimmed, redoContentStyle);
     setRedoLoading(false);
 
     if (!result.ok || !result.opinions || !result.consolidatedStrategy || !result.rationale) {
@@ -125,6 +128,7 @@ export function CampaignWorkspace({
               className="min-h-[100px]"
               disabled={redoLoading}
             />
+            <ContentStylePicker value={redoContentStyle} onChange={setRedoContentStyle} disabled={redoLoading} />
             {redoError ? <p className="text-sm text-destructive">{redoError}</p> : null}
             <div className="flex gap-2">
               <Button size="sm" disabled={redoLoading || !redoDraft.trim()} onClick={handleRedo}>

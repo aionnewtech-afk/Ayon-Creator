@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ProviderTier } from "@ayon/types";
+import type { ContentStyle, Database, ProviderTier } from "@ayon/types";
 import { resolveLlmProvider } from "../providers/provider-gateway";
 import { parseLlmJson } from "../shared/llm-json";
 import type { KnownFieldsSnapshot } from "../brand-brain/onboarding-prompt";
@@ -36,6 +36,8 @@ export interface RunCoordinatorParams {
   opinions: SpecialistOpinionResult[];
   /** ★ Achado real (pedido direto do usuário — "a pesquisa tem que de fato valer a pena"): mesmo bloco de `researchCampaignObjective` repassado ao painel de especialistas — o Coordinator precisa dele pra não "resumir" os fatos concretos até virarem genéricos. */
   researchNotes?: string;
+  /** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional"): repassado pra `buildCoordinatorUserMessage` mudar o tom da consolidação. */
+  contentStyle?: ContentStyle;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function runCoordinator(params: RunCoordinatorParams): Promise<Coor
       rationale: opinion.rationale,
     })),
     researchNotes: params.researchNotes,
+    contentStyle: params.contentStyle,
   });
 
   const completion = await llmProvider.complete({

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ContentPieceFormat, Database, ProviderTier } from "@ayon/types";
+import type { ContentPieceFormat, ContentStyle, Database, ProviderTier } from "@ayon/types";
 import { resolveLlmProvider } from "../providers/provider-gateway";
 import { parseLlmJson } from "../shared/llm-json";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
@@ -26,6 +26,12 @@ export interface GenerateTextPieceParams {
   learnedPreferencesText?: string;
   consolidatedStrategy: string;
   strategyRationale: string;
+  /** ★ Achado real (briefing detalhado virou roteiro genérico): objetivo bruto digitado pelo usuário — fonte primária de itens específicos que `consolidatedStrategy` pode ter comprimido. */
+  objective?: string;
+  /** ★ Mesmo achado — fatos concretos de `researchCampaignObjective`, quando disponíveis. */
+  researchNotes?: string;
+  /** ★ Achado real (pedido direto do usuário — "cunho mais comercial ou pegada mais institucional"). */
+  contentStyle?: ContentStyle;
 }
 
 export interface GenerateTextPieceResult {
@@ -51,15 +57,23 @@ export async function generateTextPiece(params: GenerateTextPieceParams): Promis
       brandName: params.brandName,
       knownFields: params.knownFields,
       learnedPreferencesText: params.learnedPreferencesText,
+      objective: params.objective,
+      researchNotes: params.researchNotes,
       consolidatedStrategy: params.consolidatedStrategy,
       strategyRationale: params.strategyRationale,
       format: params.format,
     });
 
     const completion = await llmProvider.complete({
-      system: buildAssetGenerationSystemPrompt(params.format),
+      system: buildAssetGenerationSystemPrompt(params.format, params.contentStyle),
       messages: [{ role: "user", content: userMessage }],
-      maxTokens: 1536,
+      // ★ Achado real (validado com chamada real — objetivo com 6 itens
+      // específicos + tom institucional, mais descritivo por item, cortou no
+      // meio da 3ª descrição com 1536): a instrução "nunca comprima uma
+      // lista" (acima) agora deliberadamente produz textos mais longos
+      // quando o objetivo pede vários itens — 1536 bastava pro texto curto
+      // de sempre, não pra isso.
+      maxTokens: 2560,
     });
 
     const parsed = TextPieceResponseSchema.parse(parseLlmJson(completion.text));

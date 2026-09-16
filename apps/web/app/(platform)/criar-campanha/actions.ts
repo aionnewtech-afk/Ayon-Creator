@@ -21,7 +21,7 @@ import {
   redoCampaignStrategySession,
   runCampaignStrategySession,
 } from "@ayon/core";
-import { TEXT_ONLY_CONTENT_PIECE_FORMATS } from "@ayon/types";
+import { TEXT_ONLY_CONTENT_PIECE_FORMATS, type ContentStyle } from "@ayon/types";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -56,7 +56,10 @@ const CAMPAIGN_STRATEGY_TRIGGER_REASON = "campaign_strategy";
  * Aciona uma sessão completa do Intelligence Hub para estratégia de campanha
  * (Fluxo 10, versão simplificada da Missão 3 — sem geração de conteúdo ainda).
  */
-export async function createCampaignStrategyAction(objective: string): Promise<CreateCampaignStrategyResult> {
+export async function createCampaignStrategyAction(
+  objective: string,
+  contentStyle: ContentStyle = "comercial",
+): Promise<CreateCampaignStrategyResult> {
   const session = await getCurrentSession();
 
   if (!session?.organization || !session.membership || !session.brand) {
@@ -94,6 +97,7 @@ export async function createCampaignStrategyAction(objective: string): Promise<C
       niche: session.brand.niche,
       objective: trimmedObjective,
       actorUserId: session.user.id,
+      contentStyle,
     });
 
     await recordConsumption({
@@ -226,7 +230,11 @@ export async function getCampaignStrategyForResumeAction(campaignId: string): Pr
  * `approveCampaignStrategyAction` detecta isso e regenera os formatos
  * textuais em vez de duplicar as 9 peças.
  */
-export async function redoCampaignStrategyAction(campaignId: string, objective: string): Promise<CreateCampaignStrategyResult> {
+export async function redoCampaignStrategyAction(
+  campaignId: string,
+  objective: string,
+  contentStyle: ContentStyle = "comercial",
+): Promise<CreateCampaignStrategyResult> {
   const session = await getCurrentSession();
   if (!session?.organization || !session.membership || !session.brand) {
     return { ok: false, error: FRIENDLY_ERROR };
@@ -269,6 +277,7 @@ export async function redoCampaignStrategyAction(campaignId: string, objective: 
       niche: session.brand.niche,
       objective: trimmedObjective,
       campaignId,
+      contentStyle,
     });
 
     await recordConsumption({
@@ -428,6 +437,9 @@ export async function approveCampaignStrategyAction(campaignId: string): Promise
         learnedPreferencesText,
         consolidatedStrategy,
         strategyRationale,
+        objective: campaign.objective ?? undefined,
+        researchNotes: campaign.research_notes ?? undefined,
+        contentStyle: campaign.content_style,
       });
 
       await recordConsumption({
