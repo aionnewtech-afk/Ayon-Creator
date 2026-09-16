@@ -38,6 +38,7 @@ import {
   searchAvatarBackgroundImages,
   searchSceneCandidates,
   setSceneDuration,
+  setSceneTrim,
   suggestSceneAiPrompt,
   swapVideoVoice,
   triggerPhotoGeneration,
@@ -93,6 +94,8 @@ export interface ContentPieceView {
       assetType?: "video" | "image" | "avatar";
       segmentIndex?: number;
       generationPrompt?: string;
+      /** ★ Achado real (pedido direto do usuário — "quero poder editar uma cena, cortar e tal, não só quando for incluir, mas depois de inclusa"): ponto de início atual dentro do arquivo-fonte — pré-preenche o player de recorte ao reabrir. */
+      trimSeconds?: number;
     }[];
   };
   /** ★ Achado real (pedido direto do usuário — item 7, editor de Stories): ajustes atuais (texto/fonte/logo) — pré-preenche o painel de edição ao reabrir, em vez de sempre começar em branco. */
@@ -155,6 +158,7 @@ async function toViewWithMedia(
         assetType?: "video" | "image" | "avatar";
         segmentIndex?: number;
         generationPrompt?: string;
+        trimSeconds?: number;
       }[];
     };
     view.pendingScenePlan = {
@@ -167,6 +171,7 @@ async function toViewWithMedia(
         assetType: s.assetType,
         segmentIndex: s.segmentIndex,
         generationPrompt: s.generationPrompt,
+        trimSeconds: s.trimSeconds,
       })),
     };
     return view;
@@ -1220,6 +1225,42 @@ export async function setSceneDurationAction(
     return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
   } catch (error) {
     logger.error("asset_engine.scene_duration_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "quero poder editar uma cena, cortar e tal, não só quando for incluir, mas depois de inclusa"): ajusta só `trimSeconds` da cena já existente (banco de vídeo, IA, avatar ou upload anterior) — nunca troca o arquivo, só o ponto de início dentro dele. */
+export async function setSceneTrimAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  trimSeconds: number,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode ajustar o recorte das cenas." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await setSceneTrim({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, trimSeconds });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_trim_failed", {
       contentPieceId,
       sceneIndex,
       reason: error instanceof Error ? error.message : String(error),

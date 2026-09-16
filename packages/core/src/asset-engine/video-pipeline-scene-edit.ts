@@ -518,6 +518,36 @@ export async function setSceneDuration(params: SetSceneDurationParams): Promise<
   await persistPlan(params.db, params.contentPieceId, plan);
 }
 
+export interface SetSceneTrimParams extends SceneEditParams {
+  trimSeconds: number;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "quero poder editar uma cena,
+ * cortar e tal, não só quando for incluir, mas depois de inclusa"): até
+ * aqui, o recorte (`trimSeconds`) só existia no momento de ENVIAR um arquivo
+ * novo pra cena (`replaceVideoSceneWithUpload`) — uma cena já preenchida
+ * (banco de vídeo, IA, avatar ou upload anterior) não tinha como ter seu
+ * ponto de início reajustado sem trocar o arquivo inteiro de novo. Muda só
+ * `trimSeconds` da cena já existente (mesma URL/`assetType`, nunca troca o
+ * arquivo) — a UI reaproveita o mesmo player de recorte já usado no upload,
+ * só que assistindo a URL que já está na cena, em vez de um arquivo local.
+ */
+export async function setSceneTrim(params: SetSceneTrimParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  if (scene.assetType === "image") {
+    throw new Error("Essa cena é uma imagem — não tem o que recortar.");
+  }
+  if (!Number.isFinite(params.trimSeconds) || params.trimSeconds < 0) {
+    throw new Error("Ponto de recorte inválido.");
+  }
+
+  scene.trimSeconds = params.trimSeconds;
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
 export interface ReorderVideoScenesParams {
   db: SupabaseClient<Database>;
   contentPieceId: string;

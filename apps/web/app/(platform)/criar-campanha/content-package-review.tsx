@@ -27,6 +27,7 @@ import {
   searchSceneCandidatesAction,
   selectContentPieceVersionAction,
   setSceneDurationAction,
+  setSceneTrimAction,
   suggestSceneAiPromptAction,
   swapVideoVoiceAction,
   updateVisualOverridesAction,
@@ -365,7 +366,15 @@ export function ContentPackageReview({
       setError(result.error ?? "Algo deu errado. Tenta de novo?");
       return;
     }
-    window.open(result.downloadUrl, "_blank");
+    // ★ Achado real (pedido direto do usuário — "não faz download do zip"):
+    // `window.open(url, "_blank")` depois de um `await` sai da "janela de
+    // gesto do usuário" que os navegadores exigem pra abrir aba nova sem
+    // bloquear como pop-up — o zip carregava certinho no servidor, só a
+    // aba nunca abria, sem erro nenhum visível. Navegação na mesma aba
+    // (`location.href`) nunca é tratada como pop-up, mesmo depois do
+    // `await`, e um `Content-Type: application/zip` vira download nativo
+    // em vez de sair do app.
+    window.location.href = result.downloadUrl;
   }
 
   async function handleGeneratePhoto(pieceId: string) {
@@ -1395,6 +1404,16 @@ function VideoScenePlanReview({
   } | null>(null);
   const trimPickerVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  // ★ Achado real (pedido direto do usuário — "quero poder editar uma cena,
+  // cortar e tal, não só quando for incluir, mas depois de inclusa"): o
+  // picker acima só existe pra um arquivo local recém-escolhido (antes de
+  // subir) — este é o mesmo player, mas assistindo a URL que JÁ está na
+  // cena (banco de vídeo, IA, avatar ou upload anterior), sem trocar o
+  // arquivo, só reajustando `trimSeconds`.
+  const [recutIndex, setRecutIndex] = useState<number | null>(null);
+  const [recutTrimStart, setRecutTrimStart] = useState(0);
+  const recutVideoRef = useRef<HTMLVideoElement | null>(null);
+
   // ★ Achado real (pedido direto do usuário — "tem como a gente assistir as
   // cenas com a narração antes de editar e de baixar, porque só nas
   // figurinhas pequenas não dá pra ter muita noção"): prévia client-side —
@@ -1445,6 +1464,7 @@ function VideoScenePlanReview({
     setAiPromptOpenFor(null);
     setDurationDraft(plan.scenes[index]?.lengthSeconds.toFixed(1) ?? "");
     handleCancelTrim();
+    handleCancelRecut();
   }
 
   async function handleSetDuration(index: number) {
@@ -1563,6 +1583,27 @@ function VideoScenePlanReview({
     URL.revokeObjectURL(objectUrl);
     setTrimPicker(null);
     void handleUpload(index, file, trimStart);
+  }
+
+  function handleOpenRecut(index: number) {
+    setRecutIndex(index);
+    setRecutTrimStart(plan.scenes[index]?.trimSeconds ?? 0);
+  }
+
+  function handleCancelRecut() {
+    setRecutIndex(null);
+  }
+
+  function handleUseCurrentTimeAsRecutStart() {
+    if (!recutVideoRef.current) return;
+    setRecutTrimStart(recutVideoRef.current.currentTime);
+  }
+
+  async function handleConfirmRecut(index: number) {
+    if (busy) return;
+    setBusy(true);
+    setRecutIndex(null);
+    handleResult(await setSceneTrimAction(pieceId, index, recutTrimStart));
   }
 
   async function handleDelete(index: number) {
@@ -1870,10 +1911,52 @@ function VideoScenePlanReview({
               Duplicar / adicionar cena
             </Button>
 
+            {/* ★ Achado real (pedido direto do usuário — "quero poder editar
+                uma cena, cortar e tal, não só quando for incluir, mas depois
+                de inclusa"): banco de vídeo, IA e avatar não passam pelo
+                picker de recorte do upload (só um arquivo local recém-
+                escolhido tem isso) — este botão reabre o mesmo tipo de
+                player, mas assistindo o que já está na cena. */}
+            {plan.scenes[selectedIndex]?.assetType !== "image" ? (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => handleOpenRecut(selectedIndex)}>
+                Cortar cena
+              </Button>
+            ) : null}
+
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => handleDelete(selectedIndex)}>
               Remover cena
             </Button>
           </div>
+
+          {recutIndex === selectedIndex ? (
+            <div className="space-y-2 rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Assista e escolha de onde o recorte dessa cena começa — ela continua durando{" "}
+                {plan.scenes[selectedIndex]?.lengthSeconds.toFixed(1)}s a partir desse ponto.
+              </p>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video
+                ref={recutVideoRef}
+                src={plan.scenes[selectedIndex]?.url}
+                controls
+                className="w-full rounded-md bg-black"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleUseCurrentTimeAsRecutStart}>
+                  Usar o ponto atual como início
+                </Button>
+                <span className="text-xs text-muted-foreground">Início escolhido: {recutTrimStart.toFixed(1)}s</span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={busy} onClick={() => handleConfirmRecut(selectedIndex)}>
+                  Usar esse recorte
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={handleCancelRecut}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex items-center gap-2">
             <label htmlFor="scene-duration" className="text-xs text-muted-foreground">
