@@ -23,6 +23,7 @@ export interface RenderedScenePlan {
   videoSources: VideoRenderSceneSource[];
   includeLogo?: boolean;
   watermarkText?: string;
+  coverTitle?: string | null;
 }
 
 export interface CompleteVideoPipelineSuccessParams {

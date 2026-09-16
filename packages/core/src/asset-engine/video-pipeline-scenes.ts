@@ -344,5 +344,19 @@ export async function selectVideoScenes(params: SelectVideoScenesParams): Promis
     lastSource.lengthSeconds += shortfallSeconds;
   }
 
+  // ★ Achado real (pedido direto do usuário — "sugerir o nome... vídeo bem
+  // blogueiro TikTok"): passe único, separado da seleção de cena em si
+  // (nunca mexe nos branches acima) — um trecho pode virar vários cortes
+  // rápidos (`MAX_CLIP_SECONDS`); o rótulo aparece só na PRIMEIRA cena de
+  // cada trecho (evita o mesmo texto piscando de novo a cada corte do mesmo
+  // trecho).
+  const labeledSegments = new Set<number>();
+  for (const source of videoSources) {
+    if (source.segmentIndex === undefined || labeledSegments.has(source.segmentIndex)) continue;
+    const label = segments[source.segmentIndex]?.onScreenLabel;
+    if (label) source.onScreenLabel = label;
+    labeledSegments.add(source.segmentIndex);
+  }
+
   return { videoSources, mediaProviderKey, segments };
 }

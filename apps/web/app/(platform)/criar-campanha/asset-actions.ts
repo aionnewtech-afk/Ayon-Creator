@@ -96,6 +96,8 @@ export interface ContentPieceView {
       generationPrompt?: string;
       /** ★ Achado real (pedido direto do usuário — "quero poder editar uma cena, cortar e tal, não só quando for incluir, mas depois de inclusa"): ponto de início atual dentro do arquivo-fonte — pré-preenche o player de recorte ao reabrir. */
       trimSeconds?: number;
+      /** ★ Achado real (pedido direto do usuário — "sugerir o nome... vídeo bem blogueiro TikTok"): rótulo sugerido que vai aparecer sobreposto durante essa cena no render final. */
+      onScreenLabel?: string;
     }[];
   };
   /** ★ Achado real (pedido direto do usuário — item 7, editor de Stories): ajustes atuais (texto/fonte/logo) — pré-preenche o painel de edição ao reabrir, em vez de sempre começar em branco. */
@@ -159,6 +161,7 @@ async function toViewWithMedia(
         segmentIndex?: number;
         generationPrompt?: string;
         trimSeconds?: number;
+        onScreenLabel?: string;
       }[];
     };
     view.pendingScenePlan = {
@@ -172,6 +175,7 @@ async function toViewWithMedia(
         segmentIndex: s.segmentIndex,
         generationPrompt: s.generationPrompt,
         trimSeconds: s.trimSeconds,
+        onScreenLabel: s.onScreenLabel,
       })),
     };
     return view;
@@ -395,6 +399,8 @@ export interface GenerateVideoOptions {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa... sutil e em algum dos cantos"): texto opcional (@handle ou nome) sobreposto no vídeo inteiro, discreto, num canto. */
   watermarkText?: string;
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): sobreposto nos primeiros segundos, sobre a 1ª cena. */
+  includeCoverTitle?: boolean;
 }
 
 export async function generateVideoContentPieceAction(
@@ -441,6 +447,7 @@ export async function generateVideoContentPieceAction(
       avgSceneSeconds: options?.avgSceneSeconds,
       includeLogo: options?.includeLogo,
       watermarkText: options?.watermarkText?.trim() || undefined,
+      includeCoverTitle: options?.includeCoverTitle,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);

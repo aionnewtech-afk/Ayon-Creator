@@ -48,6 +48,8 @@ export interface VideoRenderSceneSource {
   segmentIndex?: number;
   /** ★ Achado real (pedido direto do usuário — "mostrar o prompt exato usado em cada peça gerada"): prompt de geração (Veo/Gemini image) ou termo de busca (Pexels) usado pra achar esta cena específica. */
   generationPrompt?: string;
+  /** ★ Achado real (pedido direto do usuário — "quero que o vídeo seja bem blogueiro TikTok... sugerir o nome"): rótulo curto (nome do lugar/prato/atração), copiado do `segment.onScreenLabel` correspondente (segment-script.ts) — sobreposto na tela durante esta cena, ver `buildVideoTimeline`. */
+  onScreenLabel?: string;
   /**
    * ★ Achado real (pedido direto do usuário — "incluir a oportunidade de
    * incluir um vídeo e recortar a cena que quero"): sem isso, um vídeo
@@ -102,6 +104,8 @@ export interface VideoRenderRequest {
   videoSources: VideoRenderSceneSource[];
   aspectRatio: "9:16";
   branding?: VideoBranding;
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): sobreposto nos primeiros segundos do vídeo, sobre a 1ª cena — nunca um clipe/segmento próprio (evitaria mexer no timing já validado de narração/cenas). Ausente/vazio não adiciona nada. */
+  coverTitle?: string | null;
 }
 
 export interface VideoRenderResult {

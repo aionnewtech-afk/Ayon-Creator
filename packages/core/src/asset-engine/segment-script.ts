@@ -32,6 +32,19 @@ export interface ScriptSegment {
    * que o resultado do banco de imagem — nunca baixado/usado sozinho.
    */
   realSourceHint?: string;
+  /**
+   * ★ Achado real (pedido direto do usuário — "sugerir opções... legendas ou
+   * textos, tipo, se to falando de tal lugar, sugerir o nome... quero que o
+   * vídeo seja bem blogueiro TikTok"): rótulo curto pra aparecer NA TELA
+   * durante esse trecho, quando ele nomeia um lugar/produto/atração
+   * específico (ex.: "Pastel de Nata — Lisboa", "Baklava — Istambul") —
+   * mesmo estilo de call-out que vídeos de viagem/blogueiro sempre têm.
+   * NUNCA inclua endereço/dado que o modelo não teria como confirmar (sem
+   * pesquisa real por trás) — só o nome do lugar/prato/atração já citado no
+   * próprio trecho. Ausente pra trechos sem nome específico (ex.: abertura,
+   * fechamento, CTA).
+   */
+  onScreenLabel?: string;
 }
 
 function buildSystemPrompt(context: string): string {
@@ -65,7 +78,8 @@ function buildSystemPrompt(context: string): string {
     // lugar concreto.
     "SEMPRE inclua pessoas reais fazendo uma atividade concreta e ligada ao trecho na busca — nunca um cenário/objeto vazio sozinho. Ex.: em vez de \"beach sunset\", busque \"couple walking beach sunset\"; em vez de \"colonial cafe\", busque \"friends colonial cafe coffee\"; em vez de \"mountain village\", busque \"tourists mountain village\". Escolha o tipo de pessoa (casal, amigos, família, turistas, um profissional) que combine com o público da campanha, indicado no contexto acima. Só use um termo sem pessoa se o trecho for genuinamente só sobre um objeto/prato específico (ex. um close de um prato) — mesmo assim prefira incluir alguém interagindo com ele (\"person eating\", \"chef preparing\") quando fizer sentido. " +
     "Para trechos que NÃO mencionam um lugar/atração concreto (ex.: encerramento, chamada para ação, promessa de suporte), NÃO use termos abstratos de escritório/planejamento (como 'travel planning', 'map', 'itinerary') — eles tendem a trazer clipes de estoque com texto ou bandeiras de outros países, quebrando a identidade da campanha. Prefira pessoas vivendo o benefício da marca (ex.: alguém sorrindo ao telefone, um aperto de mão, uma família feliz), sempre em inglês. " +
-    "Responda só com um JSON no formato {\"segments\": [{\"text\": \"...\", \"searchQuery\": \"...\", \"sceneType\": \"real|ai|brand\", \"aiPrompt\": \"...\", \"realSourceHint\": \"...\"}]} (`aiPrompt`/`realSourceHint` só quando fizerem sentido pro `sceneType` daquele trecho, ausentes/omitidos nos outros casos), cobrindo o roteiro inteiro (a concatenação dos `text` deve reconstruir o roteiro, em português — só `searchQuery`/`aiPrompt` são em inglês), com pelo menos 2 e no máximo 6 trechos."
+    "Pra trechos que citam um lugar/prato/atração ESPECÍFICO E NOMEADO, preencha também `onScreenLabel`: um rótulo bem curto (2-5 palavras, em português, ex.: \"Pastel de Nata — Lisboa\", \"Baklava — Istambul\") pra aparecer como texto sobreposto na tela durante essa cena, estilo vídeo de viagem/blogueiro — SÓ o nome já citado no próprio trecho, nunca invente endereço, preço ou qualquer dado que não esteja no texto. Ausente pra trechos sem nome específico. " +
+    "Responda só com um JSON no formato {\"segments\": [{\"text\": \"...\", \"searchQuery\": \"...\", \"sceneType\": \"real|ai|brand\", \"aiPrompt\": \"...\", \"realSourceHint\": \"...\", \"onScreenLabel\": \"...\"}]} (`aiPrompt`/`realSourceHint`/`onScreenLabel` só quando fizerem sentido pro trecho, ausentes/omitidos nos outros casos), cobrindo o roteiro inteiro (a concatenação dos `text` deve reconstruir o roteiro, em português — só `searchQuery`/`aiPrompt` são em inglês), com pelo menos 2 e no máximo 6 trechos."
   );
 }
 

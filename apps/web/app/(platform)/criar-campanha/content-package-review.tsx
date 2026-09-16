@@ -171,6 +171,10 @@ export function ContentPackageReview({
   const [includeLogoDraft, setIncludeLogoDraft] = useState(true);
   const [watermarkEnabledDraft, setWatermarkEnabledDraft] = useState(false);
   const [watermarkTextDraft, setWatermarkTextDraft] = useState("");
+  // ★ Achado real (pedido direto do usuário — "incluir título de capa...
+  // quero que o vídeo seja bem blogueiro TikTok"): opt-in (desligado por
+  // padrão) — muda a estética do vídeo, nunca um padrão novo silencioso.
+  const [includeCoverTitleDraft, setIncludeCoverTitleDraft] = useState(false);
 
   function updatePiece(updated: ContentPieceView) {
     setPieces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -280,7 +284,13 @@ export function ContentPackageReview({
 
   async function handleGenerateVideo(
     pieceId: string,
-    options?: { targetDurationSeconds?: number; avgSceneSeconds?: number; includeLogo?: boolean; watermarkText?: string },
+    options?: {
+      targetDurationSeconds?: number;
+      avgSceneSeconds?: number;
+      includeLogo?: boolean;
+      watermarkText?: string;
+      includeCoverTitle?: boolean;
+    },
   ) {
     setLoadingId(pieceId);
     handleActionResult(await generateVideoContentPieceAction(pieceId, options));
@@ -339,6 +349,7 @@ export function ContentPackageReview({
       avgSceneSeconds: avgSceneSecondsDraft ? Number(avgSceneSecondsDraft) : undefined,
       includeLogo: includeLogoDraft,
       watermarkText: watermarkEnabledDraft ? watermarkTextDraft : undefined,
+      includeCoverTitle: includeCoverTitleDraft,
     });
   }
 
@@ -848,6 +859,14 @@ export function ContentPackageReview({
                                 className="max-w-xs"
                               />
                             ) : null}
+                            <label className="flex items-center gap-2 text-sm text-foreground">
+                              <input
+                                type="checkbox"
+                                checked={includeCoverTitleDraft}
+                                onChange={(event) => setIncludeCoverTitleDraft(event.target.checked)}
+                              />
+                              Título de capa (sobre os primeiros segundos, estilo TikTok)
+                            </label>
                           </div>
                         ) : null}
 
@@ -1772,6 +1791,15 @@ function VideoScenePlanReview({
             <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
               {scene.lengthSeconds.toFixed(1)}s
             </span>
+            {/* ★ Achado real (pedido direto do usuário — "sugerir o nome...
+                vídeo bem blogueiro TikTok"): mostra o rótulo já na revisão
+                (não só no render final) — o usuário confirma se faz sentido
+                antes de gerar o vídeo de verdade. */}
+            {scene.onScreenLabel ? (
+              <span className="absolute top-1 left-1 right-1 truncate rounded bg-black/70 px-1.5 py-0.5 text-center text-[9px] font-medium text-white">
+                {scene.onScreenLabel}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

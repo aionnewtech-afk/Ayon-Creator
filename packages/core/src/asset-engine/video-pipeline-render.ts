@@ -23,6 +23,8 @@ export interface RenderVideoContentPieceParams {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa... sutil e em algum dos cantos"): texto opcional sobreposto no vídeo inteiro — ausente não adiciona nada. */
   watermarkText?: string;
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa"): sobreposto nos primeiros segundos, sobre a 1ª cena — ausente não adiciona nada. */
+  coverTitle?: string | null;
 }
 
 export interface RenderVideoContentPieceResult {
@@ -56,6 +58,7 @@ export async function renderVideoContentPiece(
     videoSources: params.videoSources,
     aspectRatio: "9:16",
     branding: { ...branding, includeLogo: params.includeLogo, watermarkText: params.watermarkText },
+    coverTitle: params.coverTitle,
   });
 
   const videoResponse = await fetch(result.videoUrl);

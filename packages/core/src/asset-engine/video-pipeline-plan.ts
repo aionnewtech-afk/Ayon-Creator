@@ -6,6 +6,7 @@ import type { VideoRenderSceneSource } from "../providers/video-render-provider"
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
 import { narrateVideoContentPiece } from "./video-pipeline-narrate";
+import { resolveVisualBrief } from "./resolve-visual-brief";
 import { rewriteScriptForDuration } from "./rewrite-script-for-duration";
 import { selectVideoScenes } from "./video-pipeline-scenes";
 import type { ScriptSegment } from "./segment-script";
@@ -26,6 +27,8 @@ export interface PendingVideoScenePlan {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa"): mesmo espírito de `includeLogo` — decidido no planejamento, usado no render. */
   watermarkText?: string;
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa"): texto já resolvido (`resolveVisualBrief.shortTitle`, mesmo título curto usado nas fotos da campanha) — ausente/`null` não adiciona nada. */
+  coverTitle?: string | null;
 }
 
 export interface TriggerVideoScenePlanningParams {
@@ -47,6 +50,8 @@ export interface TriggerVideoScenePlanningParams {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa... sutil e em algum dos cantos"): guardado no plano, só usado de verdade no render. */
   watermarkText?: string;
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): quando `true`, resolve `resolveVisualBrief.shortTitle` (mesmo título curto já usado nas fotos da campanha) e guarda no plano. */
+  includeCoverTitle?: boolean;
 }
 
 /**
@@ -135,6 +140,18 @@ export async function triggerVideoScenePlanning(params: TriggerVideoScenePlannin
       contentPieceId: params.contentPieceId,
     });
 
+    // ★ Achado real (pedido direto do usuário — "incluir título de capa"):
+    // reaproveita o MESMO título curto já usado nas fotos da campanha
+    // (`resolveVisualBrief`, cacheado em `campaigns.visual_brief` — só
+    // chama o LLM na 1ª vez de qualquer peça da campanha, vídeo ou foto)
+    // pra vídeo e foto nunca terem títulos diferentes.
+    let coverTitle: string | null = null;
+    if (params.includeCoverTitle) {
+      const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier);
+      const visualBrief = await resolveVisualBrief(params.db, params.campaignId, llmProvider);
+      coverTitle = visualBrief.shortTitle || null;
+    }
+
     const plan: PendingVideoScenePlan = {
       audioUrl: narrateResult.audioUrl,
       audioDurationMs: narrateResult.durationMs,
@@ -144,6 +161,7 @@ export async function triggerVideoScenePlanning(params: TriggerVideoScenePlannin
       segments: scenesResult.segments,
       includeLogo: params.includeLogo,
       watermarkText: params.watermarkText,
+      coverTitle,
     };
 
     await contentPieceRepository.update(params.contentPieceId, {
@@ -212,6 +230,7 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
       videoSources: plan.videoSources,
       includeLogo: plan.includeLogo,
       watermarkText: plan.watermarkText,
+      coverTitle: plan.coverTitle,
     });
 
     await completeVideoPipelineSuccess({
@@ -228,6 +247,7 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
         videoSources: plan.videoSources,
         includeLogo: plan.includeLogo,
         watermarkText: plan.watermarkText,
+        coverTitle: plan.coverTitle,
       },
     });
 

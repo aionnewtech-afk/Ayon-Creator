@@ -450,12 +450,82 @@ const TRANSITION_STYLE_ROTATION = ["fadeFast", "slideLeftFast", "zoom", "wipeRig
  * sem áudio próprio) + 1 soundtrack (narração). ★ Missão 11 — sem track de
  * legenda (removida, arch. §14.2).
  */
+/**
+ * ★ Achado real (pedido direto do usuário — "incluir título de capa...
+ * quero que o vídeo seja bem blogueiro TikTok"): renderiza SOBRE os
+ * primeiros segundos da 1ª cena, nunca um segmento/clipe próprio no início —
+ * evitaria mexer no timing de narração/cenas já validado (múltiplas vezes
+ * corrigido nesta sessão). Dimensões em pixel assumem o "sd" 9:16 do
+ * Shotstack (576×1024, documentado) — ★ nunca validado com um render real
+ * ainda (conta sandbox sem crédito no momento desta implementação); revisar
+ * visualmente na primeira geração real.
+ */
+const VIDEO_FRAME_WIDTH_PX = 576;
+const COVER_TITLE_DISPLAY_SECONDS = 2.2;
+
+function buildCoverTitleClip(coverTitle: string | null | undefined, totalLength: number, branding: VideoBranding | undefined) {
+  const text = coverTitle?.trim();
+  if (!text) return null;
+
+  return {
+    asset: {
+      type: "text",
+      text,
+      width: VIDEO_FRAME_WIDTH_PX - 80,
+      height: 260,
+      font: buildTextFont(branding, { color: "#ffffff", size: 52, weight: 800 }),
+      alignment: { horizontal: "center", vertical: "center" },
+      background: { color: "#000000", opacity: 0.45, padding: 24, borderRadius: 16 },
+    },
+    start: 0,
+    length: Math.min(COVER_TITLE_DISPLAY_SECONDS, totalLength),
+    position: "center",
+    // ★ Achado real (pedido direto do usuário — "aparecer aquele efeito
+    // quando aparecer o texto... bem blogueiro TikTok"): `zoomIn` no "in" dá
+    // exatamente o pop de escala que abre um texto de capa nesse estilo;
+    // `fade` no "out" evita o título sumir abruptamente antes da 1ª fala.
+    transition: { in: "zoomIn", out: "fade" },
+  };
+}
+
+/**
+ * ★ Mesmo achado do título de capa — rótulo curto (nome do lugar/prato/
+ * atração, `segment.onScreenLabel`) sobre a cena correspondente, terço
+ * inferior (nunca colide com a logo/marca d'água, que ficam nos cantos
+ * inferiores — `LOGO_CLIP`/`WATERMARK_CLIP_STYLE`), com o mesmo pop de
+ * entrada do título de capa.
+ */
+function buildOnScreenLabelClips(videoSources: VideoRenderRequest["videoSources"], branding: VideoBranding | undefined) {
+  return videoSources
+    .filter((source) => source.onScreenLabel?.trim())
+    .map((source) => ({
+      asset: {
+        type: "text",
+        text: source.onScreenLabel!.trim(),
+        width: VIDEO_FRAME_WIDTH_PX - 96,
+        height: 90,
+        font: buildTextFont(branding, { color: "#ffffff", size: 30, weight: 700 }),
+        alignment: { horizontal: "center", vertical: "center" },
+        background: { color: "#000000", opacity: 0.55, padding: 14, borderRadius: 10 },
+      },
+      start: source.startSeconds,
+      length: source.lengthSeconds,
+      position: "bottom",
+      offset: { y: 0.16 },
+      transition: { in: "slideUp", out: "fade" },
+    }));
+}
+
 function buildVideoTimeline(request: VideoRenderRequest) {
   const totalLength = request.videoSources.reduce((sum, source) => sum + source.lengthSeconds, 0);
   const logoClip = buildLogoClip(request.branding, totalLength);
   const watermarkClip = buildWatermarkClip(request.branding, totalLength);
+  const coverTitleClip = buildCoverTitleClip(request.coverTitle, totalLength, request.branding);
+  const onScreenLabelClips = buildOnScreenLabelClips(request.videoSources, request.branding);
 
   const tracks = [
+    ...(coverTitleClip ? [{ clips: [coverTitleClip] }] : []),
+    ...(onScreenLabelClips.length > 0 ? [{ clips: onScreenLabelClips }] : []),
     ...(logoClip ? [{ clips: [logoClip] }] : []),
     ...(watermarkClip ? [{ clips: [watermarkClip] }] : []),
     {

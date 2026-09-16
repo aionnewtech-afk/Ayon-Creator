@@ -123,6 +123,7 @@ export async function swapVideoVoice(params: SwapVideoVoiceParams): Promise<void
       videoSources: scenePlan.videoSources,
       includeLogo: scenePlan.includeLogo,
       watermarkText: scenePlan.watermarkText,
+      coverTitle: scenePlan.coverTitle,
     });
 
     await completeVideoPipelineSuccess({
