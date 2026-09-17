@@ -358,5 +358,36 @@ export async function selectVideoScenes(params: SelectVideoScenesParams): Promis
     labeledSegments.add(source.segmentIndex);
   }
 
+  // ★ Achado real (pedido direto do usuário — "a narração quero a opção de
+  // editar que nem no capcut, cortar, remanejar mais pra frente pra estender
+  // o vídeo"): só AQUI, antes de qualquer reordenação (o plano ainda está na
+  // ordem original em que as cenas foram encontradas), `source.startSeconds`
+  // reflete de fato a posição real de cada cena dentro do áudio de narração
+  // inteiro — a janela de áudio do trecho é do início da 1ª cena até o fim
+  // da última (um trecho pode virar vários cortes rápidos, `MAX_CLIP_SECONDS`).
+  // Grava em CADA cena do trecho (não só a 1ª, ao contrário do rótulo acima)
+  // porque o usuário pode reordenar as cenas de um mesmo trecho de forma
+  // não-contígua depois — cada uma precisa saber sozinha de onde vem no
+  // áudio original. Consumido por `ffmpeg-video-render-provider.ts`.
+  const segmentAudioBounds = new Map<number, { start: number; end: number }>();
+  for (const source of videoSources) {
+    if (source.segmentIndex === undefined) continue;
+    const start = source.startSeconds;
+    const end = source.startSeconds + source.lengthSeconds;
+    const bounds = segmentAudioBounds.get(source.segmentIndex);
+    if (!bounds) {
+      segmentAudioBounds.set(source.segmentIndex, { start, end });
+    } else {
+      bounds.start = Math.min(bounds.start, start);
+      bounds.end = Math.max(bounds.end, end);
+    }
+  }
+  for (const source of videoSources) {
+    if (source.segmentIndex === undefined) continue;
+    const bounds = segmentAudioBounds.get(source.segmentIndex)!;
+    source.audioStartSeconds = bounds.start;
+    source.audioEndSeconds = bounds.end;
+  }
+
   return { videoSources, mediaProviderKey, segments };
 }

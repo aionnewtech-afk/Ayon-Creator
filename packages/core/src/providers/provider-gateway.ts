@@ -8,6 +8,7 @@ import { AnthropicWebSearchTrendSourceProvider } from "./anthropic-web-search-tr
 import type { CampaignResearchProvider } from "./campaign-research-provider";
 import { ElevenLabsVoiceProvider } from "./elevenlabs-voice-provider";
 import { FakeLlmProvider } from "./fake-llm-provider";
+import { FfmpegVideoRenderProvider } from "./ffmpeg-video-render-provider";
 import { GeminiCampaignResearchProvider } from "./gemini-campaign-research-provider";
 import { GeminiImageMediaProvider, type GeminiImageMediaContext } from "./gemini-image-media-provider";
 import { GeminiLlmProvider } from "./gemini-llm-provider";
@@ -335,6 +336,18 @@ export async function resolveVideoRenderProvider(
 
   if (!config) {
     throw new Error(`Nenhum provider_config ativo para (capability=video_render, tier=${tier}).`);
+  }
+
+  // ★ Achado real (pedido direto do usuário — "podemos deixar de usar API
+  // pra essa render e desenvolver algo nosso... já tem as cenas separadas, é
+  // só criar uma timeline estilo capcut"): motivado por crédito do Shotstack
+  // (sandbox) esgotado repetidas vezes, travando toda geração de vídeo até
+  // recarga manual. Mesmo padrão do `LLM_PROVIDER=gemini` acima — desvia a
+  // capacidade `video_render` para o motor próprio (ffmpeg, sem custo/limite
+  // de crédito de terceiro) sem tocar `provider_configs`; reversível
+  // removendo a variável (ou voltando pra "shotstack").
+  if (process.env.VIDEO_RENDER_PROVIDER === "ffmpeg") {
+    return new FfmpegVideoRenderProvider(config.provider_key, db);
   }
 
   const apiKey = process.env.SHOTSTACK_API_KEY;

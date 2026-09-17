@@ -59,6 +59,24 @@ export interface VideoRenderSceneSource {
    * aplica a `assetType === "video"`; Shotstack `VideoAsset.trim`).
    */
   trimSeconds?: number;
+  /**
+   * ★ Achado real (pedido direto do usuário — "a narração quero a opção de
+   * editar que nem no capcut, cortar, remanejar mais pra frente pra estender
+   * o vídeo"): posição FIXA do trecho de roteiro que originou esta cena
+   * dentro do arquivo de narração ORIGINAL (nunca muda, mesmo que o usuário
+   * reordene/exclua cenas depois — preenchido 1x por `selectVideoScenes`,
+   * video-pipeline-scenes.ts, com base na posição real antes de qualquer
+   * reordenação). `ffmpeg-video-render-provider.ts` usa isso pra montar a
+   * trilha de áudio como vários clipes (1 por sequência contígua de cenas do
+   * mesmo trecho na ordem ATUAL de `videoSources`) em vez de 1 trilha única
+   * fixa — só assim reordenar/excluir cenas reordena/remove a narração
+   * correspondente junto, sem perder sincronia. Ausente (planos criados
+   * antes deste recurso) cai no comportamento antigo: 1 trilha só, o
+   * `audioUrl` inteiro.
+   */
+  audioStartSeconds?: number;
+  /** Ver `audioStartSeconds` — fim do trecho no arquivo de narração original. */
+  audioEndSeconds?: number;
 }
 
 /**
