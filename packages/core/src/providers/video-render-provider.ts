@@ -124,6 +124,8 @@ export interface VideoRenderRequest {
   branding?: VideoBranding;
   /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): sobreposto nos primeiros segundos do vídeo, sobre a 1ª cena — nunca um clipe/segmento próprio (evitaria mexer no timing já validado de narração/cenas). Ausente/vazio não adiciona nada. */
   coverTitle?: string | null;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco de título — ausente/`"center"` mantém o comportamento de sempre. */
+  coverTitlePosition?: "top" | "center" | "bottom" | null;
 }
 
 export interface VideoRenderResult {

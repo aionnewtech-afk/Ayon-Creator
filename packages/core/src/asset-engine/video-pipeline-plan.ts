@@ -4,6 +4,7 @@ import { ensureSufficientCredits } from "../billing/credit-gate";
 import { resolveLlmProvider } from "../providers/provider-gateway";
 import type { VideoRenderSceneSource } from "../providers/video-render-provider";
 import { ContentPieceRepository } from "../repositories/content-piece.repository";
+import { ContentVersionRepository } from "../repositories/content-version.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
 import { narrateVideoContentPiece } from "./video-pipeline-narrate";
 import { resolveVisualBrief } from "./resolve-visual-brief";
@@ -12,9 +13,12 @@ import { selectVideoScenes } from "./video-pipeline-scenes";
 import type { ScriptSegment } from "./segment-script";
 import { MissingScriptError } from "./video-pipeline-trigger";
 import { renderVideoContentPiece } from "./video-pipeline-render";
-import { completeVideoPipelineSuccess, completeVideoPipelineFailure } from "./video-pipeline-complete";
+import { completeVideoPipelineSuccess, completeVideoPipelineFailure, type RenderedScenePlan } from "./video-pipeline-complete";
 
 const VIDEO_GENERATION_TRIGGER_REASON = "video_generation";
+const CONTENT_OUTPUT_BUCKET = "content-output";
+/** Mesmo TTL de `video-pipeline-narrate.ts` — a narração reaberta pode ficar em revisão por dias. */
+const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export interface PendingVideoScenePlan {
   audioUrl: string;
@@ -27,8 +31,10 @@ export interface PendingVideoScenePlan {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa"): mesmo espírito de `includeLogo` — decidido no planejamento, usado no render. */
   watermarkText?: string;
-  /** ★ Achado real (pedido direto do usuário — "incluir título de capa"): texto já resolvido (`resolveVisualBrief.shortTitle`, mesmo título curto usado nas fotos da campanha) — ausente/`null` não adiciona nada. */
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa"): texto já resolvido (`resolveVisualBrief.shortTitle`, mesmo título curto usado nas fotos da campanha, ou o texto que o usuário digitou por conta própria) — ausente/`null` não adiciona nada. */
   coverTitle?: string | null;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
+  coverTitlePosition?: "top" | "center" | "bottom" | null;
 }
 
 export interface TriggerVideoScenePlanningParams {
@@ -50,8 +56,12 @@ export interface TriggerVideoScenePlanningParams {
   includeLogo?: boolean;
   /** ★ Achado real (pedido direto do usuário — "marca d'água com o insta ou nome da empresa... sutil e em algum dos cantos"): guardado no plano, só usado de verdade no render. */
   watermarkText?: string;
-  /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): quando `true`, resolve `resolveVisualBrief.shortTitle` (mesmo título curto já usado nas fotos da campanha) e guarda no plano. */
+  /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): quando `true` e `coverTitleText` ausente, resolve `resolveVisualBrief.shortTitle` (mesmo título curto já usado nas fotos da campanha) e guarda no plano. */
   includeCoverTitle?: boolean;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher o que colocar no título"): texto digitado pelo usuário — quando presente, SEMPRE vence o título sugerido automaticamente (nunca precisa esperar o brief resolver pra decidir o que aparece). */
+  coverTitleText?: string;
+  /** ★ Achado real (pedido direto do usuário — "não tem... o formato"): posição do bloco de título — ausente cai no padrão de sempre (centro). */
+  coverTitlePosition?: "top" | "center" | "bottom";
 }
 
 /**
@@ -140,13 +150,15 @@ export async function triggerVideoScenePlanning(params: TriggerVideoScenePlannin
       contentPieceId: params.contentPieceId,
     });
 
-    // ★ Achado real (pedido direto do usuário — "incluir título de capa"):
-    // reaproveita o MESMO título curto já usado nas fotos da campanha
-    // (`resolveVisualBrief`, cacheado em `campaigns.visual_brief` — só
-    // chama o LLM na 1ª vez de qualquer peça da campanha, vídeo ou foto)
-    // pra vídeo e foto nunca terem títulos diferentes.
-    let coverTitle: string | null = null;
-    if (params.includeCoverTitle) {
+    // ★ Achado real (pedido direto do usuário — "não tem a opção de
+    // escolher o que colocar no título"): texto digitado pelo usuário sempre
+    // vence — só cai no título sugerido automaticamente (reaproveitando o
+    // MESMO título curto já usado nas fotos da campanha, `resolveVisualBrief`,
+    // cacheado em `campaigns.visual_brief` — só chama o LLM na 1ª vez de
+    // qualquer peça da campanha, vídeo ou foto) quando o usuário não digitou
+    // nada por conta própria.
+    let coverTitle: string | null = params.coverTitleText?.trim() || null;
+    if (!coverTitle && params.includeCoverTitle) {
       const llmProvider = await resolveLlmProvider(params.serviceRoleDb, params.tier);
       const visualBrief = await resolveVisualBrief(params.db, params.campaignId, llmProvider);
       coverTitle = visualBrief.shortTitle || null;
@@ -162,6 +174,7 @@ export async function triggerVideoScenePlanning(params: TriggerVideoScenePlannin
       includeLogo: params.includeLogo,
       watermarkText: params.watermarkText,
       coverTitle,
+      coverTitlePosition: params.coverTitlePosition,
     };
 
     await contentPieceRepository.update(params.contentPieceId, {
@@ -231,6 +244,7 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
       includeLogo: plan.includeLogo,
       watermarkText: plan.watermarkText,
       coverTitle: plan.coverTitle,
+      coverTitlePosition: plan.coverTitlePosition,
     });
 
     await completeVideoPipelineSuccess({
@@ -248,6 +262,8 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
         includeLogo: plan.includeLogo,
         watermarkText: plan.watermarkText,
         coverTitle: plan.coverTitle,
+        coverTitlePosition: plan.coverTitlePosition,
+        segments: plan.segments,
       },
     });
 
@@ -262,4 +278,90 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
     await contentPieceRepository.update(params.contentPieceId, { pending_scene_plan: null });
     throw error;
   }
+}
+
+export class ReopenNotSupportedError extends Error {
+  constructor() {
+    super("Só dá pra reabrir a edição de cenas de um vídeo já gerado.");
+    this.name = "ReopenNotSupportedError";
+  }
+}
+
+export class MissingScenePlanForReopenError extends Error {
+  constructor() {
+    super(
+      "Não encontrei as cenas desse vídeo pra reabrir a edição (foi gerado antes desse recurso existir) — gere o vídeo de novo do zero se quiser editar.",
+    );
+    this.name = "MissingScenePlanForReopenError";
+  }
+}
+
+export interface ReopenVideoScenePlanParams {
+  /** Client de sessão (RLS) — lê/grava content_pieces, lê Storage. */
+  db: SupabaseClient<Database>;
+  organizationId: string;
+  contentPieceId: string;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "eu havia aprovado um vídeo e
+ * depois queria uma cena e não consegui mais voltar, criou outro"): uma vez
+ * que `approveVideoScenePlan` renderiza e limpa `pending_scene_plan`, TODA
+ * ação de edição de cena (trocar/cortar/reordenar/excluir/baixar .zip) fica
+ * inacessível pra sempre — a única forma de mexer em qualquer coisa era
+ * gerar um plano NOVO do zero (`triggerVideoScenePlanning`, nova busca de
+ * cena, narração do roteiro atual), descartando o corte já aprovado em vez
+ * de ajustá-lo. Esta função reconstrói o MESMO `pending_scene_plan` de antes
+ * a partir do que `completeVideoPipelineSuccess` já persiste em
+ * `content_versions.generation_metadata` (`scene_plan` + `voice_provider_key`/
+ * `media_provider_key` — mesmo dado que `swapVideoVoice` já lê) e volta o
+ * status pra `scenes_ready_for_review`, reabrindo TODA a tela de edição de
+ * cenas existente sem nenhuma UI nova. A narração em si nunca é re-sintetizada
+ * (custaria crédito de novo à toa) — o storage path é determinístico
+ * (`${organizationId}/${campaignId}/${contentPieceId}-narration.mp3`, mesmo
+ * usado por `narrateVideoContentPiece`/`swapVideoVoice`), só assina uma URL
+ * nova pro arquivo que já existe.
+ */
+export async function reopenVideoScenePlanForEditing(params: ReopenVideoScenePlanParams): Promise<void> {
+  const contentPieceRepository = new ContentPieceRepository(params.db);
+  const contentVersionRepository = new ContentVersionRepository(params.db);
+
+  const piece = await contentPieceRepository.findById(params.contentPieceId);
+  if (!piece || piece.format !== "video") throw new ReopenNotSupportedError();
+  if (piece.status !== "ready_for_review" && piece.status !== "approved") throw new ReopenNotSupportedError();
+
+  const latestVersion = await contentVersionRepository.findLatestByContentPieceId(params.contentPieceId);
+  const metadata = latestVersion?.generation_metadata as {
+    scene_plan?: RenderedScenePlan;
+    voice_provider_key?: string;
+    media_provider_key?: string;
+  } | null;
+  const scenePlan = metadata?.scene_plan;
+  if (!latestVersion || !scenePlan) throw new MissingScenePlanForReopenError();
+
+  const storagePath = `${params.organizationId}/${piece.campaign_id}/${params.contentPieceId}-narration.mp3`;
+  const { data: signed, error: signError } = await params.db.storage
+    .from(CONTENT_OUTPUT_BUCKET)
+    .createSignedUrl(storagePath, AUDIO_SIGNED_URL_TTL_SECONDS);
+  if (signError || !signed) throw signError ?? new MissingScenePlanForReopenError();
+
+  const audioDurationMs = Math.round(scenePlan.videoSources.reduce((sum, source) => sum + source.lengthSeconds, 0) * 1000);
+
+  const plan: PendingVideoScenePlan = {
+    audioUrl: signed.signedUrl,
+    audioDurationMs,
+    voiceProviderKey: metadata?.voice_provider_key ?? "unknown",
+    videoSources: scenePlan.videoSources,
+    mediaProviderKey: metadata?.media_provider_key ?? "unknown",
+    segments: scenePlan.segments ?? [],
+    includeLogo: scenePlan.includeLogo,
+    watermarkText: scenePlan.watermarkText,
+    coverTitle: scenePlan.coverTitle,
+    coverTitlePosition: scenePlan.coverTitlePosition,
+  };
+
+  await contentPieceRepository.update(params.contentPieceId, {
+    status: "scenes_ready_for_review",
+    pending_scene_plan: plan as unknown as Record<string, unknown>,
+  });
 }

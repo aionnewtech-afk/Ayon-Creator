@@ -463,7 +463,12 @@ const TRANSITION_STYLE_ROTATION = ["fadeFast", "slideLeftFast", "zoom", "wipeRig
 const VIDEO_FRAME_WIDTH_PX = 576;
 const COVER_TITLE_DISPLAY_SECONDS = 2.2;
 
-function buildCoverTitleClip(coverTitle: string | null | undefined, totalLength: number, branding: VideoBranding | undefined) {
+function buildCoverTitleClip(
+  coverTitle: string | null | undefined,
+  totalLength: number,
+  branding: VideoBranding | undefined,
+  position?: "top" | "center" | "bottom" | null,
+) {
   const text = coverTitle?.trim();
   if (!text) return null;
 
@@ -479,7 +484,10 @@ function buildCoverTitleClip(coverTitle: string | null | undefined, totalLength:
     },
     start: 0,
     length: Math.min(COVER_TITLE_DISPLAY_SECONDS, totalLength),
-    position: "center",
+    // ★ Achado real (pedido direto do usuário — "não tem a opção de
+    // escolher... o formato" do título): antes sempre fixo no centro —
+    // ausente/"center" mantém o comportamento de sempre.
+    position: position === "top" ? "top" : position === "bottom" ? "bottom" : "center",
     // ★ Achado real (pedido direto do usuário — "aparecer aquele efeito
     // quando aparecer o texto... bem blogueiro TikTok"): `zoomIn` no "in" dá
     // exatamente o pop de escala que abre um texto de capa nesse estilo;
@@ -520,7 +528,7 @@ function buildVideoTimeline(request: VideoRenderRequest) {
   const totalLength = request.videoSources.reduce((sum, source) => sum + source.lengthSeconds, 0);
   const logoClip = buildLogoClip(request.branding, totalLength);
   const watermarkClip = buildWatermarkClip(request.branding, totalLength);
-  const coverTitleClip = buildCoverTitleClip(request.coverTitle, totalLength, request.branding);
+  const coverTitleClip = buildCoverTitleClip(request.coverTitle, totalLength, request.branding, request.coverTitlePosition);
   const onScreenLabelClips = buildOnScreenLabelClips(request.videoSources, request.branding);
 
   const tracks = [

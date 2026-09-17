@@ -12,11 +12,13 @@ import {
   InsufficientCreditsError,
   LearningSignalRepository,
   MissingScenePlanForVoiceSwapError,
+  MissingScenePlanForReopenError,
   MissingScriptError,
   N8nDispatchError,
   type PhotoVisualOverrides,
   PipelineRunRepository,
   AvatarNotReadyError,
+  ReopenNotSupportedError,
   VoiceSwapNotSupportedError,
   applySceneCandidate,
   approveVideoScenePlan,
@@ -34,6 +36,7 @@ import {
   replaceVideoSceneWithAi,
   replaceVideoSceneWithAvatar,
   replaceVideoSceneWithUpload,
+  reopenVideoScenePlanForEditing,
   reorderVideoScenes,
   searchAvatarBackgroundImages,
   searchSceneCandidates,
@@ -401,6 +404,10 @@ export interface GenerateVideoOptions {
   watermarkText?: string;
   /** ★ Achado real (pedido direto do usuário — "incluir título de capa... quero que o vídeo seja bem blogueiro TikTok"): sobreposto nos primeiros segundos, sobre a 1ª cena. */
   includeCoverTitle?: boolean;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher o que colocar no título"): texto digitado pelo usuário — quando presente, sempre vence o título sugerido automaticamente. */
+  coverTitleText?: string;
+  /** ★ Achado real (pedido direto do usuário — "não tem... o formato"): posição do bloco de título — ausente cai no padrão de sempre (centro). */
+  coverTitlePosition?: "top" | "center" | "bottom";
 }
 
 export async function generateVideoContentPieceAction(
@@ -448,6 +455,8 @@ export async function generateVideoContentPieceAction(
       includeLogo: options?.includeLogo,
       watermarkText: options?.watermarkText?.trim() || undefined,
       includeCoverTitle: options?.includeCoverTitle,
+      coverTitleText: options?.coverTitleText?.trim() || undefined,
+      coverTitlePosition: options?.coverTitlePosition,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);
@@ -537,6 +546,48 @@ export async function swapVideoVoiceAction(contentPieceId: string, voiceRef: str
       return { ok: false, error: error.message };
     }
     logger.error("asset_engine.video_voice_swap_failed", {
+      contentPieceId,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: FRIENDLY_ERROR };
+  }
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "eu havia aprovado um vídeo e
+ * depois queria uma cena e não consegui mais voltar, criou outro"): volta um
+ * vídeo já renderizado (`ready_for_review` ou `approved`) pro estado
+ * `scenes_ready_for_review`, reabrindo TODA a tela de edição de cenas
+ * existente (trocar/cortar/reordenar/excluir/baixar .zip) a partir do MESMO
+ * corte já aprovado — nunca gera um plano novo do zero. Aprovar de novo
+ * depois disso cria uma nova versão renderizada da MESMA peça (nunca uma
+ * peça duplicada).
+ */
+export async function reopenVideoScenePlanAction(contentPieceId: string): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode reabrir a edição de cenas." };
+  }
+
+  const db = await createClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  try {
+    await reopenVideoScenePlanForEditing({
+      db,
+      organizationId: session.organization.id,
+      contentPieceId,
+    });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    if (error instanceof ReopenNotSupportedError || error instanceof MissingScenePlanForReopenError) {
+      return { ok: false, error: error.message };
+    }
+    logger.error("asset_engine.video_scene_plan_reopen_failed", {
       contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });

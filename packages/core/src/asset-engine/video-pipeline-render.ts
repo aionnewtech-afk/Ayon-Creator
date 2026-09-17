@@ -25,6 +25,8 @@ export interface RenderVideoContentPieceParams {
   watermarkText?: string;
   /** ★ Achado real (pedido direto do usuário — "incluir título de capa"): sobreposto nos primeiros segundos, sobre a 1ª cena — ausente não adiciona nada. */
   coverTitle?: string | null;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
+  coverTitlePosition?: "top" | "center" | "bottom" | null;
 }
 
 export interface RenderVideoContentPieceResult {
@@ -59,6 +61,7 @@ export async function renderVideoContentPiece(
     aspectRatio: "9:16",
     branding: { ...branding, includeLogo: params.includeLogo, watermarkText: params.watermarkText },
     coverTitle: params.coverTitle,
+    coverTitlePosition: params.coverTitlePosition,
   });
 
   const videoResponse = await fetch(result.videoUrl);

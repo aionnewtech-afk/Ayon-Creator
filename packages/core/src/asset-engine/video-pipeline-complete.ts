@@ -6,6 +6,7 @@ import { ContentPieceRepository } from "../repositories/content-piece.repository
 import { ContentVersionRepository } from "../repositories/content-version.repository";
 import { CreditPricingRepository } from "../repositories/credit-pricing.repository";
 import { PipelineRunRepository } from "../repositories/pipeline-run.repository";
+import type { ScriptSegment } from "./segment-script";
 
 const VIDEO_GENERATION_TRIGGER_REASON = "video_generation";
 
@@ -24,6 +25,19 @@ export interface RenderedScenePlan {
   includeLogo?: boolean;
   watermarkText?: string;
   coverTitle?: string | null;
+  /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
+  coverTitlePosition?: "top" | "center" | "bottom" | null;
+  /**
+   * ★ Achado real (pedido direto do usuário — "eu havia aprovado um vídeo e
+   * depois queria uma cena e não consegui mais voltar, criou outro"): sem os
+   * trechos do roteiro salvos aqui também, `reopenVideoScenePlanForEditing`
+   * (video-pipeline-plan.ts) não teria como reconstruir a tela de revisão de
+   * cenas (que mostra o texto de cada trecho ao lado da cena escolhida) pra
+   * um vídeo já aprovado/renderizado — só as cenas em si, sem contexto.
+   * Ausente (vídeos renderizados antes deste campo existir) degrada
+   * graciosamente: a reabertura ainda funciona, só sem o texto por trecho.
+   */
+  segments?: ScriptSegment[];
 }
 
 export interface CompleteVideoPipelineSuccessParams {

@@ -22,6 +22,7 @@ import {
   regenerateContentPieceAction,
   rejectContentPieceAction,
   replaceSceneWithAvatarAction,
+  reopenVideoScenePlanAction,
   reorderVideoScenesAction,
   searchAvatarBackgroundImagesAction,
   searchSceneCandidatesAction,
@@ -175,6 +176,12 @@ export function ContentPackageReview({
   // quero que o vídeo seja bem blogueiro TikTok"): opt-in (desligado por
   // padrão) — muda a estética do vídeo, nunca um padrão novo silencioso.
   const [includeCoverTitleDraft, setIncludeCoverTitleDraft] = useState(false);
+  // ★ Achado real (pedido direto do usuário — "não tem a opção de escolher
+  // o que colocar no título e nem o formato"): texto vazio cai no título
+  // sugerido automaticamente (brief da campanha) — digitar aqui sempre
+  // vence. Posição escolhe onde o bloco aparece na tela.
+  const [coverTitleTextDraft, setCoverTitleTextDraft] = useState("");
+  const [coverTitlePositionDraft, setCoverTitlePositionDraft] = useState<"top" | "center" | "bottom">("center");
 
   function updatePiece(updated: ContentPieceView) {
     setPieces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -265,6 +272,12 @@ export function ContentPackageReview({
     handleActionResult(await rejectContentPieceAction(pieceId));
   }
 
+  /** ★ Achado real (pedido direto do usuário — "eu havia aprovado um vídeo e depois queria uma cena e não consegui mais voltar, criou outro"): volta o MESMO corte já aprovado pra edição de cenas, em vez de gerar um plano novo do zero. */
+  async function handleReopenScenePlan(pieceId: string) {
+    setLoadingId(pieceId);
+    handleActionResult(await reopenVideoScenePlanAction(pieceId));
+  }
+
   function openVoiceSwapPanel(pieceId: string) {
     setVoiceSwapOpenFor((current) => (current === pieceId ? null : pieceId));
     setVoiceSwapDraft(null);
@@ -290,6 +303,8 @@ export function ContentPackageReview({
       includeLogo?: boolean;
       watermarkText?: string;
       includeCoverTitle?: boolean;
+      coverTitleText?: string;
+      coverTitlePosition?: "top" | "center" | "bottom";
     },
   ) {
     setLoadingId(pieceId);
@@ -314,6 +329,9 @@ export function ContentPackageReview({
       setIncludeLogoDraft(true);
       setWatermarkEnabledDraft(false);
       setWatermarkTextDraft("");
+      setIncludeCoverTitleDraft(false);
+      setCoverTitleTextDraft("");
+      setCoverTitlePositionDraft("center");
       if (mode === "avatar" && !avatarVoices && !avatarVoicesLoading) {
         setAvatarVoicesLoading(true);
         const result = await listAvatarVoicesAction();
@@ -350,6 +368,8 @@ export function ContentPackageReview({
       includeLogo: includeLogoDraft,
       watermarkText: watermarkEnabledDraft ? watermarkTextDraft : undefined,
       includeCoverTitle: includeCoverTitleDraft,
+      coverTitleText: includeCoverTitleDraft ? coverTitleTextDraft : undefined,
+      coverTitlePosition: includeCoverTitleDraft ? coverTitlePositionDraft : undefined,
     });
   }
 
@@ -715,10 +735,29 @@ export function ContentPackageReview({
                           ) : null}
                         </>
                       ) : null}
-                      {piece.status === "ready_for_review" ? (
+                      {piece.status === "ready_for_review" || piece.status === "approved" ? (
                         <>
-                          <Button size="sm" disabled={isLoading} onClick={() => handleApprove(piece.id)}>
+                          <Button
+                            size="sm"
+                            disabled={isLoading || piece.status === "approved"}
+                            onClick={() => handleApprove(piece.id)}
+                          >
                             Aprovar
+                          </Button>
+                          {/* ★ Achado real (pedido direto do usuário — "eu
+                              havia aprovado um vídeo e depois queria uma
+                              cena e não consegui mais voltar, criou outro"):
+                              volta pro MESMO corte já aprovado em modo de
+                              edição de cenas (reabre a tela de
+                              trocar/cortar/reordenar/excluir/baixar .zip) —
+                              nunca gera um plano novo do zero. */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isLoading}
+                            onClick={() => handleReopenScenePlan(piece.id)}
+                          >
+                            {isLoading ? "Reabrindo..." : "Editar cenas de novo"}
                           </Button>
                           <Button
                             size="sm"
@@ -726,7 +765,7 @@ export function ContentPackageReview({
                             disabled={isLoading}
                             onClick={() => openGenerateOptionsPanel(piece.id, "auto")}
                           >
-                            Gerar de novo
+                            Gerar de novo (do zero)
                           </Button>
                           {avatarReady ? (
                             <Button
@@ -867,6 +906,39 @@ export function ContentPackageReview({
                               />
                               Título de capa (sobre os primeiros segundos, estilo TikTok)
                             </label>
+                            {/* ★ Achado real (pedido direto do usuário —
+                                "não tem a opção de escolher o que colocar
+                                no título e nem o formato"): antes o texto
+                                era sempre sugerido automaticamente, sem
+                                jeito de escrever o próprio ou escolher onde
+                                aparece na tela. */}
+                            {includeCoverTitleDraft ? (
+                              <div className="space-y-2 pl-6">
+                                <Input
+                                  value={coverTitleTextDraft}
+                                  onChange={(event) => setCoverTitleTextDraft(event.target.value)}
+                                  placeholder="Deixe em branco para eu sugerir um título"
+                                  className="max-w-xs"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <label htmlFor="cover-title-position" className="text-xs text-muted-foreground">
+                                    Posição na tela
+                                  </label>
+                                  <select
+                                    id="cover-title-position"
+                                    value={coverTitlePositionDraft}
+                                    onChange={(event) =>
+                                      setCoverTitlePositionDraft(event.target.value as "top" | "center" | "bottom")
+                                    }
+                                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                  >
+                                    <option value="top">Topo</option>
+                                    <option value="center">Centro</option>
+                                    <option value="bottom">Base</option>
+                                  </select>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 

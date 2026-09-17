@@ -311,6 +311,16 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
   const coverTitle = request.coverTitle?.trim();
   if (coverTitle) {
     const nextLabel = "vtitle";
+    // ★ Achado real (pedido direto do usuário — "não tem a opção de
+    // escolher... o formato" do título): antes sempre fixo no centro —
+    // `coverTitlePosition` deixa escolher topo/centro/base, ausente/"center"
+    // mantém o comportamento de sempre.
+    const titleY =
+      request.coverTitlePosition === "top"
+        ? "h*0.08"
+        : request.coverTitlePosition === "bottom"
+          ? "h*0.78-text_h/2"
+          : "(h-text_h)/2";
     filterParts.push(
       `[${currentLabel}]${buildDrawtext({
         text: coverTitle,
@@ -318,7 +328,7 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
         fontSize: 52,
         fontColor: "white",
         x: "(w-text_w)/2",
-        y: "(h-text_h)/2",
+        y: titleY,
         boxColor: "black",
         boxOpacity: 0.45,
         enableExpr: `between(t\\,0\\,${Math.min(COVER_TITLE_DISPLAY_SECONDS, totalLength)})`,
