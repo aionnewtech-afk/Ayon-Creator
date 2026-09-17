@@ -1,8 +1,3 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@ayon/types";
 import type {
@@ -16,7 +11,6 @@ import { logProviderCall } from "./log-provider-call";
 import { fetchWithRetry } from "../shared/fetch-with-retry";
 import { logger } from "../logger";
 
-const execFileAsync = promisify(execFile);
 const CONTENT_OUTPUT_BUCKET = "content-output";
 
 // ★ Achado real (pedido direto do usuário — "a gente tem CapCut Pro mas não
@@ -36,6 +30,57 @@ const FPS = 30;
 const COVER_TITLE_DISPLAY_SECONDS = 2.2;
 
 /**
+ * ★ Achado real (build de produção quebrado — "Module not found: Can't
+ * resolve 'node:util'/'node:child_process'..."): mesmo motivo já documentado
+ * em shotstack-video-render-provider.ts pro `sharp` — este arquivo é
+ * alcançável pelo bundle do CLIENTE através do barrel plano de `@ayon/core`
+ * (provider-gateway.ts → index.ts, importado por client components como o
+ * sidebar), mesmo nunca sendo de fato CHAMADO por nenhum deles. Import
+ * ESTÁTICO de módulo nativo do Node faz o webpack tentar empacotar essas
+ * libs pro browser (onde não existem) e o build falha. `import()` dinâmico
+ * com `webpackIgnore: true` (mesma técnica do `sharp`) faz o webpack pular a
+ * análise por completo — só resolvido em runtime, que nunca acontece no
+ * client (estes métodos só rodam server-side, no pipeline de vídeo).
+ */
+interface NodeDeps {
+  execFileAsync: (file: string, args: string[], options: { maxBuffer: number }) => Promise<{ stdout: string; stderr: string }>;
+  mkdtemp: (prefix: string) => Promise<string>;
+  readFile: (path: string) => Promise<Buffer>;
+  rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
+  writeFile: (path: string, data: Buffer) => Promise<void>;
+  path: { join: (...parts: string[]) => string };
+  tmpdir: () => string;
+}
+
+let cachedNodeDeps: NodeDeps | null = null;
+
+async function loadNodeDeps(): Promise<NodeDeps> {
+  if (cachedNodeDeps) return cachedNodeDeps;
+
+  const [childProcess, fsPromises, os, pathModule, util] = await Promise.all([
+    import(/* webpackIgnore: true */ "node:child_process"),
+    import(/* webpackIgnore: true */ "node:fs/promises"),
+    import(/* webpackIgnore: true */ "node:os"),
+    import(/* webpackIgnore: true */ "node:path"),
+    import(/* webpackIgnore: true */ "node:util"),
+  ]);
+
+  const path = (pathModule.default ?? pathModule) as NodeDeps["path"];
+  const execFileAsync = util.promisify(childProcess.execFile) as NodeDeps["execFileAsync"];
+
+  cachedNodeDeps = {
+    execFileAsync,
+    mkdtemp: fsPromises.mkdtemp,
+    readFile: fsPromises.readFile,
+    rm: fsPromises.rm,
+    writeFile: fsPromises.writeFile,
+    path,
+    tmpdir: os.tmpdir,
+  };
+  return cachedNodeDeps;
+}
+
+/**
  * ★ Mesmo achado do `VIDEO_FRAME_WIDTH_PX` em shotstack-video-render-provider.ts
  * (nunca validado com um render real por falta de crédito) — aqui a
  * resolução é escolhida por nós (não um preset de terceiro), então é
@@ -51,20 +96,21 @@ export class FfmpegVideoRenderProvider implements VideoRenderProvider {
 
   async composeVideo(request: VideoRenderRequest): Promise<VideoRenderResult> {
     const startedAt = new Date();
-    const workDir = await mkdtemp(path.join(tmpdir(), "ayon-render-"));
+    const deps = await loadNodeDeps();
+    const workDir = await deps.mkdtemp(deps.path.join(deps.tmpdir(), "ayon-render-"));
     let errorMessage: string | undefined;
 
     try {
-      const outputPath = path.join(workDir, "output.mp4");
-      await renderVideoWithFfmpeg(request, workDir, outputPath);
-      const videoUrl = await this.publish(outputPath, "mp4", "video/mp4");
+      const outputPath = deps.path.join(workDir, "output.mp4");
+      await renderVideoWithFfmpeg(request, workDir, outputPath, deps);
+      const videoUrl = await this.publish(outputPath, "mp4", "video/mp4", deps);
       return { videoUrl, providerKey: this.providerKey };
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
       await logCall(this.serviceRoleDb, this.providerKey, "composeVideo", startedAt, errorMessage);
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await deps.rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
@@ -84,8 +130,8 @@ export class FfmpegVideoRenderProvider implements VideoRenderProvider {
     }
   }
 
-  private async publish(filePath: string, extension: string, contentType: string): Promise<string> {
-    const buffer = await readFile(filePath);
+  private async publish(filePath: string, extension: string, contentType: string, deps: NodeDeps): Promise<string> {
+    const buffer = await deps.readFile(filePath);
     return this.publishBuffer(buffer, extension, contentType);
   }
 
@@ -129,11 +175,11 @@ async function logCall(
   });
 }
 
-async function downloadToFile(url: string, destPath: string): Promise<void> {
+async function downloadToFile(url: string, destPath: string, deps: NodeDeps): Promise<void> {
   const response = await fetchWithRetry(url);
   if (!response.ok) throw new Error(`Download falhou (${response.status}) para ${url}`);
   const arrayBuffer = await response.arrayBuffer();
-  await writeFile(destPath, Buffer.from(arrayBuffer));
+  await deps.writeFile(destPath, Buffer.from(arrayBuffer));
 }
 
 /**
@@ -177,7 +223,7 @@ function buildDrawtext(options: DrawtextOptions): string {
   return `drawtext=${parts.join(":")}`;
 }
 
-async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: string, outputPath: string): Promise<void> {
+async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: string, outputPath: string, deps: NodeDeps): Promise<void> {
   const ffmpegPathModule = await import(/* webpackIgnore: true */ "ffmpeg-static");
   const ffmpegPath = (ffmpegPathModule.default ?? ffmpegPathModule) as string;
   if (!ffmpegPath) throw new Error("ffmpeg-static não retornou um caminho de binário válido.");
@@ -185,13 +231,13 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
   const sources = request.videoSources;
   if (sources.length === 0) throw new Error("Nenhuma cena para renderizar.");
 
-  const narrationPath = path.join(workDir, "narration.mp3");
-  await downloadToFile(request.audioUrl, narrationPath);
+  const narrationPath = deps.path.join(workDir, "narration.mp3");
+  await downloadToFile(request.audioUrl, narrationPath, deps);
 
   let fontPath: string | undefined;
   if (request.branding?.fontUrl) {
-    fontPath = path.join(workDir, "brand-font.ttf");
-    await downloadToFile(request.branding.fontUrl, fontPath).catch((error) => {
+    fontPath = deps.path.join(workDir, "brand-font.ttf");
+    await downloadToFile(request.branding.fontUrl, fontPath, deps).catch((error) => {
       logger.warn("providers.ffmpeg.font_download_failed", { reason: error instanceof Error ? error.message : String(error) });
       fontPath = undefined;
     });
@@ -200,8 +246,8 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
   let logoPath: string | undefined;
   const includeLogo = Boolean(request.branding?.logoUrl) && request.branding?.includeLogo !== false;
   if (includeLogo && request.branding?.logoUrl) {
-    logoPath = path.join(workDir, "logo.png");
-    await downloadToFile(request.branding.logoUrl, logoPath).catch((error) => {
+    logoPath = deps.path.join(workDir, "logo.png");
+    await downloadToFile(request.branding.logoUrl, logoPath, deps).catch((error) => {
       logger.warn("providers.ffmpeg.logo_download_failed", { reason: error instanceof Error ? error.message : String(error) });
       logoPath = undefined;
     });
@@ -211,8 +257,8 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
   for (let i = 0; i < sources.length; i++) {
     const source = sources[i]!;
     const extension = source.assetType === "image" ? guessImageExtension(source.url) : guessVideoExtension(source.url);
-    const scenePath = path.join(workDir, `scene-${i}.${extension}`);
-    await downloadToFile(source.url, scenePath);
+    const scenePath = deps.path.join(workDir, `scene-${i}.${extension}`);
+    await downloadToFile(source.url, scenePath, deps);
     scenePaths.push(scenePath);
   }
 
@@ -421,7 +467,7 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
 
   logger.info("providers.ffmpeg.compose_video_started", { scenes: sources.length, totalLength });
   try {
-    await execFileAsync(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 64 });
+    await deps.execFileAsync(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 64 });
   } catch (error) {
     const stderr = (error as { stderr?: string })?.stderr;
     throw new Error(`ffmpeg falhou ao compor o vídeo: ${stderr ?? (error instanceof Error ? error.message : String(error))}`);
