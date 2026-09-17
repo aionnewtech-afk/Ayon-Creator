@@ -77,6 +77,32 @@ export interface VideoRenderSceneSource {
   audioStartSeconds?: number;
   /** Ver `audioStartSeconds` — fim do trecho no arquivo de narração original. */
   audioEndSeconds?: number;
+  /**
+   * ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra
+   * cortar, acelerar, mudar de lugar"): velocidade da fala deste trecho
+   * (0.5–2.0, ffmpeg `atempo`) — `1`/ausente mantém a velocidade natural da
+   * narração original. Só suportado pelo motor próprio (`ffmpeg-video-render-provider.ts`,
+   * `atempo` no clipe de áudio do trecho); Shotstack não tem campo
+   * equivalente, então esse ajuste é ignorado lá.
+   */
+  audioPlaybackRate?: number;
+  /**
+   * ★ Achado real (pedido direto do usuário — "não vi opção de colocar
+   * balões de texto... quero basicamente no modelo do capcut"): balão de
+   * fala (estilo chat/CapCut) sobreposto durante esta cena — texto curto
+   * dentro de um balão com "rabinho", posição livre (fração da tela, não um
+   * preset fixo como `onScreenLabel`). Só suportado pelo motor próprio
+   * (renderizado via `sharp`, sobreposto no vídeo via ffmpeg `overlay`).
+   */
+  textBalloons?: TextBalloon[];
+}
+
+export interface TextBalloon {
+  text: string;
+  /** Fração da largura do frame (0–1) onde o CANTO SUPERIOR ESQUERDO do balão fica. */
+  xFraction: number;
+  /** Fração da altura do frame (0–1) onde o CANTO SUPERIOR ESQUERDO do balão fica. */
+  yFraction: number;
 }
 
 /**
@@ -126,6 +152,14 @@ export interface VideoRenderRequest {
   coverTitle?: string | null;
   /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco de título — ausente/`"center"` mantém o comportamento de sempre. */
   coverTitlePosition?: "top" | "center" | "bottom" | null;
+  /**
+   * ★ Achado real (pedido direto do usuário — "não vi... animação sonora"):
+   * faixa de visualização de áudio (barras reagindo à narração, estilo
+   * CapCut/TikTok) sobreposta na base do vídeo — opt-in (muda a estética do
+   * vídeo, nunca um padrão novo silencioso), só suportado pelo motor próprio
+   * (`ffmpeg` `showwaves`, gerado a partir do áudio real, nunca decorativo).
+   */
+  includeSoundAnimation?: boolean;
 }
 
 export interface VideoRenderResult {

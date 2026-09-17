@@ -548,6 +548,85 @@ export async function setSceneTrim(params: SetSceneTrimParams): Promise<void> {
   await persistPlan(params.db, params.contentPieceId, plan);
 }
 
+export interface SetSceneAudioPlaybackRateParams extends SceneEditParams {
+  /** `1` (ou ausente) volta à velocidade natural — faixa aceita 0.5–2.0 (mesmo limite do ffmpeg `atempo` numa única passada). */
+  playbackRate: number;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "a timeline com o áudio...
+ * pra cortar, acelerar, mudar de lugar"): muda a velocidade da FALA do
+ * trecho correspondente a esta cena — nunca da cena isolada, porque o
+ * áudio é por TRECHO (`segmentIndex`), não por corte individual (um trecho
+ * pode virar várias cenas, `MAX_CLIP_SECONDS`). Grava o mesmo valor em
+ * TODAS as cenas do trecho (não só a selecionada) — `ffmpeg-video-render-provider.ts`
+ * lê de qualquer uma delas (a 1ª de cada sequência contígua), então todas
+ * precisam concordar, mesmo que o usuário reordene depois.
+ */
+export async function setSceneAudioPlaybackRate(params: SetSceneAudioPlaybackRateParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  if (!Number.isFinite(params.playbackRate) || params.playbackRate < 0.5 || params.playbackRate > 2) {
+    throw new Error("Velocidade inválida — escolha entre 0.5x e 2x.");
+  }
+
+  const segmentIndex = scene.segmentIndex;
+  for (const source of videoSources) {
+    if (segmentIndex !== undefined && source.segmentIndex === segmentIndex) {
+      source.audioPlaybackRate = params.playbackRate;
+    } else if (segmentIndex === undefined && source === scene) {
+      source.audioPlaybackRate = params.playbackRate;
+    }
+  }
+
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
+export interface AddSceneTextBalloonParams extends SceneEditParams {
+  text: string;
+  xFraction: number;
+  yFraction: number;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "não vi opção de colocar
+ * balões de texto... quero basicamente no modelo do capcut"): balão é por
+ * CENA (não por trecho, ao contrário da velocidade) — cada corte pode
+ * querer um balão diferente (ou nenhum), mesmo quando vários cortes vêm do
+ * mesmo trecho de roteiro.
+ */
+export async function addSceneTextBalloon(params: AddSceneTextBalloonParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  const text = params.text.trim();
+  if (!text) throw new Error("Digite o texto do balão.");
+  if (text.length > 120) throw new Error("Texto do balão muito longo — resuma um pouco.");
+
+  scene.textBalloons = [
+    ...(scene.textBalloons ?? []),
+    { text, xFraction: clamp01(params.xFraction), yFraction: clamp01(params.yFraction) },
+  ];
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
+export interface RemoveSceneTextBalloonParams extends SceneEditParams {
+  balloonIndex: number;
+}
+
+export async function removeSceneTextBalloon(params: RemoveSceneTextBalloonParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  scene.textBalloons = (scene.textBalloons ?? []).filter((_, index) => index !== params.balloonIndex);
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
 export interface ReorderVideoScenesParams {
   db: SupabaseClient<Database>;
   contentPieceId: string;

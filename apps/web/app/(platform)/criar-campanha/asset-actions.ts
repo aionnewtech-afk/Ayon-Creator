@@ -20,6 +20,7 @@ import {
   AvatarNotReadyError,
   ReopenNotSupportedError,
   VoiceSwapNotSupportedError,
+  addSceneTextBalloon,
   applySceneCandidate,
   approveVideoScenePlan,
   deleteVideoScene,
@@ -36,10 +37,12 @@ import {
   replaceVideoSceneWithAi,
   replaceVideoSceneWithAvatar,
   replaceVideoSceneWithUpload,
+  removeSceneTextBalloon,
   reopenVideoScenePlanForEditing,
   reorderVideoScenes,
   searchAvatarBackgroundImages,
   searchSceneCandidates,
+  setSceneAudioPlaybackRate,
   setSceneDuration,
   setSceneTrim,
   suggestSceneAiPrompt,
@@ -101,6 +104,10 @@ export interface ContentPieceView {
       trimSeconds?: number;
       /** ★ Achado real (pedido direto do usuário — "sugerir o nome... vídeo bem blogueiro TikTok"): rótulo sugerido que vai aparecer sobreposto durante essa cena no render final. */
       onScreenLabel?: string;
+      /** ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"): velocidade atual da fala do trecho — pré-preenche o seletor de velocidade. */
+      audioPlaybackRate?: number;
+      /** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"). */
+      textBalloons?: { text: string; xFraction: number; yFraction: number }[];
     }[];
   };
   /** ★ Achado real (pedido direto do usuário — item 7, editor de Stories): ajustes atuais (texto/fonte/logo) — pré-preenche o painel de edição ao reabrir, em vez de sempre começar em branco. */
@@ -165,6 +172,8 @@ async function toViewWithMedia(
         generationPrompt?: string;
         trimSeconds?: number;
         onScreenLabel?: string;
+        audioPlaybackRate?: number;
+        textBalloons?: { text: string; xFraction: number; yFraction: number }[];
       }[];
     };
     view.pendingScenePlan = {
@@ -179,6 +188,8 @@ async function toViewWithMedia(
         generationPrompt: s.generationPrompt,
         trimSeconds: s.trimSeconds,
         onScreenLabel: s.onScreenLabel,
+        audioPlaybackRate: s.audioPlaybackRate,
+        textBalloons: s.textBalloons,
       })),
     };
     return view;
@@ -408,6 +419,8 @@ export interface GenerateVideoOptions {
   coverTitleText?: string;
   /** ★ Achado real (pedido direto do usuário — "não tem... o formato"): posição do bloco de título — ausente cai no padrão de sempre (centro). */
   coverTitlePosition?: "top" | "center" | "bottom";
+  /** ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): faixa de visualização de áudio na base do vídeo, reagindo à narração real — opt-in, muda a estética do vídeo. */
+  includeSoundAnimation?: boolean;
 }
 
 export async function generateVideoContentPieceAction(
@@ -457,6 +470,7 @@ export async function generateVideoContentPieceAction(
       includeCoverTitle: options?.includeCoverTitle,
       coverTitleText: options?.coverTitleText?.trim() || undefined,
       coverTitlePosition: options?.coverTitlePosition,
+      includeSoundAnimation: options?.includeSoundAnimation,
     });
 
     const updated = await contentPieceRepository.findById(contentPieceId);
@@ -1319,6 +1333,115 @@ export async function setSceneTrimAction(
     return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
   } catch (error) {
     logger.error("asset_engine.scene_trim_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"): muda a velocidade da fala do TRECHO inteiro (todas as cenas daquele trecho, não só a selecionada — ver setSceneAudioPlaybackRate). */
+export async function setSceneAudioPlaybackRateAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  playbackRate: number,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode ajustar a velocidade da narração." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await setSceneAudioPlaybackRate({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, playbackRate });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_audio_playback_rate_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"). */
+export async function addSceneTextBalloonAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  text: string,
+  xFraction: number,
+  yFraction: number,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode adicionar balões de texto." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await addSceneTextBalloon({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, text, xFraction, yFraction });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_text_balloon_add_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+export async function removeSceneTextBalloonAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  balloonIndex: number,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode remover balões de texto." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await removeSceneTextBalloon({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, balloonIndex });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_text_balloon_remove_failed", {
       contentPieceId,
       sceneIndex,
       reason: error instanceof Error ? error.message : String(error),

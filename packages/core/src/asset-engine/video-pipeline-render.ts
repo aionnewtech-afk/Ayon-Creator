@@ -27,6 +27,8 @@ export interface RenderVideoContentPieceParams {
   coverTitle?: string | null;
   /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
   coverTitlePosition?: "top" | "center" | "bottom" | null;
+  /** ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in — ausente não adiciona nada. */
+  includeSoundAnimation?: boolean;
 }
 
 export interface RenderVideoContentPieceResult {
@@ -62,6 +64,7 @@ export async function renderVideoContentPiece(
     branding: { ...branding, includeLogo: params.includeLogo, watermarkText: params.watermarkText },
     coverTitle: params.coverTitle,
     coverTitlePosition: params.coverTitlePosition,
+    includeSoundAnimation: params.includeSoundAnimation,
   });
 
   const videoResponse = await fetch(result.videoUrl);

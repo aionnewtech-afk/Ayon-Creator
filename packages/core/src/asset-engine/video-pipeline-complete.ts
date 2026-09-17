@@ -27,6 +27,8 @@ export interface RenderedScenePlan {
   coverTitle?: string | null;
   /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
   coverTitlePosition?: "top" | "center" | "bottom" | null;
+  /** ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in — ausente/`false` mantém o vídeo sem a faixa de visualização de áudio. */
+  includeSoundAnimation?: boolean;
   /**
    * ★ Achado real (pedido direto do usuário — "eu havia aprovado um vídeo e
    * depois queria uma cena e não consegui mais voltar, criou outro"): sem os

@@ -282,6 +282,27 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     inputArgs.push("-i", logoPath);
   }
 
+  // ★ Achado real (pedido direto do usuário — "não vi opção de colocar
+  // balões de texto... quero basicamente no modelo do capcut"): cada balão
+  // vira um PNG próprio (bolha + rabinho + texto, renderizado via `sharp` —
+  // mesma técnica de `renderPanel`/`renderScrim`, shotstack-video-render-provider.ts),
+  // um input de imagem a mais no ffmpeg, sobreposto via `overlay` só durante
+  // a janela de tempo da cena que o balão pertence.
+  const balloonInputIndexes: { sceneIndex: number; balloonIndex: number; inputIndex: number; widthPx: number; heightPx: number }[] = [];
+  let nextInputIndex = 1 + sources.length + (logoPath ? 1 : 0);
+  for (let sceneIndex = 0; sceneIndex < sources.length; sceneIndex++) {
+    const balloons = sources[sceneIndex]!.textBalloons ?? [];
+    for (let balloonIndex = 0; balloonIndex < balloons.length; balloonIndex++) {
+      const balloon = balloons[balloonIndex]!;
+      const png = await renderTextBalloonPng(balloon.text);
+      const balloonPath = deps.path.join(workDir, `balloon-${sceneIndex}-${balloonIndex}.png`);
+      await deps.writeFile(balloonPath, png.buffer);
+      inputArgs.push("-i", balloonPath);
+      balloonInputIndexes.push({ sceneIndex, balloonIndex, inputIndex: nextInputIndex, widthPx: png.width, heightPx: png.height });
+      nextInputIndex += 1;
+    }
+  }
+
   const filterParts: string[] = [];
 
   sources.forEach((source, i) => {
@@ -382,6 +403,17 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     currentLabel = nextLabel;
   }
 
+  balloonInputIndexes.forEach(({ sceneIndex, balloonIndex, inputIndex, widthPx, heightPx }) => {
+    const scene = sources[sceneIndex]!;
+    const balloon = scene.textBalloons![balloonIndex]!;
+    const nextLabel = `vballoon${sceneIndex}_${balloonIndex}`;
+    const x = Math.round(clamp01(balloon.xFraction) * (FRAME_WIDTH - widthPx));
+    const y = Math.round(clamp01(balloon.yFraction) * (FRAME_HEIGHT - heightPx));
+    const enableExpr = `between(t\\,${scene.startSeconds.toFixed(3)}\\,${(scene.startSeconds + scene.lengthSeconds).toFixed(3)})`;
+    filterParts.push(`[${currentLabel}][${inputIndex}:v]overlay=${x}:${y}:enable='${enableExpr}'[${nextLabel}]`);
+    currentLabel = nextLabel;
+  });
+
   const fadeStart = Math.max(0, totalLength - 1);
   const canUseSegmentedAudio = sources.every(
     (source) => source.segmentIndex !== undefined && source.audioStartSeconds !== undefined && source.audioEndSeconds !== undefined,
@@ -400,11 +432,16 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     // (`startSeconds`, recomputado após qualquer edição —
     // video-pipeline-scene-edit.ts). Reordenar cenas move o clipe de áudio
     // junto; excluir todas as cenas de um trecho remove o clipe (nunca
-    // aparece no `filter_complex`). Nunca estica/acelera a fala: se sobrar
-    // tempo de tela (trecho alongado), toca só o áudio real e o resto fica
-    // em silêncio; se faltar tempo de tela (trecho encurtado), corta a
-    // sobra do fim da fala — nunca distorce velocidade.
-    const runs: { videoStart: number; videoDuration: number; audioStart: number; audioAvailable: number }[] = [];
+    // aparece no `filter_complex`). Por padrão nunca estica/acelera a fala:
+    // se sobrar tempo de tela (trecho alongado), toca só o áudio real e o
+    // resto fica em silêncio; se faltar tempo de tela (trecho encurtado),
+    // corta a sobra do fim da fala. ★ Achado real (pedido direto do usuário
+    // — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"):
+    // `audioPlaybackRate` (por trecho, `source.audioPlaybackRate`) aplica
+    // `atempo` de verdade — a MESMA fala, só mais rápida/lenta, nunca
+    // repetida/cortada por causa disso (a duração final na tela é que se
+    // ajusta pra caber a fala já acelerada).
+    const runs: { videoStart: number; videoDuration: number; audioStart: number; audioAvailable: number; playbackRate: number }[] = [];
     let cursor = 0;
     while (cursor < sources.length) {
       const segmentIndex = sources[cursor]!.segmentIndex;
@@ -415,21 +452,33 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
       const videoDuration = run.reduce((sum, source) => sum + source.lengthSeconds, 0);
       const audioStart = run[0]!.audioStartSeconds!;
       const audioAvailable = run[0]!.audioEndSeconds! - audioStart;
-      runs.push({ videoStart, videoDuration, audioStart, audioAvailable });
+      const playbackRate = run[0]!.audioPlaybackRate && run[0]!.audioPlaybackRate! > 0 ? run[0]!.audioPlaybackRate! : 1;
+      runs.push({ videoStart, videoDuration, audioStart, audioAvailable, playbackRate });
       cursor = end;
     }
 
     const delayedLabels: string[] = [];
     runs.forEach((run, i) => {
-      const clipDuration = Math.min(run.videoDuration, run.audioAvailable);
-      if (clipDuration <= 0) return;
+      // Duração do áudio JÁ acelerado/desacelerado que precisa caber na tela
+      // — nunca mais que o tempo de tela disponível, nem mais que o total de
+      // fala real dividido pela velocidade (não existe fala nova a inventar).
+      const outputDuration = Math.min(run.videoDuration, run.audioAvailable / run.playbackRate);
+      if (outputDuration <= 0) return;
+      const sourceDuration = outputDuration * run.playbackRate;
       const trimmedLabel = `atrim${i}`;
+      const temposLabel = `atempo${i}`;
       const delayedLabel = `adelay${i}`;
       filterParts.push(
-        `[0:a]atrim=start=${run.audioStart.toFixed(3)}:end=${(run.audioStart + clipDuration).toFixed(3)},asetpts=PTS-STARTPTS[${trimmedLabel}]`,
+        `[0:a]atrim=start=${run.audioStart.toFixed(3)}:end=${(run.audioStart + sourceDuration).toFixed(3)},asetpts=PTS-STARTPTS[${trimmedLabel}]`,
       );
+      // `atempo` (ffmpeg nativo) muda a velocidade preservando o tom da voz
+      // (nunca fica "esquilo"/grave como um `asetrate` cru mudaria).
+      const tempoLabel = run.playbackRate !== 1 ? temposLabel : trimmedLabel;
+      if (run.playbackRate !== 1) {
+        filterParts.push(`[${trimmedLabel}]atempo=${run.playbackRate.toFixed(3)}[${temposLabel}]`);
+      }
       const delayMs = Math.max(0, Math.round(run.videoStart * 1000));
-      filterParts.push(`[${trimmedLabel}]adelay=${delayMs}|${delayMs}[${delayedLabel}]`);
+      filterParts.push(`[${tempoLabel}]adelay=${delayMs}|${delayMs}[${delayedLabel}]`);
       delayedLabels.push(delayedLabel);
     });
 
@@ -445,6 +494,23 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     filterParts.push(`[0:a]atrim=0:${totalLength.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=out:st=${fadeStart.toFixed(3)}:d=1[aout]`);
   }
 
+  // ★ Achado real (pedido direto do usuário — "não vi... animação sonora"):
+  // barra de visualização REAL (reage à narração de verdade, nunca um
+  // enfeite decorativo) via `showwaves` (filtro nativo do ffmpeg) — divide o
+  // áudio final (`[aout]`, já com todos os cortes/velocidade/reordenação
+  // aplicados) em 2 cópias com `asplit`: uma segue pro mapeamento de áudio
+  // de sempre, a outra vira a fonte visual da barra.
+  const soundAnimationHeight = 120;
+  if (request.includeSoundAnimation) {
+    filterParts.push(`[aout]asplit=2[aout1][avizsrc]`);
+    filterParts.push(
+      `[avizsrc]showwaves=s=${FRAME_WIDTH}x${soundAnimationHeight}:mode=cline:colors=white@0.7:rate=${FPS},format=rgba[avizvideo]`,
+    );
+    filterParts.push(`[${currentLabel}][avizvideo]overlay=0:H-${soundAnimationHeight}[vsound]`);
+    currentLabel = "vsound";
+  }
+  const finalAudioLabel = request.includeSoundAnimation ? "aout1" : "aout";
+
   const filterComplex = filterParts.join(";");
 
   const args = [
@@ -455,7 +521,7 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     "-map",
     `[${currentLabel}]`,
     "-map",
-    "[aout]",
+    `[${finalAudioLabel}]`,
     "-r",
     String(FPS),
     "-pix_fmt",
@@ -518,6 +584,73 @@ function contrastTextColor(bgHex: string): string {
 
 function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+/** Quebra em linhas curtas (sem hifenização) — balão de fala é pra texto curto, não parágrafo. */
+function wrapBalloonText(text: string, maxCharsPerLine: number): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > maxCharsPerLine && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.slice(0, 3);
+}
+
+const BALLOON_MAX_CHARS_PER_LINE = 22;
+const BALLOON_FONT_SIZE = 26;
+const BALLOON_LINE_HEIGHT = 32;
+const BALLOON_PADDING_X = 24;
+const BALLOON_PADDING_Y = 18;
+const BALLOON_TAIL_HEIGHT = 22;
+
+/**
+ * ★ Achado real (pedido direto do usuário — "não vi opção de colocar
+ * balões de texto... quero basicamente no modelo do capcut"): mesmo padrão
+ * já validado de `renderPanel`/`renderScrim` (shotstack-video-render-provider.ts) —
+ * SVG (bolha arredondada + rabinho + texto) rasterizado via `sharp`, PNG
+ * pronto pra sobrepor no vídeo via ffmpeg `overlay`. Largura/altura calculadas
+ * a partir do texto (quebrado em até 3 linhas curtas), nunca um tamanho fixo
+ * que cortaria texto longo ou sobraria vazio pra texto curto.
+ */
+async function renderTextBalloonPng(text: string): Promise<{ buffer: Buffer; width: number; height: number }> {
+  const sharpModule = await import(/* webpackIgnore: true */ "sharp");
+  const sharp = sharpModule.default;
+
+  const lines = wrapBalloonText(text, BALLOON_MAX_CHARS_PER_LINE);
+  const longestLine = lines.reduce((max, line) => Math.max(max, line.length), 1);
+  const textWidth = Math.round(longestLine * BALLOON_FONT_SIZE * 0.56);
+  const width = textWidth + BALLOON_PADDING_X * 2;
+  const bubbleHeight = lines.length * BALLOON_LINE_HEIGHT + BALLOON_PADDING_Y * 2;
+  const height = bubbleHeight + BALLOON_TAIL_HEIGHT;
+  const radius = 18;
+
+  const textLines = lines
+    .map((line, i) => `<tspan x="${width / 2}" y="${BALLOON_PADDING_Y + BALLOON_LINE_HEIGHT * (i + 0.75)}">${escapeXml(line)}</tspan>`)
+    .join("");
+
+  const svg =
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">` +
+    `<path d="M${radius},0 H${width - radius} Q${width},0 ${width},${radius} V${bubbleHeight - radius} ` +
+    `Q${width},${bubbleHeight} ${width - radius},${bubbleHeight} H${width * 0.32} ` +
+    `L${width * 0.22},${height} L${width * 0.26},${bubbleHeight} H${radius} Q0,${bubbleHeight} 0,${bubbleHeight - radius} ` +
+    `V${radius} Q0,0 ${radius},0 Z" fill="#ffffff" fill-opacity="0.96" stroke="#00000022" stroke-width="2"/>` +
+    `<text text-anchor="middle" font-family="sans-serif" font-size="${BALLOON_FONT_SIZE}" font-weight="700" fill="#111111">${textLines}</text>` +
+    `</svg>`;
+
+  const buffer = await sharp(Buffer.from(svg)).png().toBuffer();
+  return { buffer, width, height };
 }
 
 /**

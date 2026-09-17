@@ -211,6 +211,66 @@ describe("FfmpegVideoRenderProvider (execução real do ffmpeg + Supabase Storag
   );
 
   it.skipIf(!hasAllEnv)(
+    "compõe um vídeo com balão de texto, velocidade de narração e animação sonora (estilo CapCut)",
+    async () => {
+      const serviceRoleDb = createClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false } },
+      );
+      const provider = new FfmpegVideoRenderProvider("ffmpeg", serviceRoleDb);
+
+      const request: VideoRenderRequest = {
+        audioUrl: `${baseUrl}/narration.mp3`,
+        aspectRatio: "9:16",
+        includeSoundAnimation: true,
+        videoSources: [
+          {
+            url: `${baseUrl}/scene0.mp4`,
+            startSeconds: 0,
+            lengthSeconds: 2,
+            segmentIndex: 0,
+            audioStartSeconds: 0,
+            audioEndSeconds: 2,
+            audioPlaybackRate: 1.5,
+            textBalloons: [{ text: "Você viajaria por um doce?", xFraction: 0.15, yFraction: 0.1 }],
+          },
+          { url: `${baseUrl}/scene1.mp4`, startSeconds: 2, lengthSeconds: 2, segmentIndex: 1, audioStartSeconds: 2, audioEndSeconds: 4 },
+        ],
+      };
+
+      const result = await provider.composeVideo(request);
+      const downloaded = await fetch(result.videoUrl);
+      expect(downloaded.ok).toBe(true);
+      const buffer = Buffer.from(await downloaded.arrayBuffer());
+      expect(buffer.length).toBeGreaterThan(10_000);
+      expect(buffer.subarray(4, 8).toString("ascii")).toBe("ftyp");
+
+      const localVideoPath = path.join(workDir, "capcut-features.mp4");
+      const { writeFile, readFile: readFileForFrame } = await import("node:fs/promises");
+      await writeFile(localVideoPath, buffer);
+
+      const ffmpegModule = await import(/* webpackIgnore: true */ "ffmpeg-static");
+      const ffmpegPath = (ffmpegModule.default ?? ffmpegModule) as string;
+
+      // Extrai um frame durante a 1ª cena (balão + animação sonora deveriam
+      // estar visíveis) pra inspeção visual real — não só "não deu erro".
+      // Salvo FORA de `workDir` (que o `afterAll` apaga) pra sobreviver à
+      // execução do teste e poder ser aberto manualmente depois.
+      const persistentDir = "C:\\Users\\Andrei\\AppData\\Local\\Temp\\ayon-capcut-frames";
+      await execFileAsync("cmd", ["/c", "mkdir", persistentDir]).catch(() => {});
+      const framePath = path.join(persistentDir, "capcut-features-frame.png");
+      await execFileAsync(ffmpegPath, ["-y", "-i", localVideoPath, "-ss", "0.5", "-frames:v", "1", framePath]);
+      const frameBuffer = await readFileForFrame(framePath);
+      expect(frameBuffer.length).toBeGreaterThan(1000);
+
+      // eslint-disable-next-line no-console
+      console.log("[debug] capcut_features_frame_saved_at", framePath);
+    },
+    120_000,
+  );
+
+  it.skipIf(!hasAllEnv)(
     "compõe uma imagem real (headline + subheadline + CTA + painel) via sharp e publica no Storage",
     async () => {
       const serviceRoleDb = createClient<Database>(

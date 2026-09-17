@@ -6,6 +6,7 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Inpu
 import { VOICE_CATALOG, type PhotoVisualOverrides } from "@ayon/core";
 import { VoicePicker } from "@/components/voice-picker";
 import {
+  addSceneTextBalloonAction,
   applySceneCandidateAction,
   approveContentPieceAction,
   approveVideoScenePlanAction,
@@ -21,12 +22,14 @@ import {
   duplicateVideoSceneAction,
   regenerateContentPieceAction,
   rejectContentPieceAction,
+  removeSceneTextBalloonAction,
   replaceSceneWithAvatarAction,
   reopenVideoScenePlanAction,
   reorderVideoScenesAction,
   searchAvatarBackgroundImagesAction,
   searchSceneCandidatesAction,
   selectContentPieceVersionAction,
+  setSceneAudioPlaybackRateAction,
   setSceneDurationAction,
   setSceneTrimAction,
   suggestSceneAiPromptAction,
@@ -182,6 +185,8 @@ export function ContentPackageReview({
   // vence. Posição escolhe onde o bloco aparece na tela.
   const [coverTitleTextDraft, setCoverTitleTextDraft] = useState("");
   const [coverTitlePositionDraft, setCoverTitlePositionDraft] = useState<"top" | "center" | "bottom">("center");
+  // ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in, mesmo espírito de includeCoverTitleDraft.
+  const [includeSoundAnimationDraft, setIncludeSoundAnimationDraft] = useState(false);
 
   function updatePiece(updated: ContentPieceView) {
     setPieces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
@@ -305,6 +310,7 @@ export function ContentPackageReview({
       includeCoverTitle?: boolean;
       coverTitleText?: string;
       coverTitlePosition?: "top" | "center" | "bottom";
+      includeSoundAnimation?: boolean;
     },
   ) {
     setLoadingId(pieceId);
@@ -332,6 +338,7 @@ export function ContentPackageReview({
       setIncludeCoverTitleDraft(false);
       setCoverTitleTextDraft("");
       setCoverTitlePositionDraft("center");
+      setIncludeSoundAnimationDraft(false);
       if (mode === "avatar" && !avatarVoices && !avatarVoicesLoading) {
         setAvatarVoicesLoading(true);
         const result = await listAvatarVoicesAction();
@@ -370,6 +377,7 @@ export function ContentPackageReview({
       includeCoverTitle: includeCoverTitleDraft,
       coverTitleText: includeCoverTitleDraft ? coverTitleTextDraft : undefined,
       coverTitlePosition: includeCoverTitleDraft ? coverTitlePositionDraft : undefined,
+      includeSoundAnimation: includeSoundAnimationDraft,
     });
   }
 
@@ -939,6 +947,15 @@ export function ContentPackageReview({
                                 </div>
                               </div>
                             ) : null}
+                            {/* ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in, mesmo espírito do título de capa. */}
+                            <label className="flex items-center gap-2 text-sm text-foreground">
+                              <input
+                                type="checkbox"
+                                checked={includeSoundAnimationDraft}
+                                onChange={(event) => setIncludeSoundAnimationDraft(event.target.checked)}
+                              />
+                              Animação sonora (barra reagindo à narração, estilo CapCut)
+                            </label>
                           </div>
                         ) : null}
 
@@ -1399,6 +1416,17 @@ export function ContentPackageReview({
  * "não conseguimos gerar" sem contexto. Usuário nunca precisa descobrir
  * sozinho qual etapa falhou.
  */
+/** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"): presets de posição (fração da tela) em vez de um canvas de arrastar livre — mais rápido de usar num celular, e mais simples de implementar bem. */
+const BALLOON_POSITION_PRESETS = {
+  topLeft: { label: "Canto superior esquerdo", xFraction: 0.06, yFraction: 0.08 },
+  topRight: { label: "Canto superior direito", xFraction: 0.55, yFraction: 0.08 },
+  center: { label: "Centro", xFraction: 0.15, yFraction: 0.42 },
+  bottomLeft: { label: "Canto inferior esquerdo", xFraction: 0.06, yFraction: 0.68 },
+  bottomRight: { label: "Canto inferior direito", xFraction: 0.55, yFraction: 0.68 },
+} as const;
+
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5] as const;
+
 /** `0:07` — usado pra mostrar em que momento do vídeo cada trecho do roteiro aparece (pedido direto do usuário — "associado cada frase com o momento do vídeo"). */
 function formatTimestamp(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -1470,6 +1498,18 @@ function VideoScenePlanReview({
   // digitação livre tipo "3." antes de virar número) só da cena selecionada
   // — confirma com um botão explícito, nunca salva a cada tecla.
   const [durationDraft, setDurationDraft] = useState("");
+
+  // ★ Achado real (pedido direto do usuário — "não vi opção de colocar
+  // balões de texto... quero basicamente no modelo do capcut"): posição por
+  // preset (não um canvas de arrastar livre — mais simples de usar e de
+  // implementar) mapeado pra xFraction/yFraction no server action.
+  const [balloonTextDraft, setBalloonTextDraft] = useState("");
+  const [balloonPositionDraft, setBalloonPositionDraft] = useState<keyof typeof BALLOON_POSITION_PRESETS>("topLeft");
+
+  // ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra
+  // cortar, acelerar, mudar de lugar"): velocidade é por TRECHO (roteiro),
+  // não por corte — todas as cenas do mesmo trecho mostram/aplicam o mesmo
+  // valor (ver setSceneAudioPlaybackRate).
 
   // ★ Achado real (pedido direto do usuário — "reorganizar cenas por
   // arrastar e soltar... a nova ordem será utilizada na geração final"):
@@ -1554,6 +1594,7 @@ function VideoScenePlanReview({
     setSearchCandidates(null);
     setAiPromptOpenFor(null);
     setDurationDraft(plan.scenes[index]?.lengthSeconds.toFixed(1) ?? "");
+    setBalloonTextDraft("");
     handleCancelTrim();
     handleCancelRecut();
   }
@@ -1563,6 +1604,28 @@ function VideoScenePlanReview({
     if (!Number.isFinite(lengthSeconds) || lengthSeconds < 0.5 || busy) return;
     setBusy(true);
     handleResult(await setSceneDurationAction(pieceId, index, lengthSeconds));
+  }
+
+  /** ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"): aplica no TRECHO inteiro (ver setSceneAudioPlaybackRate) — qualquer cena selecionada do mesmo trecho já reflete o valor certo. */
+  async function handleSetSpeed(index: number, rate: number) {
+    if (busy) return;
+    setBusy(true);
+    handleResult(await setSceneAudioPlaybackRateAction(pieceId, index, rate));
+  }
+
+  /** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"). */
+  async function handleAddBalloon(index: number) {
+    if (busy || !balloonTextDraft.trim()) return;
+    const preset = BALLOON_POSITION_PRESETS[balloonPositionDraft];
+    setBusy(true);
+    setBalloonTextDraft("");
+    handleResult(await addSceneTextBalloonAction(pieceId, index, balloonTextDraft.trim(), preset.xFraction, preset.yFraction));
+  }
+
+  async function handleRemoveBalloon(index: number, balloonIndex: number) {
+    if (busy) return;
+    setBusy(true);
+    handleResult(await removeSceneTextBalloonAction(pieceId, index, balloonIndex));
   }
 
   function handleDragStart(index: number) {
@@ -2074,6 +2137,70 @@ function VideoScenePlanReview({
             <Button size="sm" variant="outline" disabled={busy} onClick={() => handleSetDuration(selectedIndex)}>
               Aplicar
             </Button>
+          </div>
+
+          {/* ★ Achado real (pedido direto do usuário — "timeline com o áudio...
+              pra cortar, acelerar, mudar de lugar"): velocidade é do TRECHO
+              inteiro (roteiro), não só desta cena — mudar aqui muda a fala
+              de todas as cenas desse mesmo trecho (ver handleSetSpeed). */}
+          {plan.scenes[selectedIndex]?.segmentIndex !== undefined ? (
+            <div className="flex items-center gap-2">
+              <label htmlFor="scene-speed" className="text-xs text-muted-foreground">
+                Velocidade da narração deste trecho:
+              </label>
+              <select
+                id="scene-speed"
+                value={plan.scenes[selectedIndex]?.audioPlaybackRate ?? 1}
+                disabled={busy}
+                onChange={(event) => handleSetSpeed(selectedIndex, Number(event.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {SPEED_OPTIONS.map((rate) => (
+                  <option key={rate} value={rate}>
+                    {rate}x{rate === 1 ? " (normal)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {/* ★ Achado real (pedido direto do usuário — "não vi opção de
+              colocar balões de texto... quero basicamente no modelo do
+              capcut"): balão de fala sobreposto só durante esta cena —
+              posição por preset (canto/centro), texto curto. */}
+          <div className="space-y-2 rounded-md border border-border/60 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Balões de texto</p>
+            {(plan.scenes[selectedIndex]?.textBalloons ?? []).map((balloon, balloonIndex) => (
+              <div key={balloonIndex} className="flex items-center justify-between gap-2 rounded-md bg-secondary/50 px-2 py-1 text-sm">
+                <span className="truncate">{balloon.text}</span>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => handleRemoveBalloon(selectedIndex, balloonIndex)}>
+                  Remover
+                </Button>
+              </div>
+            ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={balloonTextDraft}
+                onChange={(event) => setBalloonTextDraft(event.target.value)}
+                placeholder="Texto do balão (curto)"
+                className="max-w-[220px]"
+              />
+              <select
+                value={balloonPositionDraft}
+                disabled={busy}
+                onChange={(event) => setBalloonPositionDraft(event.target.value as keyof typeof BALLOON_POSITION_PRESETS)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {Object.entries(BALLOON_POSITION_PRESETS).map(([key, preset]) => (
+                  <option key={key} value={key}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <Button size="sm" variant="outline" disabled={busy || !balloonTextDraft.trim()} onClick={() => handleAddBalloon(selectedIndex)}>
+                Adicionar balão
+              </Button>
+            </div>
           </div>
 
           {trimPicker && trimPicker.index === selectedIndex ? (

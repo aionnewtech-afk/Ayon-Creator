@@ -35,6 +35,8 @@ export interface PendingVideoScenePlan {
   coverTitle?: string | null;
   /** ★ Achado real (pedido direto do usuário — "não tem a opção de escolher... o formato" do título): posição do bloco — ausente/`"center"` mantém o comportamento de sempre. */
   coverTitlePosition?: "top" | "center" | "bottom" | null;
+  /** ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in, decidido no planejamento, usado no render. */
+  includeSoundAnimation?: boolean;
 }
 
 export interface TriggerVideoScenePlanningParams {
@@ -62,6 +64,8 @@ export interface TriggerVideoScenePlanningParams {
   coverTitleText?: string;
   /** ★ Achado real (pedido direto do usuário — "não tem... o formato"): posição do bloco de título — ausente cai no padrão de sempre (centro). */
   coverTitlePosition?: "top" | "center" | "bottom";
+  /** ★ Achado real (pedido direto do usuário — "não vi... animação sonora"): opt-in, guardado no plano, só usado de verdade no render. */
+  includeSoundAnimation?: boolean;
 }
 
 /**
@@ -175,6 +179,7 @@ export async function triggerVideoScenePlanning(params: TriggerVideoScenePlannin
       watermarkText: params.watermarkText,
       coverTitle,
       coverTitlePosition: params.coverTitlePosition,
+      includeSoundAnimation: params.includeSoundAnimation,
     };
 
     await contentPieceRepository.update(params.contentPieceId, {
@@ -245,6 +250,7 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
       watermarkText: plan.watermarkText,
       coverTitle: plan.coverTitle,
       coverTitlePosition: plan.coverTitlePosition,
+      includeSoundAnimation: plan.includeSoundAnimation,
     });
 
     await completeVideoPipelineSuccess({
@@ -263,6 +269,7 @@ export async function approveVideoScenePlan(params: ApproveVideoScenePlanParams)
         watermarkText: plan.watermarkText,
         coverTitle: plan.coverTitle,
         coverTitlePosition: plan.coverTitlePosition,
+        includeSoundAnimation: plan.includeSoundAnimation,
         segments: plan.segments,
       },
     });
@@ -358,6 +365,7 @@ export async function reopenVideoScenePlanForEditing(params: ReopenVideoScenePla
     watermarkText: scenePlan.watermarkText,
     coverTitle: scenePlan.coverTitle,
     coverTitlePosition: scenePlan.coverTitlePosition,
+    includeSoundAnimation: scenePlan.includeSoundAnimation,
   };
 
   await contentPieceRepository.update(params.contentPieceId, {
