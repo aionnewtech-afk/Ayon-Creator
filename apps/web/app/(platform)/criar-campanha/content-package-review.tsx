@@ -1460,6 +1460,281 @@ function failureMessage(piece: ContentPieceView, mediaLabelWithArticle: string):
  * (`onUpdated`) — a tira reflete a troca imediatamente, sem regenerar
  * narração nem as outras cenas.
  */
+
+const TIMELINE_PIXELS_PER_SECOND = 60;
+const TIMELINE_MIN_BLOCK_WIDTH_PX = 28;
+const TIMELINE_TRACK_HEIGHT_PX = 96;
+const TIMELINE_WAVEFORM_HEIGHT_PX = 48;
+/** Abaixo disso (em px) um pointerdown+up conta como clique (seleciona a cena), não como arrasto — mesmo limiar comum de bibliotecas de drag. */
+const TIMELINE_DRAG_THRESHOLD_PX = 6;
+
+/**
+ * ★ Achado real (pedido direto do usuário — "quero poder cortar o áudio,
+ * arrastar pros lados"): decodifica o áudio de narração no PRÓPRIO
+ * navegador (Web Audio API) pra desenhar uma forma de onda real — nunca um
+ * desenho decorativo. Recalcula só quando a URL muda (a URL é assinada e
+ * estável durante toda a revisão do plano).
+ */
+function useNarrationWaveform(audioUrl: string): number[] | null {
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPeaks(null);
+
+    (async () => {
+      try {
+        const response = await fetch(audioUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const audioContext = new AudioContextCtor();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const channelData = audioBuffer.getChannelData(0);
+        const bucketCount = Math.max(20, Math.round(audioBuffer.duration * (TIMELINE_PIXELS_PER_SECOND / 4)));
+        const bucketSize = Math.max(1, Math.floor(channelData.length / bucketCount));
+        const computedPeaks: number[] = [];
+        for (let i = 0; i < bucketCount; i++) {
+          let max = 0;
+          const start = i * bucketSize;
+          const end = Math.min(start + bucketSize, channelData.length);
+          for (let j = start; j < end; j++) {
+            const abs = Math.abs(channelData[j]!);
+            if (abs > max) max = abs;
+          }
+          computedPeaks.push(max);
+        }
+        await audioContext.close();
+        if (!cancelled) setPeaks(computedPeaks);
+      } catch {
+        // Sem forma de onda (CORS/decodificação falhou) nunca trava a
+        // timeline — ela segue funcional (cortar/arrastar), só sem o desenho.
+        if (!cancelled) setPeaks([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl]);
+
+  return peaks;
+}
+
+interface SceneTimelineScene {
+  url: string;
+  startSeconds: number;
+  lengthSeconds: number;
+  assetType?: "video" | "image" | "avatar";
+  onScreenLabel?: string;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "a timeline com o áudio não
+ * apareceu, pra cortar, acelerar, mudar de lugar" / "quero poder cortar o
+ * áudio, arrastar pros lados"): timeline de verdade, estilo CapCut — cenas
+ * posicionadas/dimensionadas proporcionalmente à duração real (não mais
+ * miniaturas de largura fixa), forma de onda real da narração alinhada no
+ * mesmo eixo de tempo, borda direita de cada cena arrastável pra cortar a
+ * duração ao vivo, corpo da cena arrastável pra reordenar. Nunca chama a
+ * Server Action a cada pixel — só ao soltar (`onPointerUp`), mesmo espírito
+ * de "confirma com uma ação explícita" já usado no resto da tela.
+ */
+function SceneTimeline({
+  scenes,
+  audioUrl,
+  selectedIndex,
+  busy,
+  onSelect,
+  onReorder,
+  onResizeDuration,
+}: {
+  scenes: SceneTimelineScene[];
+  audioUrl: string;
+  selectedIndex: number | null;
+  busy: boolean;
+  onSelect: (index: number) => void;
+  onReorder: (newOrder: number[]) => void;
+  onResizeDuration: (index: number, lengthSeconds: number) => void;
+}) {
+  const peaks = useNarrationWaveform(audioUrl);
+
+  const [resize, setResize] = useState<{ index: number; startClientX: number; startLength: number; previewLength: number } | null>(
+    null,
+  );
+  const [drag, setDrag] = useState<{ index: number; startClientX: number; deltaX: number; moved: boolean; overIndex: number } | null>(
+    null,
+  );
+
+  const totalDurationSeconds = scenes.reduce((sum, scene) => sum + scene.lengthSeconds, 0);
+  const totalWidthPx = Math.max(1, totalDurationSeconds) * TIMELINE_PIXELS_PER_SECOND;
+
+  function widthForScene(scene: SceneTimelineScene): number {
+    return Math.max(TIMELINE_MIN_BLOCK_WIDTH_PX, scene.lengthSeconds * TIMELINE_PIXELS_PER_SECOND);
+  }
+
+  /** Índice de destino durante um arrasto — compara o X (relativo à timeline) ao ponto médio de cada cena, na ordem ATUAL de `scenes`. */
+  function indexAtTimelineX(xWithinTimeline: number): number {
+    let cumulative = 0;
+    for (let i = 0; i < scenes.length; i++) {
+      const width = widthForScene(scenes[i]!);
+      if (xWithinTimeline < cumulative + width / 2) return i;
+      cumulative += width;
+    }
+    return scenes.length - 1;
+  }
+
+  function handleResizePointerDown(event: React.PointerEvent<HTMLDivElement>, index: number) {
+    if (busy) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setResize({ index, startClientX: event.clientX, startLength: scenes[index]!.lengthSeconds, previewLength: scenes[index]!.lengthSeconds });
+  }
+
+  function handleResizePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!resize) return;
+    const deltaSeconds = (event.clientX - resize.startClientX) / TIMELINE_PIXELS_PER_SECOND;
+    setResize({ ...resize, previewLength: Math.max(0.3, resize.startLength + deltaSeconds) });
+  }
+
+  function handleResizePointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (!resize) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    const { index, previewLength, startLength } = resize;
+    setResize(null);
+    if (Math.abs(previewLength - startLength) > 0.05) onResizeDuration(index, Math.round(previewLength * 10) / 10);
+  }
+
+  function handleBlockPointerDown(event: React.PointerEvent<HTMLDivElement>, index: number) {
+    if (busy) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDrag({ index, startClientX: event.clientX, deltaX: 0, moved: false, overIndex: index });
+  }
+
+  function handleBlockPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    const deltaX = event.clientX - drag.startClientX;
+    const moved = drag.moved || Math.abs(deltaX) > TIMELINE_DRAG_THRESHOLD_PX;
+    const draggedScene = scenes[drag.index]!;
+    const draggedCenterX = draggedScene.startSeconds * TIMELINE_PIXELS_PER_SECOND + widthForScene(draggedScene) / 2 + deltaX;
+    const overIndex = moved ? indexAtTimelineX(draggedCenterX) : drag.index;
+    setDrag({ ...drag, deltaX, moved, overIndex });
+  }
+
+  function handleBlockPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    const { index, moved, overIndex } = drag;
+    setDrag(null);
+    if (!moved || overIndex === index) {
+      onSelect(index);
+      return;
+    }
+    const order = scenes.map((_, i) => i);
+    const [movedIndex] = order.splice(index, 1);
+    order.splice(overIndex, 0, movedIndex!);
+    onReorder(order);
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">
+        Arraste o corpo de uma cena pra reordenar; arraste a borda direita pra cortar a duração.
+      </p>
+      <div className="overflow-x-auto rounded-md border border-border bg-secondary/20 pb-1">
+        <div style={{ width: totalWidthPx }} className="relative">
+          {/* Forma de onda real da narração — mesmo eixo de tempo das cenas abaixo. */}
+          <div
+            className="relative border-b border-border/60 bg-background/40"
+            style={{ height: TIMELINE_WAVEFORM_HEIGHT_PX, width: totalWidthPx }}
+          >
+            {peaks && peaks.length > 0 ? (
+              <svg width={totalWidthPx} height={TIMELINE_WAVEFORM_HEIGHT_PX} className="absolute inset-0">
+                {peaks.map((peak, i) => {
+                  const barWidth = totalWidthPx / peaks.length;
+                  const barHeight = Math.max(2, peak * TIMELINE_WAVEFORM_HEIGHT_PX);
+                  return (
+                    <rect
+                      key={i}
+                      x={i * barWidth}
+                      y={(TIMELINE_WAVEFORM_HEIGHT_PX - barHeight) / 2}
+                      width={Math.max(1, barWidth - 1)}
+                      height={barHeight}
+                      className="fill-primary/50"
+                    />
+                  );
+                })}
+              </svg>
+            ) : peaks === null ? (
+              <p className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">
+                Carregando forma de onda...
+              </p>
+            ) : null}
+          </div>
+
+          {/* Cenas — largura proporcional à duração real. */}
+          <div className="relative" style={{ height: TIMELINE_TRACK_HEIGHT_PX, width: totalWidthPx }}>
+            {scenes.map((scene, index) => {
+              const isDraggingThis = drag?.index === index && drag.moved;
+              const isResizingThis = resize?.index === index;
+              const width = isResizingThis ? resize.previewLength * TIMELINE_PIXELS_PER_SECOND : widthForScene(scene);
+              const left = scene.startSeconds * TIMELINE_PIXELS_PER_SECOND + (isDraggingThis ? drag.deltaX : 0);
+              const showInsertionBefore = drag && drag.moved && drag.overIndex === index && drag.overIndex < drag.index;
+              const showInsertionAfter = drag && drag.moved && drag.overIndex === index && drag.overIndex > drag.index;
+
+              return (
+                <div
+                  key={index}
+                  className={`absolute top-0 h-full ${isDraggingThis ? "z-10 opacity-80 shadow-lg" : "z-0"}`}
+                  style={{ left, width }}
+                >
+                  {showInsertionBefore ? <div className="absolute -left-1 top-0 h-full w-0.5 bg-primary" /> : null}
+                  <div
+                    onPointerDown={(event) => handleBlockPointerDown(event, index)}
+                    onPointerMove={handleBlockPointerMove}
+                    onPointerUp={handleBlockPointerUp}
+                    className={`relative h-full w-full cursor-grab overflow-hidden rounded-md active:cursor-grabbing ${
+                      selectedIndex === index ? "ring-2 ring-primary ring-offset-2" : ""
+                    }`}
+                  >
+                    {scene.assetType === "image" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={scene.url} alt={`Cena ${index + 1}`} className="h-full w-full object-cover" draggable={false} />
+                    ) : (
+                      // eslint-disable-next-line jsx-a11y/media-has-caption
+                      <video src={scene.url} muted loop autoPlay playsInline className="h-full w-full object-cover" />
+                    )}
+                    {scene.assetType === "avatar" ? (
+                      <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        Avatar
+                      </span>
+                    ) : null}
+                    <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {(isResizingThis ? resize.previewLength : scene.lengthSeconds).toFixed(1)}s
+                    </span>
+                    {scene.onScreenLabel ? (
+                      <span className="absolute top-1 left-1 right-1 truncate rounded bg-black/70 px-1.5 py-0.5 text-center text-[9px] font-medium text-white">
+                        {scene.onScreenLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  {/* ★ Borda direita arrastável — corta/estica a duração desta cena ao vivo (setSceneDurationAction só no pointerup). */}
+                  <div
+                    onPointerDown={(event) => handleResizePointerDown(event, index)}
+                    onPointerMove={handleResizePointerMove}
+                    onPointerUp={handleResizePointerUp}
+                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-foreground/20 hover:bg-primary/60"
+                  />
+                  {showInsertionAfter ? <div className="absolute -right-1 top-0 h-full w-0.5 bg-primary" /> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VideoScenePlanReview({
   pieceId,
   plan,
@@ -1510,14 +1785,6 @@ function VideoScenePlanReview({
   // cortar, acelerar, mudar de lugar"): velocidade é por TRECHO (roteiro),
   // não por corte — todas as cenas do mesmo trecho mostram/aplicam o mesmo
   // valor (ver setSceneAudioPlaybackRate).
-
-  // ★ Achado real (pedido direto do usuário — "reorganizar cenas por
-  // arrastar e soltar... a nova ordem será utilizada na geração final"):
-  // Drag and Drop nativo do HTML5 (sem biblioteca nova) — `dragIndex` é a
-  // cena sendo arrastada, `dragOverIndex` só controla o destaque visual de
-  // onde ela cairia.
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // ★ Achado real (pedido direto do usuário — "incluir a oportunidade de
   // incluir um vídeo e recortar a cena que quero"): antes, um vídeo enviado
@@ -1628,28 +1895,19 @@ function VideoScenePlanReview({
     handleResult(await removeSceneTextBalloonAction(pieceId, index, balloonIndex));
   }
 
-  function handleDragStart(index: number) {
-    setDragIndex(index);
-  }
-
-  function handleDragOver(event: React.DragEvent, index: number) {
-    event.preventDefault();
-    setDragOverIndex(index);
-  }
-
-  async function handleDrop(targetIndex: number) {
-    setDragOverIndex(null);
-    if (dragIndex === null || dragIndex === targetIndex || busy) {
-      setDragIndex(null);
-      return;
-    }
-    const order = plan.scenes.map((_, index) => index);
-    const [moved] = order.splice(dragIndex, 1);
-    order.splice(targetIndex, 0, moved!);
-    setDragIndex(null);
+  /** ★ Achado real (pedido direto do usuário — "quero poder cortar o áudio, arrastar pros lados"): a timeline (SceneTimeline abaixo) já calcula a nova ordem a partir da posição onde a cena foi solta — esta função só valida/envia, igual ao antigo handleDrop. */
+  async function handleReorder(newOrder: number[]) {
+    if (busy) return;
     setBusy(true);
-    handleResult(await reorderVideoScenesAction(pieceId, order));
+    handleResult(await reorderVideoScenesAction(pieceId, newOrder));
     setSelectedIndex(null);
+  }
+
+  /** ★ Mesmo achado — arrastar a borda direita de uma cena na timeline ajusta a duração dela ao vivo, sem precisar digitar num campo. */
+  async function handleResizeDuration(index: number, lengthSeconds: number) {
+    if (busy) return;
+    setBusy(true);
+    handleResult(await setSceneDurationAction(pieceId, index, lengthSeconds));
   }
 
   async function handleSearch(index: number) {
@@ -1889,55 +2147,15 @@ function VideoScenePlanReview({
         })}
       </div>
 
-      <p className="text-xs text-muted-foreground">Arraste uma cena pra reordenar.</p>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {plan.scenes.map((scene, index) => (
-          <button
-            key={index}
-            type="button"
-            draggable
-            onClick={() => selectScene(index)}
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={(event) => handleDragOver(event, index)}
-            onDragLeave={() => setDragOverIndex((current) => (current === index ? null : current))}
-            onDrop={() => void handleDrop(index)}
-            onDragEnd={() => {
-              setDragIndex(null);
-              setDragOverIndex(null);
-            }}
-            className={`relative h-32 w-20 shrink-0 cursor-grab overflow-hidden rounded-md active:cursor-grabbing ${
-              selectedIndex === index ? "ring-2 ring-primary ring-offset-2" : ""
-            } ${dragOverIndex === index && dragIndex !== index ? "ring-2 ring-dashed ring-foreground" : ""} ${
-              dragIndex === index ? "opacity-40" : ""
-            }`}
-          >
-            {scene.assetType === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={scene.url} alt={`Cena ${index + 1}`} className="h-full w-full object-cover" />
-            ) : (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={scene.url} muted loop autoPlay playsInline className="h-full w-full object-cover" />
-            )}
-            {scene.assetType === "avatar" ? (
-              <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                Avatar
-              </span>
-            ) : null}
-            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-              {scene.lengthSeconds.toFixed(1)}s
-            </span>
-            {/* ★ Achado real (pedido direto do usuário — "sugerir o nome...
-                vídeo bem blogueiro TikTok"): mostra o rótulo já na revisão
-                (não só no render final) — o usuário confirma se faz sentido
-                antes de gerar o vídeo de verdade. */}
-            {scene.onScreenLabel ? (
-              <span className="absolute top-1 left-1 right-1 truncate rounded bg-black/70 px-1.5 py-0.5 text-center text-[9px] font-medium text-white">
-                {scene.onScreenLabel}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      <SceneTimeline
+        scenes={plan.scenes}
+        audioUrl={plan.audioUrl}
+        selectedIndex={selectedIndex}
+        busy={busy}
+        onSelect={selectScene}
+        onReorder={handleReorder}
+        onResizeDuration={handleResizeDuration}
+      />
 
       {selectedIndex !== null ? (
         <div className="space-y-3 rounded-md border border-border p-3">
