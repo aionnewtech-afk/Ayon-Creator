@@ -441,7 +441,14 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
     // `atempo` de verdade — a MESMA fala, só mais rápida/lenta, nunca
     // repetida/cortada por causa disso (a duração final na tela é que se
     // ajusta pra caber a fala já acelerada).
-    const runs: { videoStart: number; videoDuration: number; audioStart: number; audioAvailable: number; playbackRate: number }[] = [];
+    const runs: {
+      videoStart: number;
+      videoDuration: number;
+      audioStart: number;
+      audioAvailable: number;
+      playbackRate: number;
+      cutSeconds: number;
+    }[] = [];
     let cursor = 0;
     while (cursor < sources.length) {
       const segmentIndex = sources[cursor]!.segmentIndex;
@@ -453,7 +460,8 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
       const audioStart = run[0]!.audioStartSeconds!;
       const audioAvailable = run[0]!.audioEndSeconds! - audioStart;
       const playbackRate = run[0]!.audioPlaybackRate && run[0]!.audioPlaybackRate! > 0 ? run[0]!.audioPlaybackRate! : 1;
-      runs.push({ videoStart, videoDuration, audioStart, audioAvailable, playbackRate });
+      const cutSeconds = run[0]!.audioCutSeconds && run[0]!.audioCutSeconds! > 0 ? run[0]!.audioCutSeconds! : Infinity;
+      runs.push({ videoStart, videoDuration, audioStart, audioAvailable, playbackRate, cutSeconds });
       cursor = end;
     }
 
@@ -462,7 +470,11 @@ async function renderVideoWithFfmpeg(request: VideoRenderRequest, workDir: strin
       // Duração do áudio JÁ acelerado/desacelerado que precisa caber na tela
       // — nunca mais que o tempo de tela disponível, nem mais que o total de
       // fala real dividido pela velocidade (não existe fala nova a inventar).
-      const outputDuration = Math.min(run.videoDuration, run.audioAvailable / run.playbackRate);
+      // ★ Achado real (pedido direto do usuário — "a locução ainda não deixa
+      // cortar... arrastar pros lados"): `cutSeconds` (arrastar a borda do
+      // trecho de áudio na timeline) corta ainda mais essa duração — nunca
+      // estica além do que já seria natural, só encurta.
+      const outputDuration = Math.min(run.videoDuration, run.audioAvailable / run.playbackRate, run.cutSeconds);
       if (outputDuration <= 0) return;
       const sourceDuration = outputDuration * run.playbackRate;
       const trimmedLabel = `atrim${i}`;

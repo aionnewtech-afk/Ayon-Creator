@@ -29,6 +29,7 @@ import {
   searchAvatarBackgroundImagesAction,
   searchSceneCandidatesAction,
   selectContentPieceVersionAction,
+  setSceneAudioCutSecondsAction,
   setSceneAudioPlaybackRateAction,
   setSceneDurationAction,
   setSceneTrimAction,
@@ -399,7 +400,21 @@ export function ContentPackageReview({
   async function handleDownloadScenePackage(pieceId: string) {
     setLoadingId(pieceId);
     setError(null);
-    const result = await downloadScenePackageAction(pieceId);
+    // ★ Achado real (pedido direto do usuário — "o zip continua sem
+    // baixar"): sem `try/catch` aqui, uma falha de rede na CHAMADA da
+    // Server Action em si (não uma resposta `{ ok: false }`, mas a promise
+    // inteira rejeitando — ex.: timeout do proxy num pacote com várias
+    // cenas grandes) nunca setava `loadingId` de volta pra `null` nem
+    // mostrava erro nenhum — o botão só ficava "Preparando..." pra sempre,
+    // sem nenhum feedback visível de que algo deu errado.
+    let result: Awaited<ReturnType<typeof downloadScenePackageAction>>;
+    try {
+      result = await downloadScenePackageAction(pieceId);
+    } catch {
+      setLoadingId(null);
+      setError("Não consegui preparar o pacote de cenas agora. Tenta de novo?");
+      return;
+    }
     setLoadingId(null);
     if (!result.ok || !result.downloadUrl) {
       setError(result.error ?? "Algo deu errado. Tenta de novo?");
@@ -1526,6 +1541,43 @@ interface SceneTimelineScene {
   lengthSeconds: number;
   assetType?: "video" | "image" | "avatar";
   onScreenLabel?: string;
+  segmentIndex?: number;
+  audioPlaybackRate?: number;
+  audioCutSeconds?: number;
+}
+
+interface AudioTrackSegment {
+  segmentIndex: number;
+  firstSceneIndex: number;
+  startSeconds: number;
+  durationSeconds: number;
+  playbackRate: number;
+  cutSeconds?: number;
+}
+
+/** Agrupa cenas CONTÍGUAS do mesmo trecho — mesmo critério do motor de render (ffmpeg-video-render-provider.ts) pra virar 1 bloco de áudio só. */
+function computeAudioTrackSegments(scenes: SceneTimelineScene[]): AudioTrackSegment[] {
+  const result: AudioTrackSegment[] = [];
+  let cursor = 0;
+  while (cursor < scenes.length) {
+    const segmentIndex = scenes[cursor]!.segmentIndex;
+    let end = cursor + 1;
+    while (end < scenes.length && scenes[end]!.segmentIndex === segmentIndex) end++;
+    if (segmentIndex !== undefined) {
+      const run = scenes.slice(cursor, end);
+      const durationSeconds = run.reduce((sum, scene) => sum + scene.lengthSeconds, 0);
+      result.push({
+        segmentIndex,
+        firstSceneIndex: cursor,
+        startSeconds: run[0]!.startSeconds,
+        durationSeconds,
+        playbackRate: run[0]!.audioPlaybackRate ?? 1,
+        cutSeconds: run[0]!.audioCutSeconds,
+      });
+    }
+    cursor = end;
+  }
+  return result;
 }
 
 /**
@@ -1543,20 +1595,27 @@ function SceneTimeline({
   scenes,
   audioUrl,
   selectedIndex,
+  selectedAudioSegmentIndex,
   busy,
   onSelect,
   onReorder,
   onResizeDuration,
+  onSelectAudioSegment,
+  onCutAudio,
 }: {
   scenes: SceneTimelineScene[];
   audioUrl: string;
   selectedIndex: number | null;
+  selectedAudioSegmentIndex: number | null;
   busy: boolean;
   onSelect: (index: number) => void;
   onReorder: (newOrder: number[]) => void;
   onResizeDuration: (index: number, lengthSeconds: number) => void;
+  onSelectAudioSegment: (segmentIndex: number) => void;
+  onCutAudio: (segmentIndex: number, cutSeconds: number | undefined) => void;
 }) {
   const peaks = useNarrationWaveform(audioUrl);
+  const audioTrackSegments = computeAudioTrackSegments(scenes);
 
   const [resize, setResize] = useState<{ index: number; startClientX: number; startLength: number; previewLength: number } | null>(
     null,
@@ -1564,6 +1623,13 @@ function SceneTimeline({
   const [drag, setDrag] = useState<{ index: number; startClientX: number; deltaX: number; moved: boolean; overIndex: number } | null>(
     null,
   );
+  const [audioCutDrag, setAudioCutDrag] = useState<{
+    segmentIndex: number;
+    startClientX: number;
+    startCutSeconds: number;
+    previewCutSeconds: number;
+    naturalDurationSeconds: number;
+  } | null>(null);
 
   const totalDurationSeconds = scenes.reduce((sum, scene) => sum + scene.lengthSeconds, 0);
   const totalWidthPx = Math.max(1, totalDurationSeconds) * TIMELINE_PIXELS_PER_SECOND;
@@ -1635,10 +1701,43 @@ function SceneTimeline({
     onReorder(order);
   }
 
+  /** ★ Achado real (pedido direto do usuário — "a locução ainda não deixa cortar... arrastar pros lados"): arrasta a borda do bloco de áudio do trecho — encurta a fala que toca, nunca estica além do natural. */
+  function handleAudioCutPointerDown(event: React.PointerEvent<HTMLDivElement>, segment: AudioTrackSegment) {
+    if (busy) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const startCutSeconds = segment.cutSeconds ?? segment.durationSeconds;
+    setAudioCutDrag({
+      segmentIndex: segment.segmentIndex,
+      startClientX: event.clientX,
+      startCutSeconds,
+      previewCutSeconds: startCutSeconds,
+      naturalDurationSeconds: segment.durationSeconds,
+    });
+  }
+
+  function handleAudioCutPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!audioCutDrag) return;
+    const deltaSeconds = (event.clientX - audioCutDrag.startClientX) / TIMELINE_PIXELS_PER_SECOND;
+    const preview = Math.min(audioCutDrag.naturalDurationSeconds, Math.max(0.3, audioCutDrag.startCutSeconds + deltaSeconds));
+    setAudioCutDrag({ ...audioCutDrag, previewCutSeconds: preview });
+  }
+
+  function handleAudioCutPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (!audioCutDrag) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    const { segmentIndex, previewCutSeconds, naturalDurationSeconds } = audioCutDrag;
+    setAudioCutDrag(null);
+    // Voltou pro fim natural (ou além) — remove o corte manual, em vez de gravar um valor que não corta nada.
+    const cutSeconds = previewCutSeconds >= naturalDurationSeconds - 0.05 ? undefined : Math.round(previewCutSeconds * 10) / 10;
+    onCutAudio(segmentIndex, cutSeconds);
+  }
+
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">
-        Arraste o corpo de uma cena pra reordenar; arraste a borda direita pra cortar a duração.
+        Cenas: arraste o corpo pra reordenar, a borda direita pra cortar a duração. Narração: clique num trecho pra
+        ajustar velocidade, arraste a borda dele pra cortar a fala.
       </p>
       <div className="overflow-x-auto rounded-md border border-border bg-secondary/20 pb-1">
         <div style={{ width: totalWidthPx }} className="relative">
@@ -1669,6 +1768,62 @@ function SceneTimeline({
                 Carregando forma de onda...
               </p>
             ) : null}
+          </div>
+
+          {/* ★ Achado real (pedido direto do usuário — "a locução ainda não
+              deixa cortar, nem mudar a velocidade selecionando ela"): trilha
+              própria do áudio — 1 bloco por trecho de roteiro (não por cena
+              individual, já que o áudio é do trecho inteiro). Clicar
+              seleciona (mostra velocidade no painel abaixo); arrastar a
+              borda corta a fala desse trecho — a parte "muda" do bloco (sem
+              fala) fica visivelmente mais escura. */}
+          <div className="relative border-b border-border/60" style={{ height: 28, width: totalWidthPx }}>
+            {audioTrackSegments.map((segment) => {
+              const isDraggingThis = audioCutDrag?.segmentIndex === segment.segmentIndex;
+              const cutSeconds = isDraggingThis ? audioCutDrag.previewCutSeconds : (segment.cutSeconds ?? segment.durationSeconds);
+              const fullWidth = segment.durationSeconds * TIMELINE_PIXELS_PER_SECOND;
+              const activeWidth = Math.min(cutSeconds, segment.durationSeconds) * TIMELINE_PIXELS_PER_SECOND;
+              const left = segment.startSeconds * TIMELINE_PIXELS_PER_SECOND;
+              const isSelected = selectedAudioSegmentIndex === segment.segmentIndex;
+
+              return (
+                <div
+                  key={segment.segmentIndex}
+                  className={`absolute top-0.5 h-6 overflow-hidden rounded ${isSelected ? "ring-2 ring-primary" : ""}`}
+                  style={{ left, width: fullWidth }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectAudioSegment(segment.segmentIndex)}
+                    className="absolute inset-0 flex items-center justify-center bg-amber-500/40 text-[9px] font-medium text-amber-950 hover:bg-amber-500/55"
+                    style={{ width: activeWidth }}
+                  >
+                    {segment.playbackRate !== 1 ? `${segment.playbackRate}x` : ""}
+                  </button>
+                  {activeWidth < fullWidth ? (
+                    <div
+                      className="absolute top-0 h-full bg-foreground/10"
+                      style={{ left: activeWidth, width: fullWidth - activeWidth }}
+                    />
+                  ) : null}
+                  {/* ★ Achado real (validado com arrasto de verdade na
+                      revisão desta funcionalidade): uma alça de poucos
+                      pixels é difícil de acertar até com mouse, pior ainda
+                      no toque — a faixa CLICÁVEL é bem mais larga (12px) que
+                      a barra visível (2px, centralizada), pra facilitar
+                      pegar o ponto certo sem exigir precisão de pixel. */}
+                  <div
+                    onPointerDown={(event) => handleAudioCutPointerDown(event, segment)}
+                    onPointerMove={handleAudioCutPointerMove}
+                    onPointerUp={handleAudioCutPointerUp}
+                    className="group absolute top-0 flex h-full w-3 cursor-col-resize items-stretch justify-center"
+                    style={{ left: Math.max(0, activeWidth - 6) }}
+                  >
+                    <div className="h-full w-0.5 bg-amber-700/80 group-hover:w-1 group-hover:bg-amber-500" />
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Cenas — largura proporcional à duração real. */}
@@ -1750,6 +1905,8 @@ function VideoScenePlanReview({
   avatarName: string | null;
 }) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  /** ★ Achado real (pedido direto do usuário — "a locução ainda não deixa cortar, nem mudar a velocidade selecionando ela"): seleção PRÓPRIA pra trecho de áudio na timeline — independente de qual cena está selecionada, já que 1 trecho pode ter várias cenas. */
+  const [selectedAudioSegmentIndex, setSelectedAudioSegmentIndex] = useState<number | null>(null);
   const [queryDraft, setQueryDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [sceneError, setSceneError] = useState<string | null>(null);
@@ -1856,6 +2013,7 @@ function VideoScenePlanReview({
 
   function selectScene(index: number) {
     setSelectedIndex((current) => (current === index ? null : index));
+    setSelectedAudioSegmentIndex(null);
     setSceneError(null);
     setQueryDraft("");
     setSearchCandidates(null);
@@ -1873,11 +2031,29 @@ function VideoScenePlanReview({
     handleResult(await setSceneDurationAction(pieceId, index, lengthSeconds));
   }
 
-  /** ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"): aplica no TRECHO inteiro (ver setSceneAudioPlaybackRate) — qualquer cena selecionada do mesmo trecho já reflete o valor certo. */
-  async function handleSetSpeed(index: number, rate: number) {
-    if (busy) return;
+  /** Qualquer cena do trecho serve — `setSceneAudioPlaybackRateAction`/`setSceneAudioCutSecondsAction` aplicam no trecho inteiro (ver os cores functions). */
+  function firstSceneIndexForSegment(segmentIndex: number): number {
+    return plan.scenes.findIndex((scene) => scene.segmentIndex === segmentIndex);
+  }
+
+  function handleSelectAudioSegment(segmentIndex: number) {
+    setSelectedAudioSegmentIndex((current) => (current === segmentIndex ? null : segmentIndex));
+    setSelectedIndex(null);
+  }
+
+  async function handleSetSegmentSpeed(segmentIndex: number, rate: number) {
+    const sceneIndex = firstSceneIndexForSegment(segmentIndex);
+    if (sceneIndex === -1 || busy) return;
     setBusy(true);
-    handleResult(await setSceneAudioPlaybackRateAction(pieceId, index, rate));
+    handleResult(await setSceneAudioPlaybackRateAction(pieceId, sceneIndex, rate));
+  }
+
+  /** ★ Achado real (pedido direto do usuário — "a locução ainda não deixa cortar... arrastar pros lados"). */
+  async function handleCutAudio(segmentIndex: number, cutSeconds: number | undefined) {
+    const sceneIndex = firstSceneIndexForSegment(segmentIndex);
+    if (sceneIndex === -1 || busy) return;
+    setBusy(true);
+    handleResult(await setSceneAudioCutSecondsAction(pieceId, sceneIndex, cutSeconds));
   }
 
   /** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"). */
@@ -2151,11 +2327,58 @@ function VideoScenePlanReview({
         scenes={plan.scenes}
         audioUrl={plan.audioUrl}
         selectedIndex={selectedIndex}
+        selectedAudioSegmentIndex={selectedAudioSegmentIndex}
         busy={busy}
         onSelect={selectScene}
         onReorder={handleReorder}
         onResizeDuration={handleResizeDuration}
+        onSelectAudioSegment={handleSelectAudioSegment}
+        onCutAudio={handleCutAudio}
       />
+
+      {/* ★ Achado real (pedido direto do usuário — "a locução ainda não
+          deixa cortar, nem mudar a velocidade selecionando ela"): painel
+          PRÓPRIO pra narração, separado do painel de cena — clicar num
+          trecho de áudio na timeline mostra isso, nunca precisa selecionar
+          uma cena primeiro. */}
+      {selectedAudioSegmentIndex !== null ? (
+        <div className="space-y-2 rounded-md border border-amber-600/40 bg-amber-500/5 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Narração — trecho {selectedAudioSegmentIndex + 1}
+          </p>
+          {sceneError ? <p className="text-xs text-destructive">{sceneError}</p> : null}
+          <p className="text-sm text-foreground">{plan.segments[selectedAudioSegmentIndex]?.text}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="segment-speed" className="text-xs text-muted-foreground">
+              Velocidade:
+            </label>
+            <select
+              id="segment-speed"
+              value={
+                plan.scenes.find((scene) => scene.segmentIndex === selectedAudioSegmentIndex)?.audioPlaybackRate ?? 1
+              }
+              disabled={busy}
+              onChange={(event) => handleSetSegmentSpeed(selectedAudioSegmentIndex, Number(event.target.value))}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              {SPEED_OPTIONS.map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate}x{rate === 1 ? " (normal)" : ""}
+                </option>
+              ))}
+            </select>
+            {plan.scenes.find((scene) => scene.segmentIndex === selectedAudioSegmentIndex)?.audioCutSeconds ? (
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => handleCutAudio(selectedAudioSegmentIndex, undefined)}>
+                Remover corte da fala
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Arraste a borda amarela do trecho na timeline acima pra cortar a fala mais cedo — o resto da(s) cena(s)
+            continua na tela, só sem narração.
+          </p>
+        </div>
+      ) : null}
 
       {selectedIndex !== null ? (
         <div className="space-y-3 rounded-md border border-border p-3">
@@ -2257,6 +2480,11 @@ function VideoScenePlanReview({
             </div>
           ) : null}
 
+          {/* ★ Achado real (pedido direto do usuário — "deixa o layout mais
+              intuitivo"): título curto separando "trocar a cena" (busca/IA/
+              avatar/upload/duplicar/remover) do resto do painel — antes era
+              tudo 1 bloco só, sem indicar onde cada grupo de botão começa. */}
+          <p className="pt-1 text-xs font-medium text-muted-foreground">Trocar esta cena por:</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
@@ -2339,6 +2567,7 @@ function VideoScenePlanReview({
             </div>
           ) : null}
 
+          <p className="pt-1 text-xs font-medium text-muted-foreground">Ajustes desta cena:</p>
           <div className="flex items-center gap-2">
             <label htmlFor="scene-duration" className="text-xs text-muted-foreground">
               Duração desta cena (segundos):
@@ -2357,30 +2586,13 @@ function VideoScenePlanReview({
             </Button>
           </div>
 
-          {/* ★ Achado real (pedido direto do usuário — "timeline com o áudio...
-              pra cortar, acelerar, mudar de lugar"): velocidade é do TRECHO
-              inteiro (roteiro), não só desta cena — mudar aqui muda a fala
-              de todas as cenas desse mesmo trecho (ver handleSetSpeed). */}
-          {plan.scenes[selectedIndex]?.segmentIndex !== undefined ? (
-            <div className="flex items-center gap-2">
-              <label htmlFor="scene-speed" className="text-xs text-muted-foreground">
-                Velocidade da narração deste trecho:
-              </label>
-              <select
-                id="scene-speed"
-                value={plan.scenes[selectedIndex]?.audioPlaybackRate ?? 1}
-                disabled={busy}
-                onChange={(event) => handleSetSpeed(selectedIndex, Number(event.target.value))}
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {SPEED_OPTIONS.map((rate) => (
-                  <option key={rate} value={rate}>
-                    {rate}x{rate === 1 ? " (normal)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+          {/* ★ Achado real (pedido direto do usuário — "a locução ainda não
+              deixa cortar, nem mudar a velocidade selecionando ela"):
+              velocidade/corte da narração saíram de dentro do painel de
+              cena — agora só aparecem clicando o trecho de ÁUDIO na
+              timeline (painel próprio, acima), nunca misturados com os
+              controles da cena (mais intuitivo: cada trilha tem seu
+              painel). */}
 
           {/* ★ Achado real (pedido direto do usuário — "não vi opção de
               colocar balões de texto... quero basicamente no modelo do

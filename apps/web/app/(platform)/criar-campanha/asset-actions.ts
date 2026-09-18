@@ -42,6 +42,7 @@ import {
   reorderVideoScenes,
   searchAvatarBackgroundImages,
   searchSceneCandidates,
+  setSceneAudioCutSeconds,
   setSceneAudioPlaybackRate,
   setSceneDuration,
   setSceneTrim,
@@ -106,6 +107,8 @@ export interface ContentPieceView {
       onScreenLabel?: string;
       /** ★ Achado real (pedido direto do usuário — "timeline com o áudio... pra cortar, acelerar, mudar de lugar"): velocidade atual da fala do trecho — pré-preenche o seletor de velocidade. */
       audioPlaybackRate?: number;
+      /** ★ Achado real (pedido direto do usuário — "a locução ainda não deixa cortar... arrastar pros lados"): corte manual atual (segundos) — pré-preenche a borda arrastável do trecho de áudio na timeline. */
+      audioCutSeconds?: number;
       /** ★ Achado real (pedido direto do usuário — "não vi opção de colocar balões de texto... quero basicamente no modelo do capcut"). */
       textBalloons?: { text: string; xFraction: number; yFraction: number }[];
     }[];
@@ -173,6 +176,7 @@ async function toViewWithMedia(
         trimSeconds?: number;
         onScreenLabel?: string;
         audioPlaybackRate?: number;
+        audioCutSeconds?: number;
         textBalloons?: { text: string; xFraction: number; yFraction: number }[];
       }[];
     };
@@ -189,6 +193,7 @@ async function toViewWithMedia(
         trimSeconds: s.trimSeconds,
         onScreenLabel: s.onScreenLabel,
         audioPlaybackRate: s.audioPlaybackRate,
+        audioCutSeconds: s.audioCutSeconds,
         textBalloons: s.textBalloons,
       })),
     };
@@ -860,7 +865,7 @@ export async function downloadScenePackageAction(contentPieceId: string): Promis
       contentPieceId,
       reason: error instanceof Error ? error.message : String(error),
     });
-    return { ok: false, error: FRIENDLY_ERROR };
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
   }
 }
 
@@ -1369,6 +1374,42 @@ export async function setSceneAudioPlaybackRateAction(
     return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
   } catch (error) {
     logger.error("asset_engine.scene_audio_playback_rate_failed", {
+      contentPieceId,
+      sceneIndex,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
+  }
+}
+
+/** ★ Achado real (pedido direto do usuário — "a locução ainda não deixa cortar... arrastar pros lados"): `cutSeconds` ausente remove o corte manual (volta ao teto natural). */
+export async function setSceneAudioCutSecondsAction(
+  contentPieceId: string,
+  sceneIndex: number,
+  cutSeconds: number | undefined,
+): Promise<ContentPieceActionResult> {
+  const session = await getCurrentSession();
+  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
+  if (!hasMinimumRole(session.membership.role, "editor")) {
+    return { ok: false, error: "Só quem edita ou administra a conta pode cortar a narração." };
+  }
+
+  const db = await createClient();
+  const serviceRoleDb = createServiceRoleClient();
+  const contentPieceRepository = new ContentPieceRepository(db);
+
+  const piece = await contentPieceRepository.findById(contentPieceId);
+  if (!piece || piece.status !== "scenes_ready_for_review") return { ok: false, error: FRIENDLY_ERROR };
+
+  try {
+    const tier = session.brand.provider_tier ?? session.organization.provider_tier;
+    await setSceneAudioCutSeconds({ db, serviceRoleDb, tier, campaignId: piece.campaign_id, contentPieceId, sceneIndex, cutSeconds });
+
+    const updated = await contentPieceRepository.findById(contentPieceId);
+    revalidatePath("/criar-campanha");
+    return { ok: true, contentPiece: updated ? await toViewWithMedia(db, updated) : undefined };
+  } catch (error) {
+    logger.error("asset_engine.scene_audio_cut_failed", {
       contentPieceId,
       sceneIndex,
       reason: error instanceof Error ? error.message : String(error),

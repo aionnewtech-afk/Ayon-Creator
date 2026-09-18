@@ -583,6 +583,37 @@ export async function setSceneAudioPlaybackRate(params: SetSceneAudioPlaybackRat
   await persistPlan(params.db, params.contentPieceId, plan);
 }
 
+export interface SetSceneAudioCutParams extends SceneEditParams {
+  /** Segundos (no eixo do vídeo já renderizado) até onde a fala deste trecho continua tocando — `undefined`/`Infinity` remove o corte manual, voltando ao teto natural. */
+  cutSeconds: number | undefined;
+}
+
+/**
+ * ★ Achado real (pedido direto do usuário — "a locução ainda não deixa
+ * cortar... arrastar pros lados"): mesmo espírito de `setSceneAudioPlaybackRate`
+ * — o corte é do TRECHO inteiro (todas as cenas dele), porque o áudio é por
+ * trecho, não por corte de vídeo individual.
+ */
+export async function setSceneAudioCutSeconds(params: SetSceneAudioCutParams): Promise<void> {
+  const { videoSources, plan } = await loadPendingPlan(params.db, params.contentPieceId);
+  const scene = requireScene(videoSources, params.sceneIndex);
+
+  if (params.cutSeconds !== undefined && (!Number.isFinite(params.cutSeconds) || params.cutSeconds <= 0)) {
+    throw new Error("Ponto de corte inválido.");
+  }
+
+  const segmentIndex = scene.segmentIndex;
+  for (const source of videoSources) {
+    if (segmentIndex !== undefined && source.segmentIndex === segmentIndex) {
+      source.audioCutSeconds = params.cutSeconds;
+    } else if (segmentIndex === undefined && source === scene) {
+      source.audioCutSeconds = params.cutSeconds;
+    }
+  }
+
+  await persistPlan(params.db, params.contentPieceId, plan);
+}
+
 export interface AddSceneTextBalloonParams extends SceneEditParams {
   text: string;
   xFraction: number;

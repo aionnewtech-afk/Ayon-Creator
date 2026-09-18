@@ -87,6 +87,17 @@ export interface VideoRenderSceneSource {
    */
   audioPlaybackRate?: number;
   /**
+   * ★ Achado real (pedido direto do usuário — "a locução ainda não deixa
+   * cortar... arrastar pros lados"): teto (em segundos, no eixo de tempo do
+   * vídeo já renderizado, depois de aplicar `audioPlaybackRate`) de quanto
+   * da fala real deste trecho realmente toca — ausente usa o teto de sempre
+   * (`min(duração de tela do trecho, fala disponível)`). Cortar aqui nunca
+   * inventa/repete fala: só decide parar de tocar mais cedo, deixando o
+   * resto do trecho em silêncio (a tela continua, só sem narração). Só
+   * suportado pelo motor próprio.
+   */
+  audioCutSeconds?: number;
+  /**
    * ★ Achado real (pedido direto do usuário — "não vi opção de colocar
    * balões de texto... quero basicamente no modelo do capcut"): balão de
    * fala (estilo chat/CapCut) sobreposto durante esta cena — texto curto
