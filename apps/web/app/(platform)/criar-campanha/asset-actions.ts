@@ -52,7 +52,6 @@ import {
   triggerVideoScenePlanning,
 } from "@ayon/core";
 import { buildContentPackage, PackageNotReadyError } from "@ayon/core/src/asset-engine/build-content-package";
-import { buildScenePackage } from "@ayon/core/src/asset-engine/build-scene-clips-package";
 import type { CampaignStatus, ContentPieceFormat, ContentPieceStatus, Database, ProductionMode } from "@ayon/types";
 import { getCurrentSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -820,52 +819,6 @@ export async function approveVideoScenePlanAction(contentPieceId: string): Promi
       reason: error instanceof Error ? error.message : String(error),
     });
     return { ok: false, error: FRIENDLY_ERROR };
-  }
-}
-
-export interface DownloadScenePackageResult {
-  ok: boolean;
-  error?: string;
-  downloadUrl?: string;
-}
-
-/**
- * ★ Achado real (pedido direto do usuário — "baixar todas as cenas e ela
- * fazer a edição, de acordo com as transições que ela quer, ou baixar o
- * vídeo todo de uma vez, já com as transições internas que a gente vai
- * colocar"): alternativa a `approveVideoScenePlanAction` — nunca aprova nem
- * altera a peça, só empacota as cenas atuais (+ narração) num .zip pra
- * edição própria em qualquer editor.
- */
-export async function downloadScenePackageAction(contentPieceId: string): Promise<DownloadScenePackageResult> {
-  const session = await getCurrentSession();
-  if (!session?.organization || !session.membership || !session.brand) return { ok: false, error: FRIENDLY_ERROR };
-  if (!hasMinimumRole(session.membership.role, "editor")) {
-    return { ok: false, error: "Só quem edita ou administra a conta pode baixar as cenas." };
-  }
-
-  const db = await createClient();
-  const contentPieceRepository = new ContentPieceRepository(db);
-
-  const piece = await contentPieceRepository.findById(contentPieceId);
-  if (!piece || piece.status !== "scenes_ready_for_review") {
-    return { ok: false, error: FRIENDLY_ERROR };
-  }
-
-  try {
-    const { downloadUrl } = await buildScenePackage({
-      db,
-      organizationId: session.organization.id,
-      campaignId: piece.campaign_id,
-      contentPieceId,
-    });
-    return { ok: true, downloadUrl };
-  } catch (error) {
-    logger.error("asset_engine.scene_package_failed", {
-      contentPieceId,
-      reason: error instanceof Error ? error.message : String(error),
-    });
-    return { ok: false, error: error instanceof Error ? error.message : FRIENDLY_ERROR };
   }
 }
 

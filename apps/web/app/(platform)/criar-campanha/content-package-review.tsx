@@ -11,7 +11,6 @@ import {
   approveContentPieceAction,
   approveVideoScenePlanAction,
   deleteReplacementSceneAction,
-  downloadScenePackageAction,
   editContentPieceAction,
   generateAvatarVideoContentPieceAction,
   generatePhotoContentPieceAction,
@@ -397,38 +396,44 @@ export function ContentPackageReview({
   }
 
   /** ★ Achado real (pedido direto do usuário — "baixar todas as cenas e ela fazer a edição... ou baixar o vídeo todo de uma vez"): nunca aprova nem muda a peça, só baixa um .zip com as cenas atuais + narração. */
+  /**
+   * ★ Achado real (pedido direto do usuário — "The object exceeded the
+   * maximum allowed size"): a versão anterior gerava uma signed URL do
+   * Supabase Storage e navegava até ela (`location.href`) — só que o
+   * upload do .zip pro Storage vinha ANTES, e Storage recusa qualquer
+   * objeto acima do limite do plano. A rota `app/api/scene-package/
+   * [contentPieceId]` monta e transmite o .zip direto na resposta, sem
+   * Storage no meio — busca com `fetch` (nunca falha silenciosamente:
+   * resposta não-ok mostra a mensagem real do servidor) e baixa via link
+   * sintético a partir do blob recebido — mesmo espírito de nunca depender
+   * de `window.open` (bloqueado como pop-up após um `await`).
+   */
   async function handleDownloadScenePackage(pieceId: string) {
     setLoadingId(pieceId);
     setError(null);
-    // ★ Achado real (pedido direto do usuário — "o zip continua sem
-    // baixar"): sem `try/catch` aqui, uma falha de rede na CHAMADA da
-    // Server Action em si (não uma resposta `{ ok: false }`, mas a promise
-    // inteira rejeitando — ex.: timeout do proxy num pacote com várias
-    // cenas grandes) nunca setava `loadingId` de volta pra `null` nem
-    // mostrava erro nenhum — o botão só ficava "Preparando..." pra sempre,
-    // sem nenhum feedback visível de que algo deu errado.
-    let result: Awaited<ReturnType<typeof downloadScenePackageAction>>;
+    let response: Response;
     try {
-      result = await downloadScenePackageAction(pieceId);
+      response = await fetch(`/api/scene-package/${pieceId}`);
     } catch {
       setLoadingId(null);
       setError("Não consegui preparar o pacote de cenas agora. Tenta de novo?");
       return;
     }
     setLoadingId(null);
-    if (!result.ok || !result.downloadUrl) {
-      setError(result.error ?? "Algo deu errado. Tenta de novo?");
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setError(body?.error ?? "Algo deu errado. Tenta de novo?");
       return;
     }
-    // ★ Achado real (pedido direto do usuário — "não faz download do zip"):
-    // `window.open(url, "_blank")` depois de um `await` sai da "janela de
-    // gesto do usuário" que os navegadores exigem pra abrir aba nova sem
-    // bloquear como pop-up — o zip carregava certinho no servidor, só a
-    // aba nunca abria, sem erro nenhum visível. Navegação na mesma aba
-    // (`location.href`) nunca é tratada como pop-up, mesmo depois do
-    // `await`, e um `Content-Type: application/zip` vira download nativo
-    // em vez de sair do app.
-    window.location.href = result.downloadUrl;
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "cenas.zip";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
   }
 
   async function handleGeneratePhoto(pieceId: string) {
@@ -969,7 +974,7 @@ export function ContentPackageReview({
                                 checked={includeSoundAnimationDraft}
                                 onChange={(event) => setIncludeSoundAnimationDraft(event.target.checked)}
                               />
-                              Animação sonora (barra reagindo à narração, estilo CapCut)
+                              Animação sonora (barra reagindo à narração, estilo CapCut) — só com o motor ffmpeg ativo
                             </label>
                           </div>
                         ) : null}
@@ -2377,6 +2382,17 @@ function VideoScenePlanReview({
             Arraste a borda amarela do trecho na timeline acima pra cortar a fala mais cedo — o resto da(s) cena(s)
             continua na tela, só sem narração.
           </p>
+          {/* ★ Achado real (pedido direto do usuário — "a narração não mudou
+              nada"): velocidade/corte só têm efeito no vídeo final quando o
+              motor de render é o ffmpeg (VIDEO_RENDER_PROVIDER=ffmpeg no
+              Railway) — o Shotstack (padrão) não tem esses campos e ignora
+              silenciosamente, sem erro nenhum. Aviso direto aqui pra nunca
+              parecer que o ajuste "não funcionou" sem explicação. */}
+          <p className="rounded-md bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700">
+            Velocidade e corte de narração só aparecem no vídeo final quando o motor de render é o ffmpeg
+            (<code className="font-mono">VIDEO_RENDER_PROVIDER=ffmpeg</code>) — com o Shotstack (padrão), esse ajuste fica
+            salvo mas não muda o vídeo gerado.
+          </p>
         </div>
       ) : null}
 
@@ -2599,7 +2615,9 @@ function VideoScenePlanReview({
               capcut"): balão de fala sobreposto só durante esta cena —
               posição por preset (canto/centro), texto curto. */}
           <div className="space-y-2 rounded-md border border-border/60 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Balões de texto</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Balões de texto <span className="normal-case text-muted-foreground/70">(só com o motor ffmpeg ativo)</span>
+            </p>
             {(plan.scenes[selectedIndex]?.textBalloons ?? []).map((balloon, balloonIndex) => (
               <div key={balloonIndex} className="flex items-center justify-between gap-2 rounded-md bg-secondary/50 px-2 py-1 text-sm">
                 <span className="truncate">{balloon.text}</span>

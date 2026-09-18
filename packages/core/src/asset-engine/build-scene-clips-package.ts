@@ -7,9 +7,6 @@ import { logger } from "../logger";
 import type { PendingVideoScenePlan } from "./video-pipeline-plan";
 import { MissingScenePlanError } from "./video-pipeline-plan";
 
-const CONTENT_OUTPUT_BUCKET = "content-output";
-const PACKAGE_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24;
-
 /**
  * ★ Achado real (pedido direto do usuário — "baixar todas as cenas e ela
  * fazer a edição, de acordo com as transições que ela quer, ou baixar o
@@ -21,13 +18,21 @@ const PACKAGE_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24;
  * vídeo, pro usuário editar do jeito dele em qualquer editor. Nunca altera
  * o plano nem o status da peça — puramente um export, a peça continua em
  * `scenes_ready_for_review` do mesmo jeito depois.
+ *
+ * ★ Achado real #2 (pedido direto do usuário — "The object exceeded the
+ * maximum allowed size"): a versão anterior fazia upload do .zip pro
+ * Supabase Storage pra depois gerar uma signed URL — Storage recusa
+ * qualquer objeto acima do limite do plano (50MB no gratuito), e um vídeo
+ * de várias cenas de banco (Pexels) facilmente passa disso. O .zip nunca
+ * precisava viver no Storage pra começo de conversa (é um export pontual,
+ * nunca reaproveitado depois) — devolve o Buffer direto pra quem chamou
+ * (a rota `app/api/scene-package/[contentPieceId]/route.ts`) transmitir
+ * pro navegador na hora, sem limite de tamanho de objeto nenhum no meio.
  */
 export async function buildScenePackage(params: {
   db: SupabaseClient<Database>;
-  organizationId: string;
-  campaignId: string;
   contentPieceId: string;
-}): Promise<{ downloadUrl: string }> {
+}): Promise<{ buffer: Buffer }> {
   const piece = await new ContentPieceRepository(params.db).findById(params.contentPieceId);
   const plan = piece?.pending_scene_plan as unknown as PendingVideoScenePlan | null;
   if (piece?.status !== "scenes_ready_for_review" || !plan) throw new MissingScenePlanError();
@@ -76,18 +81,6 @@ export async function buildScenePackage(params: {
   }
   zip.file("narracao.mp3", await audioResponse.arrayBuffer());
 
-  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-  const storagePath = `${params.organizationId}/${params.campaignId}/${params.contentPieceId}-cenas.zip`;
-
-  const { error: uploadError } = await params.db.storage
-    .from(CONTENT_OUTPUT_BUCKET)
-    .upload(storagePath, zipBuffer, { contentType: "application/zip", upsert: true });
-  if (uploadError) throw uploadError;
-
-  const { data: signed, error: signError } = await params.db.storage
-    .from(CONTENT_OUTPUT_BUCKET)
-    .createSignedUrl(storagePath, PACKAGE_SIGNED_URL_TTL_SECONDS);
-  if (signError || !signed) throw signError ?? new Error("Não consegui gerar o link do pacote de cenas.");
-
-  return { downloadUrl: signed.signedUrl };
+  const buffer = await zip.generateAsync({ type: "nodebuffer" });
+  return { buffer };
 }
